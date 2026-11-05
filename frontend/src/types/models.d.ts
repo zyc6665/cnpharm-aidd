@@ -263,6 +263,8 @@ export interface ToolContract {
     output: ToolSchema
   }
   capability: ToolContractCapability
+  /** 规范化的模型能力族（后端 model_family），用于「同类模型」聚合选择。 */
+  model_family?: string | null
   artifacts?: {
     inputs?: Array<{
       name: string

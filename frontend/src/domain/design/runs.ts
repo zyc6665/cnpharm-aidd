@@ -21,7 +21,7 @@ import {
   STRUCTURE_PREDICT_TOOL_SLUG,
   POCKET_PREDICT_TOOL_SLUG,
 } from '@/types/design'
-import { ADMET_TOOL_SLUG } from '@/types/predict'
+import { ADMET_TOOL_SLUG, AFFINITY_TOOL_SLUGS } from '@/types/predict'
 import { VINA_TOOL_SLUG } from '@/types/screening'
 import { FREE_ENERGY_TOOL_SLUG, MD_TOOL_SLUG } from '@/api/md'
 
@@ -56,7 +56,7 @@ export const DESIGN_RUN_CATEGORIES: readonly DesignRunCategory[] = [
   },
   {
     key: 'predict',
-    slugs: [ADMET_TOOL_SLUG],
+    slugs: [ADMET_TOOL_SLUG, ...AFFINITY_TOOL_SLUGS],
     resultPath: taskId => `/tasks/${taskId}/predictions`
   },
   {

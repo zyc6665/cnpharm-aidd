@@ -73,7 +73,7 @@
             <a-descriptions-item label="已有预测结果">{{ resultCount }}</a-descriptions-item>
           </a-descriptions>
           <div class="stage-actions">
-            <a-button type="primary" :disabled="!proteinId" @click="goProteinPredict">
+            <a-button type="primary" :disabled="!proteinId" @click="goAffinityPredict">
               去亲和力预测
             </a-button>
             <span class="stage-note">结合目标蛋白与候选分子结构，输出结合亲和力预测评分。</span>
@@ -144,10 +144,9 @@ function onStepChange(index: number) {
   current.value = index
 }
 
-function goProteinPredict() {
-  if (proteinId.value) {
-    router.push(`/proteins/${proteinId.value}/predict`)
-  }
+function goAffinityPredict() {
+  if (!proteinId.value) return
+  router.push({ path: '/predict', query: { type: 'affinity', project_id: props.projectId } })
 }
 
 function goPockets() {

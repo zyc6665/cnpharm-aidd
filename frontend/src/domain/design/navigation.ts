@@ -23,8 +23,8 @@ export function buildDesignNavGroups(): DesignNavGroup[] {
       groupKey: 'prepare',
       labelKey: 'nav.designGroupPrepare',
       items: [
-        { key: 'structurePredict', to: '/design?focus=structure', labelKey: 'nav.structurePredict', isNew: true },
-        { key: 'pocketPredict', to: '/design?focus=pocket', labelKey: 'nav.pocketPredict', isNew: true },
+        { key: 'structurePredict', to: '/design?focus=structure', labelKey: 'nav.structurePredict' },
+        { key: 'pocketPredict', to: '/design?focus=pocket', labelKey: 'nav.pocketPredict' },
       ],
     },
     {
@@ -43,11 +43,6 @@ export function buildDesignNavGroups(): DesignNavGroup[] {
         { key: 'predict', to: '/predict', labelKey: 'nav.predict' },
         { key: 'md', to: '/md', labelKey: 'nav.md' },
       ],
-    },
-    {
-      groupKey: 'record',
-      labelKey: 'nav.designGroupRecord',
-      items: [{ key: 'designRuns', to: '/design/runs', labelKey: 'nav.designRuns' }],
     },
   ]
 }

@@ -263,6 +263,7 @@ export default {
       }
     },
     tools: {
+
       title: 'Popular Tools',
       subtitle: 'Most popular computational tools',
       viewAll: 'View All Tools'
@@ -283,6 +284,10 @@ export default {
       pocketNote: 'Predict pockets inline and select one as the design start; it advances to molecule generation when done.',
       goPocketManage: 'Manage on pockets page',
       actionFailed: 'Action failed'
+    },
+    advanced: {
+      title: 'Advanced Orchestration (Custom Workflow)',
+      subtitle: 'Compose tools freely into a DAG workflow with branching, loops and parallelism — for advanced users who need custom pipelines'
     },
     title: 'Tool Workbench',
     subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
@@ -1083,6 +1088,25 @@ export default {
 
   // Tools
   tools: {
+    modelFamilies: {
+      structure_prediction: 'Structure Prediction',
+      pocket_prediction: 'Pocket Prediction',
+      molecule_generation: 'Molecule Generation',
+      peptide_design: 'Peptide Design',
+      admet_prediction: 'Property Prediction',
+      property_prediction: 'Molecular Properties',
+      affinity: 'Binding Affinity',
+      free_energy: 'Free Energy',
+      docking: 'Molecular Docking',
+      molecular_dynamics: 'Molecular Dynamics',
+      toxicity_prediction: 'Toxicity Prediction',
+      protein_preparation: 'Protein Preparation',
+      ligand_preparation: 'Ligand Preparation',
+      conformer_generation: 'Conformer Generation',
+      format_conversion: 'Format Conversion',
+      synthetic_accessibility: 'Synthetic Accessibility',
+      interaction_analysis: 'Interaction Analysis'
+    },
     parameterJsonInvalid: 'Enter valid JSON',
     parameterJsonObject: 'Enter a JSON object',
     parameterJsonArray: 'Enter a JSON array',
@@ -1756,6 +1780,7 @@ export default {
       projectPlaceholder: 'Select project',
       continueFlow: 'Continue design flow',
       hideFlow: 'Hide flow',
+      advanced: 'Advanced: custom workflow',
       loadError: 'Failed to load design pipeline',
       noProject: 'No projects yet — create a project first',
       goProjects: 'Back to workspace',
@@ -1775,6 +1800,12 @@ export default {
     upstream: {
       missingStructure: 'This protein has no structure yet — predict one inline below',
       missingPocket: 'No selected pocket for this structure yet — predict and select one'
+    },
+    modelSelect: {
+      label: 'Model',
+      placeholder: 'Select model',
+      hint: 'Switch freely when several models share this capability; defaults to your last choice',
+      mock: 'demo model'
     },
     runs: {
       title: 'Design Runs',
@@ -1916,6 +1947,15 @@ export default {
         'Missing project_id, cannot load candidate sets; you can upload a SMILES CSV instead.',
       groups: 'Metric groups',
       groupsHint: 'All selected by default; uncheck as needed.',
+      type: 'Prediction type',
+      typeAdmet: 'ADMET properties',
+      typeAffinity: 'Binding affinity',
+      affinityInputs: 'Affinity prediction inputs',
+      proteinPdb: 'Protein structure (PDB / mmCIF)',
+      ligandSdf: 'Ligands (SDF)',
+      ligandSmiles: 'Ligand SMILES (CSV)',
+      affinityHint: 'Affinity prediction belongs to Evaluation → Property prediction; upload protein and ligands as required by the selected model contract.',
+      chooseInputFile: 'Choose file',
       submit: 'Submit prediction task',
       submitting: 'Submitting…',
       success: 'Task submitted, redirecting to predictions…',
@@ -2198,6 +2238,16 @@ export default {
 
   // Tasks
   tasks: {
+    scope: { all: 'All tasks', design: 'Design tasks' },
+    columns: {
+      name: 'Task',
+      tool: 'Tool',
+      project: 'Project',
+      status: 'Status',
+      progress: 'Progress',
+      createdAt: 'Submitted',
+      actions: 'Actions'
+    },
     loadFailed: 'Failed to load tasks',
     loadFailedHint: 'Network or service problem — you can retry',
     outputMetrics: 'Key metrics',
@@ -2492,9 +2542,18 @@ export default {
     title: 'Admin Panel',
     dashboard: 'Dashboard',
     dashboardSubtitle: 'Review users, tools and task activity in one operational overview',
+    group: {
+      overview: 'Overview',
+      access: 'Users & Access',
+      tools: 'Tools & Models',
+      tasks: 'Tasks & Compute',
+      system: 'Audit & System'
+    },
     users: 'User Management',
+    usersSubtitle: 'Manage platform accounts, roles and status',
     tools: 'Tool Management',
     tasks: 'Task Management',
+    tasksSubtitle: 'Review and handle platform tasks across users',
     system: 'System Settings',
     backToSite: 'Back to Site',
     // List four-state: per-page load-error and guided empty copy
@@ -2535,12 +2594,37 @@ export default {
     // Compute queue
     compute: {
       title: 'Compute Queue',
-      subtitle: 'Inspect node slot declarations and occupancy; slots are versioned with deployment, this view is read-only',
+      subtitle: 'Inspect compute node GPU and task occupancy; this view is read-only',
       totalSlots: 'Total Slots',
       schedulableSlots: 'Schedulable Slots',
       byVendor: 'By Vendor',
       slotState: 'Slot State Overview',
       emptyState: 'No slots declared yet (DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE)',
+      k8s: {
+        totalGpu: 'Total GPUs',
+        allocatableGpu: 'Allocatable GPUs',
+        allocatedGpu: 'Allocated GPUs',
+        runningPods: 'Running GPU pods',
+        nodes: 'GPU nodes',
+        jobs: 'GPU jobs (model-jobs)',
+        ready: 'Ready',
+        notReady: 'NotReady',
+        nodeName: 'Node',
+        nodeStatus: 'Status',
+        roles: 'Roles',
+        gpu: 'GPU (allocatable/total)',
+        cpu: 'CPU',
+        memory: 'Memory',
+        kubelet: 'Kubelet',
+        podName: 'Pod',
+        jobName: 'Job',
+        phase: 'Phase',
+        gpuUsed: 'GPU',
+        node: 'Node',
+        startTime: 'Start time',
+        noJobs: 'No GPU jobs',
+        loadError: 'Failed to load K8s compute info'
+      },
       emptyTitle: 'No compute nodes available yet',
       emptyHint: 'Slot declarations are read from DRP_NODE_SLOTS_YAML or DRP_NODE_SLOTS_FILE. Follow deploy/slots/slots.example.yaml and restart the backend.',
       emptyVendorTitle: 'No accelerator vendor data',
@@ -2617,6 +2701,10 @@ export default {
     recentTasks: 'Recent Tasks',
     recentUsers: 'Recent Users',
     toolName: 'Tool Name',
+    modelFamily: 'Model family',
+    currentVersion: 'Current version',
+    imageDigest: 'Image digest',
+    publishNewVersion: 'Publish new version',
     role: 'Role',
     registerTime: 'Registered',
     // User Management
@@ -2672,8 +2760,10 @@ export default {
     toolPackagesSubtitle: 'Register and validate model deliverables. Publish a package, then create a platform tool before users can run it.',
     workbenchGroups: 'Workbench Groups',
     workbenchGroupsSubtitle: 'Manage tool workbench groups, recommendations, and mappings in one place',
-    toolCategories: 'Category Management',
-    toolCategoriesSubtitle: 'Manage tool categories, status and display order in one place',
+    toolCategories: 'Model Families',
+    toolCategoriesSubtitle: 'Groups are derived from model capability and update automatically with model registration',
+    toolCategoriesAutoTitle: 'Categories are derived automatically',
+    toolCategoriesAutoHint: 'Each tool is grouped into a capability family such as structure prediction, pocket prediction or molecule generation. New models join their family automatically.',
     createCategory: 'Create Category',
     editCategory: 'Edit Category',
     categoryName: 'Category Name',

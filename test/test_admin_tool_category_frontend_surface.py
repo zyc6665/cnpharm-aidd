@@ -22,26 +22,25 @@ def test_admin_tool_categories_route_and_entry_exist():
     assert "name: 'AdminToolCategories'" in router_source
     assert "ToolCategories.vue" in router_source
 
-    # Phase 3: admin/index.vue 改用数据驱动 v-for 循环 adminTabs 数组
+    # admin/index.vue 使用分组数据驱动 v-for 渲染侧边栏
     assert "key: 'tool-categories'" in admin_index_source
     assert "labelKey: 'admin.toolCategories'" in admin_index_source
-    assert "navigate(tab.key)" in admin_index_source
+    assert 'navigate(item)' in admin_index_source
 
 
-def test_admin_tool_categories_page_has_management_actions():
-    """分类管理页应提供增删改查、启停和排序入口。"""
+def test_admin_tool_categories_page_is_read_only_capability_families():
+    """分类页只读展示由模型能力族自动派生的分类，不再提供手工维护入口。"""
     page_source = read_source("frontend/src/views/admin/ToolCategories.vue")
 
-    assert "showCreateModal" in page_source
-    assert "handleEdit" in page_source
-    assert "handleToggleStatus" in page_source
-    assert "handleDelete" in page_source
-    assert "moveCategory" in page_source
-    assert "ArrowUpOutlined" in page_source
-    assert "ArrowDownOutlined" in page_source
-    assert "normalizeCategorySlug" in page_source
-    assert "formState.slug or formState.name" not in page_source
-    assert "formState.slug || formState.name" in page_source
+    assert "admin.toolCategoriesAutoTitle" in page_source
+    assert "admin.toolCategoriesAutoHint" in page_source
+    assert "modelFamilyLabelKey" in page_source
+    assert "adminGetToolCategories" in page_source
+    assert "record.tool_count" in page_source
+    assert "showCreateModal" not in page_source
+    assert "handleEdit" not in page_source
+    assert "handleDelete" not in page_source
+    assert "moveCategory" not in page_source
 
 
 def test_admin_tool_registration_uses_tool_packages_only():
@@ -63,18 +62,17 @@ def test_admin_tool_registration_uses_tool_packages_only():
     assert "category: selectedCategory.value" in list_source
 
 
-def test_admin_tool_form_exposes_agent_capability_config():
-    """管理员工具表单应暴露 Agent 动态注册配置，而不是只能手写隐藏 JSON。"""
+def test_admin_tool_form_is_k8s_only_and_links_to_package_registration():
+    """工具编辑页固定 k8s_job 执行，并引导到模型交付包完成注册。"""
     create_source = read_source("frontend/src/views/tools/Create.vue")
-    config_source = read_source("frontend/src/domain/tools/tool-version-config.ts")
 
-    assert "Agent 编排能力" in create_source
-    assert "agent_capability_enabled" in create_source
-    assert "agent_capability" in create_source
-    assert "molecule_generation" in create_source
-    assert "agent_inputs" in create_source
-    assert "agent_outputs" in create_source
-    assert "config.agent_capability" in config_source
+    assert "模型接入教程" in create_source
+    assert "showGuide" in create_source
+    assert "k8s_job" in create_source
+    assert "k8s_image" in create_source
+    assert "k8s_resource_profile" in create_source
+    assert "Agent 编排能力" not in create_source
+    assert "agent_capability_enabled" not in create_source
 
 
 def test_tool_form_uses_structured_executor_config_editors():

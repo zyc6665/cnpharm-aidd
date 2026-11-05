@@ -12,6 +12,11 @@
       />
 
       <section class="design-section">
+        <h3 class="design-section__title">{{ t('design.modelSelect.label') }}</h3>
+        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      </section>
+
+      <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
         <PocketPicker v-model="pocketSelection" :default-project-id="initialProjectId" />
       </section>
@@ -89,12 +94,14 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, reactive, ref } from 'vue'
+  import { onMounted, reactive, ref, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import PocketPicker from './components/PocketPicker.vue'
+  import ModelSelect from '@/components/design/ModelSelect.vue'
+  import { useModelOptions } from '@/composables/useModelOptions'
   import {
     resolvePocketInputBinding,
     resolveToolBySlug,
@@ -115,6 +122,14 @@
   const resolvedTool = ref<ResolvedDesignTool | null>(null)
   const toolError = ref(false)
   const pocketSelection = ref<DesignPocketSelection | null>(null)
+
+  // 同类分子生成模型可自由选择；默认 pocket2mol。
+  const {
+    options: modelOptions,
+    selectedSlug,
+    loading: modelLoading,
+    load: loadModels,
+  } = useModelOptions('molecule_generation', { defaultSlug: MOLECULE_GENERATION_TOOL_SLUG })
 
   const form = reactive({
     numMolecules: 100,
@@ -157,7 +172,7 @@
     resolving.value = true
     toolError.value = false
     try {
-      resolvedTool.value = await resolveToolBySlug(MOLECULE_GENERATION_TOOL_SLUG)
+      resolvedTool.value = await resolveToolBySlug(selectedSlug.value)
       if (!resolvedTool.value) {
         toolError.value = true
       }
@@ -212,6 +227,10 @@
   }
 
   onMounted(() => {
+    void loadModels().then(() => loadTool())
+  })
+
+  watch(selectedSlug, () => {
     void loadTool()
   })
 </script>

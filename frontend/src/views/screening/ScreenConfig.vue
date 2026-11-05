@@ -9,6 +9,8 @@ import { estimateFunnel } from './funnel'
 import type { FunnelStageKey } from './funnel'
 import { uploadFile } from '@/api/files'
 import { submitToolTask } from '@/api/screening'
+import ModelSelect from '@/components/design/ModelSelect.vue'
+import { useModelOptions } from '@/composables/useModelOptions'
 import {
   SCREENING_PARAM_DEFAULTS,
   SCREENING_PARAM_RANGES,
@@ -23,6 +25,15 @@ const props = withDefaults(defineProps<{ projectIdOverride?: string }>(), {
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+
+// 同类对接/筛选模型可自由选择；默认 autodock-vina。
+const {
+  options: modelOptions,
+  selectedSlug,
+  loading: modelLoading,
+  load: loadModels
+} = useModelOptions('docking', { defaultSlug: VINA_TOOL_SLUG })
+void loadModels()
 
 const projectId = computed(() => {
   if (props.projectIdOverride) return props.projectIdOverride
@@ -136,7 +147,7 @@ async function handleSubmit(): Promise<void> {
       standardInputUploads.pocket = pocket.data.id
     }
     const task = await submitToolTask({
-      toolSlug: VINA_TOOL_SLUG,
+      toolSlug: selectedSlug.value,
       projectId: projectId.value || undefined,
       name: `虚拟筛选 ${new Date().toISOString().slice(0, 10)}`,
       params: { ...params },
@@ -155,6 +166,10 @@ async function handleSubmit(): Promise<void> {
 <template>
   <main class="screen-config" data-testid="screen-config-page">
     <AppPageHeader :title="t('screening.config.title')" :subtitle="t('screening.config.subtitle')" />
+
+    <a-card :title="t('design.modelSelect.label')">
+      <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+    </a-card>
 
     <a-card :title="t('screening.config.inputs')">
       <a-form layout="vertical">

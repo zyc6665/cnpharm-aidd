@@ -168,7 +168,8 @@ def resolve_database_url(database_url: str) -> str:
         relative_part = database_url[len(prefix) :]
         absolute_path = (BACKEND_ROOT / relative_part).resolve()
         base_prefix = prefix.split("./", 1)[0]
-        return f"{base_prefix}{absolute_path}"
+        # URL 中使用 POSIX 分隔符，Windows 盘符路径也能被 SQLAlchemy 正确解析。
+        return f"{base_prefix}{absolute_path.as_posix()}"
     return database_url
 
 

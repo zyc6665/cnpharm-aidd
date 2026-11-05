@@ -677,3 +677,80 @@ def get_capabilities_by_output(semantic_type: SemanticType) -> list[ToolCapabili
         for capability in AIDD_TOOL_CAPABILITIES.values()
         if any(output.semantic_type == semantic_type for output in capability.outputs)
     ]
+
+
+#: 规范化的「模型能力族」——把同一类设计环节的模型归到一组，供前端「模型选择」聚合。
+#: 与 ``capability`` / ``stage`` 解耦（后两者被工作流匹配依赖，保持原值不动）。
+MODEL_FAMILY_BY_SLUG: dict[str, str] = {
+    "boltz2-structure-prediction": "structure_prediction",
+    "lvpocket-pocket-prediction": "pocket_prediction",
+    "pocket2mol-pocket-ligand-generation": "molecule_generation",
+    "therapainter-peptide-prediction": "peptide_design",
+    "molp-pc-property-prediction": "admet_prediction",
+    "builtin-admet-prediction": "admet_prediction",
+    "builtin-rdkit-properties": "property_prediction",
+    "builtin-toxicity-prediction": "toxicity_prediction",
+    "builtin-vina-docking": "docking",
+    "autodock-vina-docking": "docking",
+    "builtin-molecular-dynamics": "molecular_dynamics",
+    "gromacs-md": "molecular_dynamics",
+    "msign-affinity-prediction": "affinity",
+    "boltz2-affinity-prediction": "affinity",
+    "gmx-mmpbsa": "free_energy",
+    "builtin-sdf-to-smiles-csv": "format_conversion",
+    "builtin-sdf-to-pdb": "format_conversion",
+    "builtin-protein-preparation": "protein_preparation",
+    "builtin-ligand-preparation": "ligand_preparation",
+    "builtin-rdkit-conformer": "conformer_generation",
+    "builtin-synthetic-accessibility": "synthetic_accessibility",
+    "builtin-interaction-analysis": "interaction_analysis",
+}
+
+
+#: 模型能力族的展示顺序与中文名称（前端会按 slug 做本地化，这里作为数据侧默认值）。
+MODEL_FAMILY_ORDER: tuple[str, ...] = (
+    "structure_prediction",
+    "pocket_prediction",
+    "molecule_generation",
+    "peptide_design",
+    "admet_prediction",
+    "property_prediction",
+    "affinity",
+    "free_energy",
+    "docking",
+    "molecular_dynamics",
+    "toxicity_prediction",
+    "protein_preparation",
+    "ligand_preparation",
+    "conformer_generation",
+    "format_conversion",
+    "synthetic_accessibility",
+    "interaction_analysis",
+)
+
+MODEL_FAMILY_LABELS: dict[str, str] = {
+    "structure_prediction": "结构预测",
+    "pocket_prediction": "口袋预测",
+    "molecule_generation": "分子生成",
+    "peptide_design": "多肽设计",
+    "admet_prediction": "性质预测",
+    "property_prediction": "分子性质",
+    "affinity": "结合亲和力",
+    "free_energy": "自由能计算",
+    "docking": "分子对接",
+    "molecular_dynamics": "分子动力学",
+    "toxicity_prediction": "毒性预测",
+    "protein_preparation": "蛋白准备",
+    "ligand_preparation": "配体准备",
+    "conformer_generation": "构象生成",
+    "format_conversion": "格式转换",
+    "synthetic_accessibility": "合成可及性",
+    "interaction_analysis": "相互作用分析",
+}
+
+
+def resolve_model_family(tool_slug: str | None) -> str | None:
+    """返回工具所属的规范化模型族（未登记则 None）。"""
+    if not tool_slug:
+        return None
+    return MODEL_FAMILY_BY_SLUG.get(tool_slug)

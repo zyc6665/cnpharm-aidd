@@ -261,6 +261,7 @@ export default {
       }
     },
     tools: {
+
       title: '热门工具',
       subtitle: '最受欢迎的计算工具',
       viewAll: '查看全部工具'
@@ -281,6 +282,10 @@ export default {
       pocketNote: '就地预测口袋并「选定」一个作为设计起点，完成后自动进入分子生成。',
       goPocketManage: '去口袋页批量管理',
       actionFailed: '操作失败'
+    },
+    advanced: {
+      title: '高级编排（自定义流程）',
+      subtitle: '把工具自由组合成 DAG 流程，支持条件分支、循环与并行；面向需要自定义流程的高级用户'
     },
     title: '工具工作台',
     subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
@@ -1080,6 +1085,25 @@ export default {
 
   // 工具
   tools: {
+    modelFamilies: {
+      structure_prediction: '结构预测',
+      pocket_prediction: '口袋预测',
+      molecule_generation: '分子生成',
+      peptide_design: '多肽设计',
+      admet_prediction: '性质预测',
+      property_prediction: '分子性质',
+      affinity: '结合亲和力',
+      free_energy: '自由能计算',
+      docking: '分子对接',
+      molecular_dynamics: '分子动力学',
+      toxicity_prediction: '毒性预测',
+      protein_preparation: '蛋白准备',
+      ligand_preparation: '配体准备',
+      conformer_generation: '构象生成',
+      format_conversion: '格式转换',
+      synthetic_accessibility: '合成可及性',
+      interaction_analysis: '相互作用分析'
+    },
     parameterJsonInvalid: '请输入有效的 JSON',
     parameterJsonObject: '请输入 JSON 对象',
     parameterJsonArray: '请输入 JSON 数组',
@@ -1748,6 +1772,7 @@ export default {
       projectPlaceholder: '选择项目',
       continueFlow: '继续设计流程',
       hideFlow: '收起流程',
+      advanced: '高级：自定义工作流',
       loadError: '设计流程加载失败',
       noProject: '还没有项目，先创建一个项目',
       goProjects: '返回工作台',
@@ -1767,6 +1792,12 @@ export default {
     upstream: {
       missingStructure: '该蛋白还没有结构，先在下方就地预测一个',
       missingPocket: '该结构还没有「已选定」的口袋，先预测并选定一个'
+    },
+    modelSelect: {
+      label: '模型',
+      placeholder: '选择模型',
+      hint: '存在同类多模型时可自由切换；默认沿用上次选择',
+      mock: '演示模型'
     },
     runs: {
       title: '设计任务',
@@ -1906,6 +1937,15 @@ export default {
       needProject: '缺少 project_id，无法加载候选集；可直接上传 SMILES CSV。',
       groups: '预测指标组',
       groupsHint: '默认全选，可按需取消。',
+      type: '预测类型',
+      typeAdmet: 'ADMET 分子性质',
+      typeAffinity: '结合亲和力',
+      affinityInputs: '亲和力预测输入',
+      proteinPdb: '蛋白结构文件（PDB / mmCIF）',
+      ligandSdf: '配体文件（SDF）',
+      ligandSmiles: '配体 SMILES（CSV）',
+      affinityHint: '亲和力预测属于「评估验证 → 性质预测」环节；按所选模型契约要求上传蛋白与配体。',
+      chooseInputFile: '选择文件',
       submit: '提交预测任务',
       submitting: '提交中…',
       success: '任务已提交，正在跳转到预测结果…',
@@ -2186,6 +2226,16 @@ export default {
 
   // 任务
   tasks: {
+    scope: { all: '全部任务', design: '设计任务' },
+    columns: {
+      name: '任务',
+      tool: '工具',
+      project: '项目',
+      status: '状态',
+      progress: '进度',
+      createdAt: '提交时间',
+      actions: '操作'
+    },
     loadFailed: '任务列表加载失败',
     loadFailedHint: '网络不稳定或服务暂时不可用，可重试',
     outputMetrics: '关键指标',
@@ -2480,9 +2530,18 @@ export default {
     title: '管理后台',
     dashboard: '仪表盘',
     dashboardSubtitle: '集中查看用户、工具与任务运行情况，快速判断平台健康度',
+    group: {
+      overview: '概览',
+      access: '用户与权限',
+      tools: '工具与模型',
+      tasks: '任务与算力',
+      system: '审计与系统'
+    },
     users: '用户管理',
+    usersSubtitle: '管理平台账号、角色与状态',
     tools: '工具管理',
     tasks: '任务管理',
+    tasksSubtitle: '跨用户查看与处理平台任务',
     system: '系统设置',
     backToSite: '返回前台',
     // 列表四态：各页面加载失败与空状态引导文案
@@ -2517,12 +2576,37 @@ export default {
     // 算力队列
     compute: {
       title: '算力队列',
-      subtitle: '查看节点卡位声明与占用情况；卡位随部署版本化，界面仅提供只读视图',
+      subtitle: '查看计算节点 GPU 与任务占用情况，界面仅提供只读视图',
       totalSlots: '总卡位',
       schedulableSlots: '可调度卡位',
       byVendor: '按厂商分布',
       slotState: '卡位状态概览',
       emptyState: '尚未声明卡位（DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE）',
+      k8s: {
+        totalGpu: 'GPU 总卡数',
+        allocatableGpu: '可分配 GPU',
+        allocatedGpu: '已分配 GPU',
+        runningPods: '运行中 GPU 任务',
+        nodes: 'GPU 节点',
+        jobs: 'GPU 任务（model-jobs）',
+        ready: '就绪',
+        notReady: '未就绪',
+        nodeName: '节点',
+        nodeStatus: '状态',
+        roles: '角色',
+        gpu: 'GPU（可分配/总数）',
+        cpu: 'CPU',
+        memory: '内存',
+        kubelet: 'Kubelet',
+        podName: 'Pod',
+        jobName: 'Job',
+        phase: '阶段',
+        gpuUsed: 'GPU',
+        node: '节点',
+        startTime: '开始时间',
+        noJobs: '当前没有 GPU 任务',
+        loadError: 'K8s 算力信息加载失败'
+      },
       emptyTitle: '还没有可用算力节点',
       emptyHint: '平台从 DRP_NODE_SLOTS_YAML 或 DRP_NODE_SLOTS_FILE 读取卡位声明。请按 deploy/slots/slots.example.yaml 填写后重启后端。',
       emptyVendorTitle: '暂无加速卡厂商信息',
@@ -2598,6 +2682,10 @@ export default {
     recentTasks: '最近任务',
     recentUsers: '最近用户',
     toolName: '工具名称',
+    modelFamily: '能力族',
+    currentVersion: '当前版本',
+    imageDigest: '镜像摘要',
+    publishNewVersion: '发布新版本',
     role: '角色',
     registerTime: '注册时间',
     // 用户管理
@@ -2652,8 +2740,10 @@ export default {
     toolPackagesSubtitle: '登记并校验模型交付物。交付包发布后，还需创建平台工具才能供用户运行。',
     workbenchGroups: '工作台分组',
     workbenchGroupsSubtitle: '维护工具工作台分组、推荐顺序与映射关系',
-    toolCategories: '分类管理',
-    toolCategoriesSubtitle: '集中维护工具分类、状态与排序',
+    toolCategories: '模型能力族',
+    toolCategoriesSubtitle: '按模型能力自动归类；分类不可手工增删，随模型注册自动更新',
+    toolCategoriesAutoTitle: '分类由模型能力自动派生',
+    toolCategoriesAutoHint: '平台按工具 slug 归入结构预测、口袋预测、分子生成等能力族。新增模型注册后会自动进入对应分类，无需手工维护。',
     createCategory: '新建分类',
     editCategory: '编辑分类',
     categoryName: '分类名称',

@@ -12,24 +12,29 @@
       </div>
     </header>
 
-    <!-- 子页导航 tabs -->
-    <nav class="admin-tabs">
-      <button
-        v-for="tab in adminTabs"
-        :key="tab.key"
-        class="admin-tab"
-        :class="{ active: activeTab === tab.key }"
-        @click="navigate(tab.key)"
-      >
-        <component :is="tab.icon" />
-        <span>{{ t(tab.labelKey) }}</span>
-      </button>
-    </nav>
+    <!-- 分组子导航 -->
+    <div class="admin-layout">
+      <aside class="admin-nav" :aria-label="t('admin.title')">
+        <div v-for="group in adminGroups" :key="group.key" class="admin-nav-group">
+          <div class="admin-nav-title">{{ t(group.labelKey) }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item"
+            class="admin-nav-item"
+            :class="{ active: activeTab === item }"
+            @click="navigate(item)"
+          >
+            <component :is="tabMeta(item).icon" />
+            <span>{{ t(tabMeta(item).labelKey) }}</span>
+          </button>
+        </div>
+      </aside>
 
-    <!-- 内容区 -->
-    <main class="admin-body">
-      <router-view />
-    </main>
+      <!-- 内容区 -->
+      <main class="admin-body">
+        <router-view />
+      </main>
+    </div>
   </div>
 </template>
 
@@ -43,7 +48,7 @@ import {
   TeamOutlined,
   ToolOutlined,
   AppstoreOutlined,
-  ClusterOutlined,
+  InboxOutlined,
   CloudServerOutlined,
   DatabaseOutlined,
   FileSearchOutlined,
@@ -56,26 +61,39 @@ const { t } = useI18n()
 
 const activeTab = ref('dashboard')
 
+// 扁平清单（供路由高亮/查询）；分组见 adminGroups。工作台分组已下线。
 const adminTabs = [
   { key: 'dashboard', icon: DashboardOutlined, labelKey: 'admin.dashboard' },
   { key: 'users', icon: TeamOutlined, labelKey: 'admin.users' },
   { key: 'tools', icon: ToolOutlined, labelKey: 'admin.tools' },
+  { key: 'tool-packages', icon: InboxOutlined, labelKey: 'admin.toolPackages' },
   { key: 'tool-categories', icon: AppstoreOutlined, labelKey: 'admin.toolCategories' },
-  { key: 'workbench-groups', icon: ClusterOutlined, labelKey: 'admin.workbenchGroups' },
   { key: 'tasks', icon: CloudServerOutlined, labelKey: 'admin.tasks' },
   { key: 'compute', icon: DatabaseOutlined, labelKey: 'admin.compute.title' },
   { key: 'audit', icon: FileSearchOutlined, labelKey: 'admin.audit.title' },
   { key: 'system', icon: SettingOutlined, labelKey: 'admin.system' },
 ]
 
+const adminGroups = [
+  { key: 'overview', labelKey: 'admin.group.overview', items: ['dashboard'] },
+  { key: 'access', labelKey: 'admin.group.access', items: ['users'] },
+  {
+    key: 'tools',
+    labelKey: 'admin.group.tools',
+    items: ['tools', 'tool-packages', 'tool-categories'],
+  },
+  { key: 'tasks', labelKey: 'admin.group.tasks', items: ['tasks', 'compute'] },
+  { key: 'system', labelKey: 'admin.group.system', items: ['audit', 'system'] },
+]
+
+function tabMeta(key: string) {
+  return adminTabs.find(tab => tab.key === key) ?? adminTabs[0]!
+}
+
 watch(
   () => route.path,
   (path) => {
     const segment = path.split('/').pop()
-    if (segment === 'tool-packages') {
-      activeTab.value = 'tools'
-      return
-    }
     if (segment && adminTabs.some((t) => t.key === segment)) {
       activeTab.value = segment
     }
@@ -92,7 +110,7 @@ function navigate(key: string) {
 @import '@/assets/styles/variables.less';
 
 .admin-page {
-  max-width: @container-xxl;
+  max-width: 1600px;
   margin: 0 auto;
   padding: @spacing-lg;
 }
@@ -126,22 +144,45 @@ function navigate(key: string) {
   font-size: @font-size-sm;
 }
 
-.admin-tabs {
+.admin-layout {
   display: flex;
-  gap: 2px;
-  padding: 4px;
-  margin-bottom: @spacing-lg;
+  gap: @spacing-lg;
+  align-items: flex-start;
+}
+
+.admin-nav {
+  flex: 0 0 208px;
+  width: 208px;
+  position: sticky;
+  top: @spacing-lg;
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-md;
+  padding: @spacing-sm;
   background: @bg-surface;
   border: 1px solid @border-color;
   border-radius: @border-radius-lg;
-  overflow-x: auto;
 }
 
-.admin-tab {
+.admin-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-nav-title {
+  padding: 6px 10px 2px;
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+  font-weight: @font-weight-semibold;
+  letter-spacing: 0.04em;
+}
+
+.admin-nav-item {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
-  padding: 8px 14px;
+  padding: 8px 10px;
   border: none;
   border-radius: @border-radius-md;
   background: transparent;
@@ -149,6 +190,7 @@ function navigate(key: string) {
   font-size: @font-size-sm;
   font-weight: @font-weight-medium;
   font-family: @font-family;
+  text-align: left;
   cursor: pointer;
   white-space: nowrap;
   transition: all @transition-fast;
@@ -166,7 +208,32 @@ function navigate(key: string) {
 }
 
 .admin-body {
+  flex: 1;
+  min-width: 0;
   min-height: 60vh;
+
+  // 统一后台各页表格/卡片观感（只作用于管理后台内容区）
+  :deep(.ant-table) {
+    font-size: @font-size-sm;
+  }
+
+  :deep(.ant-table-thead > tr > th) {
+    background: @bg-elevated;
+    color: @text-secondary;
+    font-weight: @font-weight-semibold;
+  }
+
+  :deep(.ant-card) {
+    border-radius: @border-radius-lg;
+  }
+
+  :deep(.ant-card-head) {
+    border-bottom-color: @border-color;
+  }
+
+  :deep(.ant-table-pagination.ant-pagination) {
+    margin: @spacing-md 0 0;
+  }
 }
 
 @media (max-width: @screen-md) {
@@ -174,14 +241,26 @@ function navigate(key: string) {
     padding: @spacing-md;
   }
 
-  .admin-tabs {
-    gap: 0;
-    padding: 2px;
+  .admin-layout {
+    flex-direction: column;
   }
 
-  .admin-tab {
-    padding: 8px 10px;
-    font-size: @font-size-xs;
+  .admin-nav {
+    position: static;
+    width: 100%;
+    flex: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin-nav-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .admin-nav-title {
+    display: none;
   }
 }
 </style>

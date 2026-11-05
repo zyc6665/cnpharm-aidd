@@ -2,17 +2,28 @@ import type { ToolPackage } from '@/types/tool-packages'
 import type { ToolSchema } from '@/types/models'
 import { createEmptyParameterSchema } from '@/domain/tools/parameter-schema'
 
+export interface ToolPackageGuidedInput {
+  name: string
+  title: string
+  description: string
+  type: string
+  required: boolean
+}
+
+export interface ToolPackageGuidedOutput {
+  name: string
+  type: string
+  cardinality: 'one' | 'many'
+  required: boolean
+}
+
 export interface ToolPackageGuidedDraft {
   slug: string
   name: string
   version: string
   description: string
-  inputName: string
-  inputTitle: string
-  inputDescription: string
-  inputType: string
-  outputName: string
-  outputType: string
+  inputs: ToolPackageGuidedInput[]
+  outputs: ToolPackageGuidedOutput[]
   parametersSchema: ToolSchema
   image: string
   imageDigest: string
@@ -36,12 +47,8 @@ export function createToolPackageGuidedDraft(): ToolPackageGuidedDraft {
     name: '',
     version: '1.0.0',
     description: '',
-    inputName: 'input_artifact',
-    inputTitle: '',
-    inputDescription: '',
-    inputType: 'protein_structure@1',
-    outputName: 'output_report',
-    outputType: 'run_report@1',
+    inputs: [{ name: 'input_artifact', title: '', description: '', type: 'protein_structure@1', required: true }],
+    outputs: [{ name: 'output_report', type: 'run_report@1', cardinality: 'one', required: true }],
     parametersSchema: createEmptyParameterSchema(),
     image: '',
     imageDigest: `sha256:${ZERO_SHA256}`,
@@ -58,12 +65,24 @@ export function createToolPackageGuidedDraft(): ToolPackageGuidedDraft {
   }
 }
 
+export function createGuidedInput(): ToolPackageGuidedInput {
+  return { name: '', title: '', description: '', type: 'protein_structure@1', required: true }
+}
+
+export function createGuidedOutput(): ToolPackageGuidedOutput {
+  return { name: '', type: 'run_report@1', cardinality: 'one', required: true }
+}
+
 export function buildToolPackageManifest(draft: ToolPackageGuidedDraft): Record<string, unknown> {
-  const input = draft.inputName.trim() || 'input_artifact'
-  const output = draft.outputName.trim() || 'output_report'
+  const inputs = draft.inputs
+    .map(item => ({ ...item, name: item.name.trim() }))
+    .filter(item => item.name)
+  const outputs = draft.outputs
+    .map(item => ({ ...item, name: item.name.trim() }))
+    .filter(item => item.name)
+  if (!inputs.length) inputs.push({ name: 'input_artifact', title: '', description: '', type: 'protein_structure@1', required: true })
+  if (!outputs.length) outputs.push({ name: 'output_report', type: 'run_report@1', cardinality: 'one', required: true })
   const entrypoint = draft.entrypoint.trim().split(/\s+/).filter(Boolean)
-  const adapterInputMethod = `adapter.inputs.${input}`
-  const adapterOutputMethod = `adapter.outputs.${output}`
 
   return {
     api_version: 'aidd.sciminer/tool-package',
@@ -75,19 +94,24 @@ export function buildToolPackageManifest(draft: ToolPackageGuidedDraft): Record<
       ...(draft.description.trim() ? { description: draft.description.trim() } : {})
     },
     artifacts: {
-      inputs: [{
-        name: input,
-        ...(draft.inputTitle.trim() ? { title: draft.inputTitle.trim() } : {}),
-        ...(draft.inputDescription.trim() ? { description: draft.inputDescription.trim() } : {}),
-        type: draft.inputType,
-        required: true,
-      }],
-      outputs: [{ name: output, type: draft.outputType, cardinality: 'one', required: true }]
+      inputs: inputs.map(item => ({
+        name: item.name,
+        ...(item.title.trim() ? { title: item.title.trim() } : {}),
+        ...(item.description.trim() ? { description: item.description.trim() } : {}),
+        type: item.type,
+        required: item.required,
+      })),
+      outputs: outputs.map(item => ({
+        name: item.name,
+        type: item.type,
+        cardinality: item.cardinality,
+        required: item.required,
+      })),
     },
     parameters_schema: draft.parametersSchema,
     adapter: {
-      input: [{ input, method: adapterInputMethod }],
-      output: [{ output, method: adapterOutputMethod }]
+      input: inputs.map(item => ({ input: item.name, method: `adapter.inputs.${item.name}` })),
+      output: outputs.map(item => ({ output: item.name, method: `adapter.outputs.${item.name}` })),
     },
     exposure: { agent: true, workflow: true, direct_run: true },
     runtime: {

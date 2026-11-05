@@ -3,6 +3,13 @@
     <app-page-header :title="t('md.submit.title')" :subtitle="t('md.submit.subtitle')" />
 
     <a-card :bordered="false" class="md-submit__card">
+      <div class="md-submit__model">
+        <div class="md-submit__model-label">{{ t('design.modelSelect.label') }}</div>
+        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      </div>
+    </a-card>
+
+    <a-card :bordered="false" class="md-submit__card">
       <a-spin :spinning="loadingProjects">
         <a-empty v-if="!loadingProjects && projects.length === 0" :description="t('md.submit.emptyProject')" />
 
@@ -164,6 +171,8 @@
   import { listProjects } from '@/api/projects'
   import { getTarget, listStructures, listTargets } from '@/api/targets'
   import { findToolBySlug, MD_TOOL_SLUG, resolveToolVersionId, submitMdTask } from '@/api/md'
+  import ModelSelect from '@/components/design/ModelSelect.vue'
+  import { useModelOptions } from '@/composables/useModelOptions'
   import { estimateMdRuntimeHours } from './analysis'
   import type { ResearchProject } from '@/types/projects'
   import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
@@ -182,6 +191,14 @@
   const loadingProteins = ref(false)
   const loadingStructures = ref(false)
   const submitting = ref(false)
+
+  // 同类 MD 模型可自由选择；默认 gromacs。
+  const {
+    options: modelOptions,
+    selectedSlug,
+    loading: modelLoading,
+    load: loadModels
+  } = useModelOptions('molecular_dynamics', { defaultSlug: MD_TOOL_SLUG })
 
   const form = reactive<{
     projectId: string | undefined
@@ -349,9 +366,9 @@
     }
     submitting.value = true
     try {
-      const tool = await findToolBySlug(MD_TOOL_SLUG)
+      const tool = await findToolBySlug(selectedSlug.value)
       if (!tool) {
-        message.error(t('md.submit.toolMissing', { slug: MD_TOOL_SLUG }))
+        message.error(t('md.submit.toolMissing', { slug: selectedSlug.value }))
         return
       }
       const toolVersionId = await resolveToolVersionId(tool)
@@ -382,6 +399,7 @@
   }
 
   onMounted(() => {
+    void loadModels()
     void loadProjects()
   })
 </script>

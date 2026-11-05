@@ -36,3 +36,10 @@ export const registerKubernetesToolVersion = (
     data,
     { silent: true }
   )
+
+export const validateToolPackage = (manifest: Record<string, unknown>) =>
+  post<{ isValid: boolean; errors: string[] }>(
+    '/tool-packages/validate',
+    { manifest },
+    { silent: true }
+  )

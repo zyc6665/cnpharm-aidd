@@ -23,6 +23,7 @@ from app.models.users import User
 from app.schemas.tool_packages import (
     ToolPackageCreate,
     ToolPackageKubernetesRegistrationCreate,
+    ToolPackageValidate,
 )
 from app.tool_packages.digests import tool_package_manifest_digest
 from app.tool_packages.kubernetes_registration import (
@@ -105,6 +106,17 @@ async def list_tool_packages(
         total=total or 0,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.post("/validate", response_model=dict)
+async def validate_tool_package_manifest(
+    request: ToolPackageValidate,
+    current_user: User = Depends(get_admin_user),
+):
+    validation = validate_tool_package(request.manifest)
+    return success_response(
+        data={"isValid": validation.is_valid, "errors": validation.errors}
     )
 
 

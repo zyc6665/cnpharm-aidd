@@ -100,7 +100,7 @@
 
     <a-table
       v-else
-      :scroll="{ x: 1200 }"
+      :scroll="{ x: 'max-content' }"
       :columns="columns"
       :data-source="rows"
       :loading="loading"

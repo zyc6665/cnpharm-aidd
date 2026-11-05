@@ -1,0 +1,61 @@
+# 8 × NVIDIA RTX 4090 卡位声明（单节点）
+#
+# 用途：把 10.202.2.228（hostname=4090）上的 8 张 RTX 4090 声明为平台可调度卡位。
+# 部署：放到节点 /etc/drp/slots.yaml；并在平台后端设置
+#   DRP_NODE_SLOTS_FILE=<该文件路径>   （或内联 DRP_NODE_SLOTS_YAML=...）
+# 说明（docs/09 §5.6）：
+#   - deviceIds 是宿主卡号，仅用于观测/校验；
+#   - NVIDIA_VISIBLE_DEVICES = 宿主卡号，CUDA_VISIBLE_DEVICES = 容器内序号（恒为 "0"）；
+#     两者含义不同，不能都写宿主卡号，否则容器内 0 卡可见；
+#   - accelerator 段只做展示，不参与调度判定；
+#   - models 省略 = 该卡位允许任意模型工具。
+
+schemaVersion: 2
+nodeId: dev4090-01
+hostname: "4090"
+agentEndpoint: "http://10.202.2.228:8780"
+accelerator:
+  model: "NVIDIA RTX 4090"
+  count: 8
+  memoryMb: 24576
+slots:
+  - id: A0
+    deviceIds: [0]
+    env: { NVIDIA_VISIBLE_DEVICES: "0", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=0", "--ipc=host"]
+    memoryMb: 24576
+  - id: A1
+    deviceIds: [1]
+    env: { NVIDIA_VISIBLE_DEVICES: "1", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=1", "--ipc=host"]
+    memoryMb: 24576
+  - id: A2
+    deviceIds: [2]
+    env: { NVIDIA_VISIBLE_DEVICES: "2", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=2", "--ipc=host"]
+    memoryMb: 24576
+  - id: A3
+    deviceIds: [3]
+    env: { NVIDIA_VISIBLE_DEVICES: "3", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=3", "--ipc=host"]
+    memoryMb: 24576
+  - id: A4
+    deviceIds: [4]
+    env: { NVIDIA_VISIBLE_DEVICES: "4", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=4", "--ipc=host"]
+    memoryMb: 24576
+  - id: A5
+    deviceIds: [5]
+    env: { NVIDIA_VISIBLE_DEVICES: "5", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=5", "--ipc=host"]
+    memoryMb: 24576
+  - id: A6
+    deviceIds: [6]
+    env: { NVIDIA_VISIBLE_DEVICES: "6", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=6", "--ipc=host"]
+    memoryMb: 24576
+  - id: A7
+    deviceIds: [7]
+    env: { NVIDIA_VISIBLE_DEVICES: "7", CUDA_VISIBLE_DEVICES: "0" }
+    dockerArgs: ["--gpus", "device=7", "--ipc=host"]
+    memoryMb: 24576

@@ -19,6 +19,9 @@
           >
             {{ showGuided ? t('design.pipeline.hideFlow') : t('design.pipeline.continueFlow') }}
           </a-button>
+          <a-button data-testid="design-pipeline-advanced" @click="goAdvanced">
+            {{ t('design.pipeline.advanced') }}
+          </a-button>
         </a-space>
       </template>
     </AppPageHeader>
@@ -68,14 +71,14 @@
       </div>
 
       <div v-if="showGuided && projectId" class="guided-wrap" data-testid="design-pipeline-guided">
-        <GuidedWorkflow :project-id="projectId" :initial-step="focusStep" />
+        <GuidedWorkflow :key="focusStage || 'default'" :project-id="projectId" :initial-step="focusStep" />
       </div>
     </a-spin>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -113,6 +116,10 @@ function goStage(target: DesignStageState): void {
 
 function goProjects(): void {
   void router.push('/workspace')
+}
+
+function goAdvanced(): void {
+  void router.push('/workflow')
 }
 
 function onProjectChange(value: unknown): void {
@@ -171,6 +178,23 @@ onMounted(async () => {
     showGuided.value = true
   }
 })
+
+// 已在 /design 页时，点击侧栏「结构预测/口袋预测」只改 query（path 不变），
+// 组件不会重新挂载；监听 query 变化，聚焦对应阶段并展开引导。
+watch(
+  () => [route.query.focus, route.query.project_id],
+  ([focusQuery, projectQuery]) => {
+    const focus = typeof focusQuery === 'string' ? focusQuery : ''
+    if (focus === 'structure' || focus === 'pocket') {
+      showGuided.value = true
+    }
+    const pid = typeof projectQuery === 'string' ? projectQuery : ''
+    if (pid && pid !== projectId.value) {
+      projectId.value = pid
+      void loadStage(pid)
+    }
+  }
+)
 </script>
 
 <style scoped lang="less">

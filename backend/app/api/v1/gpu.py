@@ -381,6 +381,22 @@ async def get_gpu_history(
 
 
 @router.get(
+    "/k8s",
+    summary="K8s 算力总览（节点 GPU 与 model-jobs 作业）",
+    description="管理后台「算力队列」数据源：只读查询 K8s 节点 GPU 与 model-jobs 命名空间 Job/Pod。",
+)
+async def get_k8s_compute_overview(current_user=Depends(get_admin_user)):
+    from app.services.k8s_compute import build_k8s_compute_overview
+
+    try:
+        data = await build_k8s_compute_overview()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("K8s compute overview failed: %s", exc)
+        raise HTTPException(status_code=503, detail="K8s 算力信息不可用: %s" % exc) from exc
+    return success_response(data)
+
+
+@router.get(
     "/slots",
     summary="获取卡位与节点视图",
     description="返回 slots.yaml 声明的节点、卡位与当前状态（docs/06 P-36 算力与队列页数据源）",

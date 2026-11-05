@@ -1,0 +1,18 @@
+[Unit]
+Description=DRP Node Agent (slot execution + status reporter)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/drp/agent.env
+WorkingDirectory=/opt/drp/node-agent
+ExecStart=/opt/drp/venv/bin/python -m drp_node_agent
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

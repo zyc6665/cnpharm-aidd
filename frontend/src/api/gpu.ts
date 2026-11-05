@@ -7,7 +7,7 @@
 import { get } from '@/api/request'
 import type { ApiResponse } from '@/types/api'
 import { normalizeSlotState } from '@/domain/admin/compute'
-import type { GpuAllocation, GpuSlot, GpuSlotNode, GpuSlotOverview } from '@/types/gpu'
+import type { GpuAllocation, GpuSlot, GpuSlotNode, GpuSlotOverview, K8sComputeOverview } from '@/types/gpu'
 
 /** 只读查询统一配置：不弹全局错误提示，失败重试一次。 */
 const READ_OPTIONS = { silent: true, retry: 1 } as const
@@ -167,4 +167,10 @@ export async function listGpuAllocations(params?: { status?: string }): Promise<
   const response = await get<RawAllocationStats>('/gpu/allocations', params, READ_OPTIONS)
   const allocations = Array.isArray(response.data?.allocations) ? response.data.allocations : []
   return { ...response, data: allocations.map(normalizeAllocation) }
+}
+
+/** K8s 算力总览（只读）：管理后台「算力队列」的 K8s 节点/GPU/作业视图。 */
+export async function getK8sComputeOverview(): Promise<ApiResponse<K8sComputeOverview>> {
+  const response = await get<K8sComputeOverview>('/gpu/k8s', undefined, READ_OPTIONS)
+  return response
 }

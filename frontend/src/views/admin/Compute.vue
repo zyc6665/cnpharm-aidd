@@ -8,6 +8,91 @@
       </template>
     </AppPageHeader>
 
+    <template v-if="k8s?.configured">
+      <a-alert
+        v-if="k8sError"
+        class="compute-empty"
+        type="error"
+        show-icon
+        :message="k8sError"
+      />
+      <a-row :gutter="[16, 16]" class="compute-stats" align="stretch">
+        <a-col :xs="24" :sm="12" :xl="6">
+          <a-card class="compute-stat-card" :loading="k8sLoading">
+            <a-statistic :title="t('admin.compute.k8s.totalGpu')" :value="k8s.gpuCapacity" />
+          </a-card>
+        </a-col>
+        <a-col :xs="24" :sm="12" :xl="6">
+          <a-card class="compute-stat-card" :loading="k8sLoading">
+            <a-statistic :title="t('admin.compute.k8s.allocatableGpu')" :value="k8s.gpuAllocatable" />
+          </a-card>
+        </a-col>
+        <a-col :xs="24" :sm="12" :xl="6">
+          <a-card class="compute-stat-card" :loading="k8sLoading">
+            <a-statistic :title="t('admin.compute.k8s.allocatedGpu')" :value="k8s.gpuAllocated" />
+          </a-card>
+        </a-col>
+        <a-col :xs="24" :sm="12" :xl="6">
+          <a-card class="compute-stat-card" :loading="k8sLoading">
+            <a-statistic
+              :title="t('admin.compute.k8s.runningPods')"
+              :value="k8s.runningPods ?? 0"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+
+      <a-card :title="t('admin.compute.k8s.nodes')" class="compute-state-card">
+        <a-table
+          :columns="k8sNodeColumns"
+          :data-source="k8s.nodes"
+          :pagination="false"
+          row-key="name"
+          size="middle"
+          :scroll="{ x: 'max-content' }"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'ready'">
+              <a-tag :color="record.ready ? 'success' : 'error'">
+                {{ record.ready ? t('admin.compute.k8s.ready') : t('admin.compute.k8s.notReady') }}
+              </a-tag>
+            </template>
+            <template v-else-if="column.key === 'roles'">
+              {{ (record.roles || []).join(', ') }}
+            </template>
+            <template v-else-if="column.key === 'gpu'">
+              {{ record.gpuAllocatable }} / {{ record.gpuCapacity }}
+            </template>
+            <template v-else-if="column.key === 'kubeletVersion'">
+              {{ record.kubeletVersion || '-' }}
+            </template>
+          </template>
+        </a-table>
+      </a-card>
+
+      <a-card :title="t('admin.compute.k8s.jobs')">
+        <a-table
+          :columns="k8sPodColumns"
+          :data-source="k8s.pods"
+          :pagination="false"
+          row-key="name"
+          size="middle"
+          :scroll="{ x: 'max-content' }"
+          :locale="{ emptyText: t('admin.compute.k8s.noJobs') }"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'phase'">
+              <a-tag :color="podPhaseColor(record.phase)">{{ record.phase || '-' }}</a-tag>
+            </template>
+            <template v-else-if="column.key === 'startTime'">
+              {{ formatAdminDateTime(record.startTime) }}
+            </template>
+          </template>
+        </a-table>
+      </a-card>
+    </template>
+
+    <template v-else>
     <a-alert
       v-if="loadError"
       class="compute-empty"
@@ -24,14 +109,14 @@
       :message="t('admin.compute.emptyState')"
     />
 
-    <a-row :gutter="[16, 16]" class="compute-stats">
+    <a-row :gutter="[16, 16]" class="compute-stats" align="stretch">
       <a-col :xs="24" :sm="12" :xl="6">
-        <a-card :loading="loading">
+        <a-card class="compute-stat-card" :loading="loading">
           <a-statistic :title="t('admin.compute.totalSlots')" :value="capacity.totalSlots" />
         </a-card>
       </a-col>
       <a-col :xs="24" :sm="12" :xl="6">
-        <a-card :loading="loading">
+        <a-card class="compute-stat-card" :loading="loading">
           <a-statistic :title="t('admin.compute.schedulableSlots')" :value="capacity.schedulableSlots" />
         </a-card>
       </a-col>
@@ -122,7 +207,7 @@
 
     <a-card :title="t('admin.compute.allocations')" class="compute-allocations">
       <a-table
-        :scroll="{ x: 900 }"
+        :scroll="{ x: 'max-content' }"
         :columns="allocationColumns"
         :data-source="allocations"
         :loading="allocationLoading"
@@ -156,6 +241,7 @@
         </template>
       </a-table>
     </a-card>
+    </template>
   </div>
 </template>
 
@@ -165,7 +251,7 @@ import { useI18n } from 'vue-i18n'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import { getGpuSlotOverview, listGpuAllocations } from '@/api/gpu'
+import { getGpuSlotOverview, getK8sComputeOverview, listGpuAllocations } from '@/api/gpu'
 import {
   SLOT_STATES,
   SLOT_STATE_TONES,
@@ -174,7 +260,7 @@ import {
   summarizeSlotCapacity
 } from '@/domain/admin/compute'
 import { formatAdminDateTime } from '@/domain/admin/system-health'
-import type { GpuAllocation, GpuSlotOverview } from '@/types/gpu'
+import type { GpuAllocation, GpuSlotOverview, K8sComputeOverview } from '@/types/gpu'
 
 const { t } = useI18n()
 
@@ -183,6 +269,51 @@ const loadError = ref(false)
 const overview = ref<GpuSlotOverview | null>(null)
 const allocationLoading = ref(false)
 const allocations = ref<GpuAllocation[]>([])
+
+// K8s 算力视图（当前平台执行走 k8s_job）
+const k8s = ref<K8sComputeOverview | null>(null)
+const k8sLoading = ref(false)
+const k8sError = ref('')
+
+const k8sNodeColumns = computed(() => [
+  { title: t('admin.compute.k8s.nodeName'), key: 'name', dataIndex: 'name', width: 180 },
+  { title: t('admin.compute.k8s.nodeStatus'), key: 'ready', width: 110 },
+  { title: t('admin.compute.k8s.roles'), key: 'roles', width: 140 },
+  { title: t('admin.compute.k8s.gpu'), key: 'gpu', width: 120 },
+  { title: t('admin.compute.k8s.cpu'), key: 'cpu', dataIndex: 'cpu', width: 90 },
+  { title: t('admin.compute.k8s.memory'), key: 'memory', dataIndex: 'memory', width: 140 },
+  { title: t('admin.compute.k8s.kubelet'), key: 'kubeletVersion', width: 150 },
+])
+
+const k8sPodColumns = computed(() => [
+  { title: t('admin.compute.k8s.podName'), key: 'name', dataIndex: 'name', width: 260 },
+  { title: t('admin.compute.k8s.jobName'), key: 'jobName', dataIndex: 'jobName', width: 220 },
+  { title: t('admin.compute.k8s.phase'), key: 'phase', width: 120 },
+  { title: t('admin.compute.k8s.gpuUsed'), key: 'gpu', dataIndex: 'gpu', width: 90 },
+  { title: t('admin.compute.k8s.node'), key: 'node', dataIndex: 'node', width: 120 },
+  { title: t('admin.compute.k8s.startTime'), key: 'startTime', width: 170 },
+])
+
+const podPhaseColor = (phase?: string | null): string => {
+  if (phase === 'Running') return 'processing'
+  if (phase === 'Succeeded') return 'success'
+  if (phase === 'Failed') return 'error'
+  return 'default'
+}
+
+const fetchK8s = async (): Promise<void> => {
+  k8sLoading.value = true
+  k8sError.value = ''
+  try {
+    const response = await getK8sComputeOverview()
+    k8s.value = response.data ?? null
+  } catch {
+    k8s.value = null
+    k8sError.value = t('admin.compute.k8s.loadError')
+  } finally {
+    k8sLoading.value = false
+  }
+}
 
 const allSlots = computed(() => (overview.value?.nodes ?? []).flatMap(node => node.slots))
 const stateCounts = computed(() => countSlotsByState(allSlots.value))
@@ -241,7 +372,7 @@ const fetchAllocations = async (): Promise<void> => {
 }
 
 const refreshComputeData = async (): Promise<void> => {
-  await Promise.all([fetchOverview(), fetchAllocations()])
+  await Promise.all([fetchK8s(), fetchOverview(), fetchAllocations()])
 }
 
 onMounted(refreshComputeData)
@@ -257,6 +388,18 @@ onMounted(refreshComputeData)
 
   .compute-stats {
     margin-bottom: @spacing-lg;
+
+    // 让三张卡片等高对齐
+    :deep(.ant-card) {
+      height: 100%;
+    }
+  }
+
+  .compute-stat-card :deep(.ant-card-body) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .compute-vendors {

@@ -4,18 +4,12 @@
       <ProjectWorkspaceNav v-if="routeProjectId" :project-id="routeProjectId" />
 
       <AppPageHeader
-        :title="t('workflow.title')"
-        :subtitle="t('workflow.subtitle')"
+        :title="t('workflow.advanced.title')"
+        :subtitle="t('workflow.advanced.subtitle')"
         align="center"
       />
 
       <div class="workflow-deck">
-        <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
-        <a-tab-pane key="guided" tab="引导式">
-          <GuidedWorkflow v-if="guidedProjectId" :project-id="guidedProjectId" />
-          <a-empty v-else description="请先选择一个项目" />
-        </a-tab-pane>
-        <a-tab-pane key="manual" :tab="t('workflow.mode.manual')">
           <WorkflowWorkbenchShell
             :workflow-name="workflowName"
             :ready-count="readyNodeCount"
@@ -250,8 +244,6 @@
               </WorkflowResultsSidebar>
             </template>
           </WorkflowWorkbenchShell>
-        </a-tab-pane>
-         </a-tabs>
       </div>
     </div>
   </div>
@@ -274,8 +266,6 @@
   import WorkflowResultsSidebar from '@/components/workflow/WorkflowResultsSidebar.vue'
   import WorkflowWorkbenchShell from '@/components/workflow/WorkflowWorkbenchShell.vue'
   import WorkflowWorkbenchRail from '@/components/workflow/WorkflowWorkbenchRail.vue'
-  import GuidedWorkflow from './GuidedWorkflow.vue'
-  import { listProjects } from '@/api/projects'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowNodeTaskPolling } from '@/composables/useWorkflowNodeTaskPolling'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
@@ -295,8 +285,6 @@
     useWorkflowStore
   } from '@/stores'
 
-  type WorkflowMode = 'guided' | 'manual'
-
   const { t } = useI18n()
   const route = useRoute()
   const router = useRouter()
@@ -309,14 +297,12 @@
 
   workflowStore.normalizeSessionShape()
 
-  const activeMode = ref<WorkflowMode>('guided')
   const routeProjectId = computed(() =>
     resolveWorkflowRouteProjectId({
       paramsProjectId: route.params?.projectId,
       queryProjectId: route.query.project_id
     })
   )
-  const guidedProjectId = ref(routeProjectId.value || '')
 
   const {
     sidebarToolSearchKeyword,
@@ -530,14 +516,6 @@
 
   onMounted(async () => {
     await Promise.allSettled([toolsStore.fetchWorkbenchGroups(), toolsStore.fetchWorkflowTools()])
-    if (!guidedProjectId.value) {
-      try {
-        const response = await listProjects()
-        guidedProjectId.value = response.data.items?.[0]?.id ?? ''
-      } catch {
-        guidedProjectId.value = ''
-      }
-    }
   })
 
   onMounted(async () => {

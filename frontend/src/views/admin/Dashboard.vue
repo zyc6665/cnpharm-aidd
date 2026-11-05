@@ -65,7 +65,6 @@
       <a-col :xs="24" :lg="12">
         <a-card class="dashboard-panel" :title="t('admin.recentTasks')">
           <a-table
-            :scroll="{ x: 560 }"
             :columns="taskColumns"
             :data-source="recentTasks"
             :loading="loading"
@@ -96,7 +95,6 @@
       <a-col :xs="24" :lg="12">
         <a-card class="dashboard-panel" :title="t('admin.recentUsers')">
           <a-table
-            :scroll="{ x: 560 }"
             :columns="userColumns"
             :data-source="recentUsers"
             :loading="loading"

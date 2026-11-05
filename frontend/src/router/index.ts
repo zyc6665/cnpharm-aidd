@@ -134,9 +134,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/design/runs',
-    name: 'DesignRuns',
-    component: () => import('@/views/design/Runs.vue'),
-    meta: { title: 'design.runs.title', requiresAuth: true }
+    redirect: { path: '/tasks', query: { scope: 'design' } }
   },
   {
     path: '/tasks/:id/results',
@@ -338,12 +336,6 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminToolCategories',
         component: () => import('@/views/admin/ToolCategories.vue'),
         meta: { title: 'admin.toolCategories' }
-      },
-      {
-        path: 'workbench-groups',
-        name: 'AdminWorkbenchGroups',
-        component: () => import('@/views/admin/WorkbenchGroups.vue'),
-        meta: { title: 'admin.workbenchGroups' }
       },
       {
         path: 'tasks',

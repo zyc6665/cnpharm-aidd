@@ -9,11 +9,12 @@ export function usePocketPrediction() {
   const predicting: Ref<boolean> = ref(false)
   const error: Ref<string> = ref('')
 
-  async function predict(structureId: string): Promise<string | null> {
+  async function predict(structureId: string, modelSlug?: string): Promise<string | null> {
     error.value = ''
     predicting.value = true
     try {
-      const response = await predictPockets(structureId, {})
+      const payload = modelSlug ? { model_ref: { name: modelSlug } } : {}
+      const response = await predictPockets(structureId, payload)
       return response.data.task_id
     } catch {
       error.value = 'predict-failed'

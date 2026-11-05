@@ -1,7 +1,8 @@
 <template>
-  <div class="design-runs-page">
+  <div class="design-runs-page" :class="{ embedded }">
     <div class="container">
       <AppPageHeader
+        v-if="!embedded"
         :title="t('design.runs.title')"
         :subtitle="t('design.runs.subtitle')"
       >
@@ -124,6 +125,8 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
+
+defineProps<{ embedded?: boolean }>()
 
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppInlineError from '@/components/common/AppInlineError.vue'

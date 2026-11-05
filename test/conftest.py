@@ -23,6 +23,18 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-key-not-for-deploy
 os.environ.setdefault(
     "SETTINGS_ENCRYPTION_KEY", "test-only-settings-encryption-key-not-for-deployment"
 )
+# 测试不得继承开发者 backend/.env 里的真实 K8s 绑定配置，否则部分
+# “缺少绑定应报错”的测试会被真实配置掩盖。空值等价于未配置。
+os.environ.setdefault("EXECUTOR_ENABLED_K8S", "false")
+for _k8s_setting in (
+    "K8S_ADAPTER_CLUSTER_ALIAS",
+    "K8S_ADAPTER_NAMESPACE",
+    "K8S_ADAPTER_CREDENTIAL_REF",
+    "K8S_ADAPTER_SERVICE_ACCOUNT",
+    "K8S_ADAPTER_KUBECONFIG",
+    "K8S_ADAPTER_API_SERVER",
+):
+    os.environ.setdefault(_k8s_setting, "")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BACKEND_ROOT) not in sys.path:

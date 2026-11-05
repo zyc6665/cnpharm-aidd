@@ -71,3 +71,52 @@ export interface GpuAllocation {
   status: string
   allocated_at: string | null
 }
+
+/** GET /api/v1/gpu/k8s 的返回体（管理后台「算力队列」K8s 视图）。 */
+export interface K8sComputeNode {
+  name: string
+  ready: boolean
+  roles: string[]
+  gpuCapacity: number
+  gpuAllocatable: number
+  cpu?: string | null
+  memory?: string | null
+  os?: string | null
+  kubeletVersion?: string | null
+  createdAt?: string | null
+}
+
+export interface K8sComputePod {
+  name: string
+  phase?: string | null
+  node?: string | null
+  gpu: number
+  jobName?: string | null
+  startTime?: string | null
+}
+
+export interface K8sComputeJob {
+  name: string
+  active: number
+  succeeded: number
+  failed: number
+  startTime?: string | null
+  completionTime?: string | null
+}
+
+export interface K8sComputeOverview {
+  configured: boolean
+  clusterAlias?: string | null
+  namespace?: string
+  apiServer?: string | null
+  reason?: string
+  nodeCount: number
+  gpuCapacity: number
+  gpuAllocatable: number
+  gpuAllocated: number
+  runningPods?: number
+  runningJobs: number
+  nodes: K8sComputeNode[]
+  pods: K8sComputePod[]
+  jobs: K8sComputeJob[]
+}
