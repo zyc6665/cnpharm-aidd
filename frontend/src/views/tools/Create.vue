@@ -262,31 +262,6 @@
               />
             </a-form-item>
 
-            <a-divider orientation="left">发布前校验</a-divider>
-            <a-alert
-              type="info"
-              show-icon
-              message="一键校验模型的发布条件"
-              description="检查必填信息、镜像 digest 格式、资源档位、输入/输出契约与 Tool Package manifest（若存在）。校验通过后仍可保存，平台会在提交时再次校验。"
-              style="margin-bottom: 12px"
-            />
-            <a-space direction="vertical" style="width: 100%">
-              <a-button data-testid="tool-validate-button" :loading="validationRunning" @click="runValidation">
-                {{ validationRunning ? '校验中…' : '一键校验' }}
-              </a-button>
-              <div v-if="validationChecks.length" class="validation-list" data-testid="tool-validation-results">
-                <div
-                  v-for="check in validationChecks"
-                  :key="check.key"
-                  class="validation-item"
-                  :class="check.ok ? 'is-ok' : 'is-fail'"
-                >
-                  <span class="validation-mark">{{ check.ok ? '✓' : '✗' }}</span>
-                  <span class="validation-label">{{ check.label }}</span>
-                  <span v-if="check.detail" class="validation-detail">{{ check.detail }}</span>
-                </div>
-              </div>
-            </a-space>
 
             </div>
             <div v-show="activeStep === 2">
@@ -338,49 +313,11 @@
             </div>
             <div v-show="activeStep === 3">
               <a-divider orientation="left">输入 / 输出契约</a-divider>
-              <template v-if="hasContractManifest">
-                <a-alert
-                  type="info"
-                  show-icon
-                  message="来自 Tool Package v2 的 Artifact 契约"
-                  description="在这里增删输入/输出槽，保存时会写回该版本的 manifest.artifacts。"
-                  style="margin-bottom: 12px"
-                />
-                <div class="contract-block">
-                  <div class="contract-block-title">输入（inputs）</div>
-                  <div v-for="(item, index) in contractInputs" :key="'in' + index" class="contract-row">
-                    <a-input v-model:value="item.name" placeholder="槽名称，如 receptor" style="width: 200px" />
-                    <a-select v-model:value="item.type" style="width: 200px">
-                      <a-select-option v-for="t in ARTIFACT_TYPES" :key="t" :value="t">{{ t }}</a-select-option>
-                    </a-select>
-                    <a-checkbox v-model:checked="item.required">必填</a-checkbox>
-                    <a-button type="text" danger @click="contractInputs.splice(index, 1)">删除</a-button>
-                  </div>
-                  <a-button type="dashed" block @click="addContractInput">+ 添加输入槽</a-button>
-                </div>
-                <div class="contract-block" style="margin-top: 16px">
-                  <div class="contract-block-title">输出（outputs）</div>
-                  <div v-for="(item, index) in contractOutputs" :key="'out' + index" class="contract-row">
-                    <a-input v-model:value="item.name" placeholder="槽名称，如 ligands" style="width: 180px" />
-                    <a-select v-model:value="item.type" style="width: 180px">
-                      <a-select-option v-for="t in ARTIFACT_TYPES" :key="t" :value="t">{{ t }}</a-select-option>
-                    </a-select>
-                    <a-select v-model:value="item.cardinality" style="width: 110px">
-                      <a-select-option value="one">单值</a-select-option>
-                      <a-select-option value="many">多值</a-select-option>
-                    </a-select>
-                    <a-checkbox v-model:checked="item.required">必填</a-checkbox>
-                    <a-button type="text" danger @click="contractOutputs.splice(index, 1)">删除</a-button>
-                  </div>
-                  <a-button type="dashed" block @click="addContractOutput">+ 添加输出槽</a-button>
-                </div>
-              </template>
               <a-alert
-                v-else
-                type="warning"
+                type="info"
                 show-icon
-                message="当前没有可编辑的 Tool Package 契约"
-                description="手工注册工具的输入/输出契约由 Tool Package v2 manifest 声明；从「工具包」导入（带 package_id）或编辑已关联 manifest 的版本后，可在此增删 Artifact 槽。"
+                message="输入 / 输出契约由模型交付包声明"
+                description="请在「工具与模型 → 模型交付包」登记或发布新版本；此页只维护工具展示信息与运行参数，不再单独编辑 Artifact 契约。"
               />
             </div>
             <div v-show="activeStep === 4">
@@ -489,7 +426,7 @@
   import type { ToolSchema } from '@/types/models'
   import type { ToolPackage } from '@/types/tool-packages'
   import { useToolsStore } from '@/stores'
-  import { getToolPackage, validateToolPackage } from '@/api/tool-packages'
+  import { getToolPackage } from '@/api/tool-packages'
   import {
     createTool,
     createToolDraftFromTemplate,
@@ -511,62 +448,6 @@
   const showGuide = ref(false)
   const activeStep = ref(1)
   const wizardSteps = ['基本信息', '镜像与运行', '输入/输出契约', '运行参数', '版本与发布']
-  interface ValidationCheck { key: string; label: string; ok: boolean; detail?: string }
-  const validationRunning = ref(false)
-  const validationChecks = ref<ValidationCheck[]>([])
-
-  function pushCheck(key: string, label: string, ok: boolean, detail?: string) {
-    validationChecks.value.push({ key, label, ok, detail })
-  }
-
-  async function runValidation() {
-    validationRunning.value = true
-    validationChecks.value = []
-    try {
-      pushCheck('name', '模型名称', Boolean(formState.name && String(formState.name).trim()), '必填')
-      pushCheck('slug', '模型标识（slug）', /^[a-z0-9][a-z0-9-]*$/.test(String(formState.slug || '')), '小写字母、数字与连字符')
-      pushCheck('description', '模型简介', Boolean(formState.description && String(formState.description).trim()), '必填')
-      pushCheck(
-        'image',
-        '镜像 digest',
-        /@sha256:[a-fA-F0-9]{64}$/.test(String(formState.k8s_image || '')),
-        '需为 registry/image@sha256:<64 位>'
-      )
-      pushCheck('resource', '资源档位', Boolean(formState.k8s_resource_profile), '必填')
-      pushCheck('version', '版本号', /^\d+\.\d+\.\d+/.test(String(formState.version || '')), '建议语义化版本，如 1.0.0')
-
-      if (hasContractManifest.value) {
-        const inNames = contractInputs.value.map(i => String(i.name || '').trim())
-        const outNames = contractOutputs.value.map(o => String(o.name || '').trim())
-        const missing = [...inNames, ...outNames].some(n => !n)
-        const dupIn = new Set(inNames).size !== inNames.length
-        const dupOut = new Set(outNames).size !== outNames.length
-        pushCheck('contract', '输入/输出契约', !missing && !dupIn && !dupOut,
-          missing ? '存在空槽名称' : dupIn || dupOut ? '存在重复槽名称' : `${inNames.length} 个输入 / ${outNames.length} 个输出`)
-      } else {
-        pushCheck('contract', '输入/输出契约', true, '无 Tool Package manifest，跳过（提交时由后端校验）')
-      }
-
-      if (registrationMode.value !== 'package') {
-        const schemaErrors = validateParameterSchema(inputParameterSchema.value)
-        pushCheck('params', '运行参数 Schema', inputSchemaEditorValid.value && schemaErrors.length === 0,
-          schemaErrors[0] || '参数 Schema 合法')
-      }
-
-      if (packageManifest.value) {
-        try {
-          const response = await validateToolPackage(packageManifest.value as Record<string, unknown>)
-          const result = response.data
-          pushCheck('manifest', 'Tool Package manifest 校验', result.isValid, result.errors.join('；') || '通过')
-        } catch (error) {
-          pushCheck('manifest', 'Tool Package manifest 校验', false, '调用校验接口失败，请确认后端已更新')
-        }
-      }
-      syncContractToManifest()
-    } finally {
-      validationRunning.value = false
-    }
-  }
   const toolTemplates = ref<ToolTemplateSummary[]>([])
   const selectedToolTemplateKey = ref<string>()
   const creatingTemplateDraft = ref(false)
@@ -575,32 +456,6 @@
   const originalNotes = ref('')
   const originalConfigSnapshot = ref('')
   const packageManifest = ref<Record<string, unknown> | null>(null)
-  const ARTIFACT_TYPES = ['protein_structure', 'binding_pocket', 'molecule_table', 'ligand_structure', 'complex_structure', 'peptide_sequence', 'admet_table', 'affinity_table', 'md_trajectory', 'confidence_report', 'molecule_set', 'run_report']
-  const contractInputs = ref<Array<Record<string, any>>>([])
-  const contractOutputs = ref<Array<Record<string, any>>>([])
-  const hasContractManifest = computed(() => Boolean((packageManifest.value as any)?.artifacts))
-  function syncContractFromManifest() {
-    const artifacts = (packageManifest.value as any)?.artifacts
-    contractInputs.value = Array.isArray(artifacts?.inputs)
-      ? artifacts.inputs.map((x: any) => ({ name: x?.name ?? '', type: x?.type ?? 'protein_structure', required: x?.required !== false }))
-      : []
-    contractOutputs.value = Array.isArray(artifacts?.outputs)
-      ? artifacts.outputs.map((x: any) => ({ name: x?.name ?? '', type: x?.type ?? 'run_report', cardinality: x?.cardinality === 'many' ? 'many' : 'one', required: x?.required !== false }))
-      : []
-  }
-  function syncContractToManifest() {
-    if (!packageManifest.value) return
-    const manifest = packageManifest.value as any
-    const base = manifest.artifacts && typeof manifest.artifacts === 'object' ? manifest.artifacts : {}
-    manifest.artifacts = {
-      ...base,
-      inputs: contractInputs.value.map(i => ({ ...i, name: String(i.name || '').trim(), type: i.type, required: i.required !== false })),
-      outputs: contractOutputs.value.map(o => ({ ...o, name: String(o.name || '').trim(), type: o.type, cardinality: o.cardinality === 'many' ? 'many' : 'one', required: o.required !== false }))
-    }
-  }
-  function addContractInput() { contractInputs.value.push({ name: '', type: 'protein_structure', required: true }) }
-  function addContractOutput() { contractOutputs.value.push({ name: '', type: 'run_report', cardinality: 'one', required: true }) }
-  watch([contractInputs, contractOutputs], syncContractToManifest, { deep: true })
   const packageLoading = ref(false)
 
   // 判断是编辑还是创建
@@ -815,7 +670,6 @@
         return
       }
       packageManifest.value = version.manifest
-      syncContractFromManifest()
       formState.name = pkg.name
       formState.slug = pkg.slug
       formState.description = pkg.description || ''
@@ -893,7 +747,6 @@
 
     submitting.value = true
     try {
-      syncContractToManifest()
       let submission: ReturnType<typeof createToolCreateSubmission>
       try {
         submission = createToolCreateSubmission({
@@ -1090,57 +943,4 @@
     }
   }
 
-  .contract-block {
-    border: 1px solid @border-color;
-    border-radius: 8px;
-    padding: 12px;
-  }
-
-  .contract-block-title {
-    font-size: @font-size-xs;
-    color: @text-secondary;
-    margin-bottom: 8px;
-  }
-
-  .contract-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
-  }
-
-  .validation-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .validation-item {
-    display: flex;
-    gap: 8px;
-    align-items: baseline;
-    font-size: @font-size-sm;
-
-    &.is-ok .validation-mark {
-      color: @success-color;
-    }
-
-    &.is-fail .validation-mark {
-      color: @error-color;
-    }
-  }
-
-  .validation-mark {
-    font-weight: 600;
-  }
-
-  .validation-label {
-    color: @text-primary;
-    min-width: 160px;
-  }
-
-  .validation-detail {
-    color: @text-secondary;
-  }
 </style>

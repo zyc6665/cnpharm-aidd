@@ -136,40 +136,37 @@
           <a-form-item label="简介">
             <a-textarea v-model:value="guidedDraft.description" :rows="2" placeholder="工具用途和适用场景" />
           </a-form-item>
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="输入 Artifact" required>
-                <a-input v-model:value="guidedDraft.inputName" addon-before="内部名称" />
-                <a-input
-                  v-model:value="guidedDraft.inputTitle"
-                  addon-before="显示名称"
-                  class="stacked-input"
-                  placeholder="例如：靶标蛋白结构"
-                />
-                <a-select v-model:value="guidedDraft.inputType" class="stacked-input">
-                  <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type">
-                    {{ standardArtifactTypeLabel(type) }} · {{ type }}
-                  </a-select-option>
-                </a-select>
-                <a-textarea
-                  v-model:value="guidedDraft.inputDescription"
-                  class="stacked-input"
-                  :rows="2"
-                  placeholder="输入文件的用途和格式要求"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="输出 Artifact" required>
-                <a-input v-model:value="guidedDraft.outputName" addon-before="名称" />
-                <a-select v-model:value="guidedDraft.outputType" class="stacked-input">
-                  <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type">
-                    {{ standardArtifactTypeLabel(type) }} · {{ type }}
-                  </a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <a-form-item label="输入 Artifact" required>
+            <div v-for="(item, index) in guidedDraft.inputs" :key="'input-' + index" class="artifact-row">
+              <a-input v-model:value="item.name" placeholder="内部名称，如 receptor" style="width: 180px" />
+              <a-select v-model:value="item.type" style="width: 230px">
+                <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
+                  {{ standardArtifactTypeLabel(type) }}
+                </a-select-option>
+              </a-select>
+              <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+              <a-button type="text" danger @click="guidedDraft.inputs.splice(index, 1)">删除</a-button>
+            </div>
+            <a-button type="dashed" block @click="guidedDraft.inputs.push(createGuidedInput())">+ 添加输入</a-button>
+          </a-form-item>
+
+          <a-form-item label="输出 Artifact" required>
+            <div v-for="(item, index) in guidedDraft.outputs" :key="'output-' + index" class="artifact-row">
+              <a-input v-model:value="item.name" placeholder="内部名称，如 ligands" style="width: 180px" />
+              <a-select v-model:value="item.type" style="width: 230px">
+                <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
+                  {{ standardArtifactTypeLabel(type) }}
+                </a-select-option>
+              </a-select>
+              <a-select v-model:value="item.cardinality" style="width: 100px">
+                <a-select-option value="one">单值</a-select-option>
+                <a-select-option value="many">多值</a-select-option>
+              </a-select>
+              <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+              <a-button type="text" danger @click="guidedDraft.outputs.splice(index, 1)">删除</a-button>
+            </div>
+            <a-button type="dashed" block @click="guidedDraft.outputs.push(createGuidedOutput())">+ 添加输出</a-button>
+          </a-form-item>
           <a-form-item label="科学参数">
             <ToolParameterSchemaEditor
               v-model:model-value="guidedDraft.parametersSchema"
@@ -568,6 +565,8 @@
   } from '@/domain/tool-packages'
   import {
     buildToolPackageManifest,
+    createGuidedInput,
+    createGuidedOutput,
     createToolPackageGuidedDraft
   } from '@/domain/tool-packages/manifest'
   import { getStandardArtifactTypeLabelKey } from '@/domain/tools/standard-artifact-inputs'
@@ -733,6 +732,21 @@
       })
       if (!packageParameterSchemaValid.value || schemaErrors.length > 0) {
         message.error(schemaErrors[0] || '请先修正科学参数 Schema')
+        return
+      }
+      const inputs = guidedDraft.value.inputs
+        .map(item => ({ ...item, name: item.name.trim() }))
+        .filter(item => item.name)
+      const outputs = guidedDraft.value.outputs
+        .map(item => ({ ...item, name: item.name.trim() }))
+        .filter(item => item.name)
+      if (!inputs.length || !outputs.length) {
+        message.error('请至少填写一个输入和一个输出')
+        return
+      }
+      if (new Set(inputs.map(item => item.name)).size !== inputs.length ||
+          new Set(outputs.map(item => item.name)).size !== outputs.length) {
+        message.error('输入或输出名称不能重复')
         return
       }
       manifest = buildToolPackageManifest(guidedDraft.value)
@@ -1070,5 +1084,13 @@
   .legacy-migration-entry a {
     color: @accent-color;
     font-weight: @font-weight-medium;
+  }
+
+  .artifact-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
   }
 </style>

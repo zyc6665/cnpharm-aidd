@@ -62,6 +62,25 @@ function toolPackage(overrides: Partial<ToolPackage> = {}): ToolPackage {
   }
 }
 
+test('向导支持多个输入与多个输出', () => {
+  const draft = createToolPackageGuidedDraft()
+  draft.slug = 'multi-io'
+  draft.name = 'Multi IO'
+  draft.image = 'registry.example.com/multi:1.0.0'
+  draft.inputs.push({ name: 'ligand', title: '配体', description: '', type: 'ligand_structure@1', required: false })
+  draft.outputs.push({ name: 'scores', type: 'affinity_table@1', cardinality: 'many', required: true })
+
+  const manifest = buildToolPackageManifest(draft)
+  const artifacts = manifest.artifacts as { inputs: Array<{ name: string }>; outputs: Array<{ name: string; cardinality: string }> }
+  const adapter = manifest.adapter as { input: Array<{ input: string }>; output: Array<{ output: string }> }
+
+  assert.deepEqual(artifacts.inputs.map(item => item.name), ['input_artifact', 'ligand'])
+  assert.deepEqual(artifacts.outputs.map(item => item.name), ['output_report', 'scores'])
+  assert.equal(artifacts.outputs[1]!.cardinality, 'many')
+  assert.deepEqual(adapter.input.map(item => item.input), ['input_artifact', 'ligand'])
+  assert.deepEqual(adapter.output.map(item => item.output), ['output_report', 'scores'])
+})
+
 test('Tool Package manifest 和 validation errors 可从当前版本安全读取', () => {
   const item = toolPackage({
     current_version: {
