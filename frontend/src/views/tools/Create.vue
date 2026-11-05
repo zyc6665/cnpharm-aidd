@@ -365,7 +365,7 @@
             <a-form-item class="wizard-nav">
               <a-space size="middle">
                 <a-button v-if="activeStep > 1" @click="activeStep -= 1">上一步</a-button>
-                <a-button v-if="activeStep < 5" type="primary" @click="activeStep += 1">下一步</a-button>
+                <a-button v-if="activeStep < 5" type="primary" @click="nextStep">下一步</a-button>
               </a-space>
             </a-form-item>
             <!-- 提交按钮 -->
@@ -614,7 +614,32 @@
     ],
     description: [
       { max: 500, message: t('tools.descriptionLength'), trigger: 'blur' }
+    ],
+    version: [
+      { required: true, message: '请输入版本号', trigger: 'blur' }
     ]
+  }
+
+  // 分步校验：进入下一步前先校验当前步骤的关键字段
+  const stepFields: Record<number, string[]> = {
+    1: ['name', 'slug', 'description'],
+    2: ['k8s_image', 'k8s_resource_profile'],
+    4: [],
+    5: ['version']
+  }
+
+  const nextStep = async () => {
+    const fields = stepFields[activeStep.value] ?? []
+    if (fields.length && formRef.value) {
+      try {
+        await formRef.value.validateFields(fields)
+      } catch {
+        return
+      }
+    }
+    if (activeStep.value < wizardSteps.length) {
+      activeStep.value += 1
+    }
   }
 
   function setInputSchemaEditorValidity(valid: boolean) {
