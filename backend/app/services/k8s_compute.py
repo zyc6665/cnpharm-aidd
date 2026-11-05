@@ -9,7 +9,7 @@ import logging
 import os
 import ssl
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import httpx
 

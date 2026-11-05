@@ -56,7 +56,16 @@ def resolve_tool_example_file_path(base_dir: Path, relative_path: str) -> Path:
     return candidate
 
 
+_CONTENT_TYPE_OVERRIDES = {
+    # Windows 注册表通常没有 .pdb 的 MIME 映射，显式补齐以保证跨平台一致。
+    ".pdb": "chemical/x-pdb",
+}
+
+
 def guess_tool_example_content_type(path: Path) -> str:
+    override = _CONTENT_TYPE_OVERRIDES.get(path.suffix.lower())
+    if override:
+        return override
     content_type, _ = mimetypes.guess_type(path.name)
     return content_type or "application/octet-stream"
 

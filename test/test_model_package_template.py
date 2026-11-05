@@ -118,16 +118,15 @@ def test_model_package_template_platform_run_is_thin_cli_delegate():
 
 
 def test_model_package_template_platform_run_accepts_model_root_argument():
+    # 以模板目录为 cwd 并传相对路径，兼容 Windows 上对非 ASCII 绝对路径支持不佳的 bash。
     result = subprocess.run(
-        [
-            "bash",
-            str(TEMPLATE_ROOT / "platform_run.sh"),
-            "--model-root",
-            str(TEMPLATE_ROOT),
-        ],
+        ["bash", "./platform_run.sh", "--model-root", "."],
+        cwd=TEMPLATE_ROOT,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     assert result.returncode == 2

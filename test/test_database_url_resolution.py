@@ -14,9 +14,9 @@ from app.config import resolve_database_url  # noqa: E402
 
 def test_resolve_database_url_anchors_relative_sqlite_path_to_backend_root() -> None:
     resolved = resolve_database_url("sqlite+aiosqlite:///./storage/scitool.db")
+    expected_path = (BACKEND_ROOT / "storage" / "scitool.db").resolve()
 
-    assert resolved.startswith("sqlite+aiosqlite:////")
-    assert resolved.endswith("/backend/storage/scitool.db")
+    assert resolved == f"sqlite+aiosqlite:///{expected_path.as_posix()}"
 
 
 def test_resolve_database_url_keeps_non_sqlite_url_unchanged() -> None:

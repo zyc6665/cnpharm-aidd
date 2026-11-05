@@ -15,7 +15,7 @@ def _source_path(*parts: str) -> Path:
 
 
 def _assert_no_direct_status_assignment(source: Path) -> None:
-    text = source.read_text()
+    text = source.read_text(encoding="utf-8")
     # Match task.status = ... but not task.status == ...
     matches = list(re.finditer(r"task\.status\s*=\s*[^=]", text))
     assert not matches, f"Found direct task.status assignment in {source}: {matches[0].group()}"
