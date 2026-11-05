@@ -2662,6 +2662,10 @@ export default {
     recentTasks: '最近任务',
     recentUsers: '最近用户',
     toolName: '工具名称',
+    modelFamily: '能力族',
+    currentVersion: '当前版本',
+    imageDigest: '镜像摘要',
+    publishNewVersion: '发布新版本',
     role: '角色',
     registerTime: '注册时间',
     // 用户管理

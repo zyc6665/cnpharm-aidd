@@ -125,11 +125,26 @@
               <span>{{ record.statistics?.favorite_count ?? 0 }}</span>
             </a-space>
           </template>
+          <template v-else-if="column.key === 'modelFamily'">
+            <a-tag v-if="record.contract?.model_family" color="blue">
+              {{ record.contract.model_family }}
+            </a-tag>
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="column.key === 'version'">
+            <span>{{ record.current_version?.version || '-' }}</span>
+          </template>
+          <template v-else-if="column.key === 'image'">
+            <span class="image-digest" :title="imageDigest(record)">{{ imageDigest(record) || '-' }}</span>
+          </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
               <a-button size="small" @click="handleEdit(record)">
                 <EditOutlined />
                 {{ t('common.edit') }}
+              </a-button>
+              <a-button size="small" @click="handleEdit(record)">
+                {{ t('admin.publishNewVersion') }}
               </a-button>
               <a-button size="small" danger @click="handleDelete(record)">
                 <DeleteOutlined />
@@ -192,12 +207,23 @@ const pagination = reactive({
 
 const columns = computed(() => [
   { title: t('admin.toolName'), key: 'name' },
-  { title: t('tools.category'), key: 'category', width: 180 },
-  { title: t('admin.status'), key: 'status', width: 140 },
-  { title: '验证等级', key: 'validation', width: 210 },
-  { title: t('admin.statistics'), key: 'stats', width: 140 },
-  { title: t('common.actions'), key: 'actions', width: 180 }
+  { title: t('tools.category'), key: 'category', width: 150 },
+  { title: t('admin.modelFamily'), key: 'modelFamily', width: 160 },
+  { title: t('admin.currentVersion'), key: 'version', width: 110 },
+  { title: t('admin.imageDigest'), key: 'image', width: 200 },
+  { title: t('admin.status'), key: 'status', width: 120 },
+  { title: '验证等级', key: 'validation', width: 200 },
+  { title: t('admin.statistics'), key: 'stats', width: 120 },
+  { title: t('common.actions'), key: 'actions', width: 240 }
 ])
+
+function imageDigest(tool: Tool): string {
+  const config = (tool.current_version?.config ?? {}) as Record<string, unknown>
+  const raw = config.k8s_image || config.image
+  if (typeof raw !== 'string' || !raw) return ''
+  const at = raw.indexOf('@sha256:')
+  return at >= 0 ? raw.slice(at + '@sha256:'.length) : raw
+}
 
 const statusColor = (status: Tool['status']) => {
   const mapping: Record<Tool['status'], string> = {

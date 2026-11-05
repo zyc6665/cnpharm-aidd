@@ -2681,6 +2681,10 @@ export default {
     recentTasks: 'Recent Tasks',
     recentUsers: 'Recent Users',
     toolName: 'Tool Name',
+    modelFamily: 'Model family',
+    currentVersion: 'Current version',
+    imageDigest: 'Image digest',
+    publishNewVersion: 'Publish new version',
     role: 'Role',
     registerTime: 'Registered',
     // User Management
