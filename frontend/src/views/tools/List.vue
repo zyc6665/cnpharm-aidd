@@ -29,13 +29,13 @@
         </button>
         <button
           v-for="cat in categories"
-          :key="cat.name"
+          :key="cat.slug"
           type="button"
           class="category-chip"
-          :class="{ active: selectedCategory === cat.name }"
-          @click="selectCategory(cat.name)"
+          :class="{ active: selectedCategory === cat.slug }"
+          @click="selectCategory(cat.slug)"
         >
-          {{ cat.name }}
+          {{ familyLabel(cat.slug) }}
           <span v-if="cat.count" class="category-count">{{ cat.count }}</span>
         </button>
       </div>
@@ -114,7 +114,7 @@
                     <ToolOutlined v-else />
                   </div>
                   <div class="tool-header-side">
-                    <span v-if="tool.category" class="tool-category">{{ tool.category }}</span>
+                    <span v-if="tool.category" class="tool-category">{{ familyLabel(tool.category) }}</span>
                     <button
                       v-if="isLoggedIn"
                       type="button"
@@ -218,6 +218,7 @@
     getToolSortLabelKey,
     getToolViewLabelKey
   } from '@/domain/tools'
+  import { modelFamilyLabelKey } from '@/domain/tools/model-families'
   import {
     ToolOutlined,
     PlayCircleOutlined,
@@ -253,6 +254,10 @@
 
   const categories = computed(() => toolsStore.categories)
   const tags = computed(() => toolsStore.tags)
+  const familyLabel = (family?: string | null) => {
+    const key = modelFamilyLabelKey(family)
+    return key ? t(key) : (family || '')
+  }
 
   const sortLabel = computed(() => t(getToolSortLabelKey(sortBy.value)))
   const currentViewLabel = computed(() => t(getToolViewLabelKey(currentView.value)))

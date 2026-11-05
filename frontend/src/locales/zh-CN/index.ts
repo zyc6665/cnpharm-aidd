@@ -261,6 +261,7 @@ export default {
       }
     },
     tools: {
+
       title: '热门工具',
       subtitle: '最受欢迎的计算工具',
       viewAll: '查看全部工具'
@@ -1084,6 +1085,25 @@ export default {
 
   // 工具
   tools: {
+    modelFamilies: {
+      structure_prediction: '结构预测',
+      pocket_prediction: '口袋预测',
+      molecule_generation: '分子生成',
+      peptide_design: '多肽设计',
+      admet_prediction: '性质预测',
+      property_prediction: '分子性质',
+      affinity: '结合亲和力',
+      free_energy: '自由能计算',
+      docking: '分子对接',
+      molecular_dynamics: '分子动力学',
+      toxicity_prediction: '毒性预测',
+      protein_preparation: '蛋白准备',
+      ligand_preparation: '配体准备',
+      conformer_generation: '构象生成',
+      format_conversion: '格式转换',
+      synthetic_accessibility: '合成可及性',
+      interaction_analysis: '相互作用分析'
+    },
     parameterJsonInvalid: '请输入有效的 JSON',
     parameterJsonObject: '请输入 JSON 对象',
     parameterJsonArray: '请输入 JSON 数组',
@@ -2720,8 +2740,10 @@ export default {
     toolPackagesSubtitle: '登记并校验模型交付物。交付包发布后，还需创建平台工具才能供用户运行。',
     workbenchGroups: '工作台分组',
     workbenchGroupsSubtitle: '维护工具工作台分组、推荐顺序与映射关系',
-    toolCategories: '分类管理',
-    toolCategoriesSubtitle: '集中维护工具分类、状态与排序',
+    toolCategories: '模型能力族',
+    toolCategoriesSubtitle: '按模型能力自动归类；分类不可手工增删，随模型注册自动更新',
+    toolCategoriesAutoTitle: '分类由模型能力自动派生',
+    toolCategoriesAutoHint: '平台按工具 slug 归入结构预测、口袋预测、分子生成等能力族。新增模型注册后会自动进入对应分类，无需手工维护。',
     createCategory: '新建分类',
     editCategory: '编辑分类',
     categoryName: '分类名称',

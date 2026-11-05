@@ -154,20 +154,7 @@
             </a-form-item>
 
             <a-row :gutter="24">
-              <a-col :span="12">
-                <a-form-item :label="t('tools.category')" name="category_id">
-                  <a-select
-                    v-model:value="formState.category_id"
-                    :placeholder="t('tools.selectCategory')"
-                    allow-clear
-                  >
-                    <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                      {{ cat.name }}
-                    </a-select-option>
-                  </a-select>
-                </a-form-item>
-              </a-col>
-              <a-col :span="12">
+              <a-col :span="24">
                 <a-form-item :label="t('tools.tags')" name="tag_ids">
                   <a-select
                     v-model:value="formState.tag_ids"

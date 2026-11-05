@@ -263,6 +263,7 @@ export default {
       }
     },
     tools: {
+
       title: 'Popular Tools',
       subtitle: 'Most popular computational tools',
       viewAll: 'View All Tools'
@@ -1087,6 +1088,25 @@ export default {
 
   // Tools
   tools: {
+    modelFamilies: {
+      structure_prediction: 'Structure Prediction',
+      pocket_prediction: 'Pocket Prediction',
+      molecule_generation: 'Molecule Generation',
+      peptide_design: 'Peptide Design',
+      admet_prediction: 'Property Prediction',
+      property_prediction: 'Molecular Properties',
+      affinity: 'Binding Affinity',
+      free_energy: 'Free Energy',
+      docking: 'Molecular Docking',
+      molecular_dynamics: 'Molecular Dynamics',
+      toxicity_prediction: 'Toxicity Prediction',
+      protein_preparation: 'Protein Preparation',
+      ligand_preparation: 'Ligand Preparation',
+      conformer_generation: 'Conformer Generation',
+      format_conversion: 'Format Conversion',
+      synthetic_accessibility: 'Synthetic Accessibility',
+      interaction_analysis: 'Interaction Analysis'
+    },
     parameterJsonInvalid: 'Enter valid JSON',
     parameterJsonObject: 'Enter a JSON object',
     parameterJsonArray: 'Enter a JSON array',
@@ -2740,8 +2760,10 @@ export default {
     toolPackagesSubtitle: 'Register and validate model deliverables. Publish a package, then create a platform tool before users can run it.',
     workbenchGroups: 'Workbench Groups',
     workbenchGroupsSubtitle: 'Manage tool workbench groups, recommendations, and mappings in one place',
-    toolCategories: 'Category Management',
-    toolCategoriesSubtitle: 'Manage tool categories, status and display order in one place',
+    toolCategories: 'Model Families',
+    toolCategoriesSubtitle: 'Groups are derived from model capability and update automatically with model registration',
+    toolCategoriesAutoTitle: 'Categories are derived automatically',
+    toolCategoriesAutoHint: 'Each tool is grouped into a capability family such as structure prediction, pocket prediction or molecule generation. New models join their family automatically.',
     createCategory: 'Create Category',
     editCategory: 'Edit Category',
     categoryName: 'Category Name',

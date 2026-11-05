@@ -522,6 +522,89 @@ def _is_up_to_date(bind, spec: PlatformToolSpec, tool_row) -> bool:
     return _canonical_config(raw_config) == _desired_canonical_config(spec.config)
 
 
+def _sync_model_family_categories(bind, now: datetime) -> None:
+    """把「工具分类」收敛为模型能力族（自动派生，后台只读展示）。
+
+    分类不再手工维护：按工具的 slug 解析 ``MODEL_FAMILY_BY_SLUG``，自动 upsert
+    ``tool_categories`` 并把每个工具的 ``category`` / ``category_id`` 指到对应族。
+    这样工具页筛选、后台分类页和新模型展示用的是同一套分类。
+    """
+    if "tool_categories" not in set(sa.inspect(bind).get_table_names()):
+        return
+
+    from app.tools.capabilities import (
+        MODEL_FAMILY_BY_SLUG,
+        MODEL_FAMILY_ORDER,
+    )
+
+    slugs = [str(row[0]) for row in bind.execute(sa.text("SELECT slug FROM tools")).all()]
+    present = {
+        MODEL_FAMILY_BY_SLUG[slug]
+        for slug in slugs
+        if slug in MODEL_FAMILY_BY_SLUG
+    }
+    families = [family for family in MODEL_FAMILY_ORDER if family in present]
+    category_ids: dict[str, str] = {}
+    for index, family in enumerate(families):
+        # 分类的展示名由前端按 slug 本地化，这里存 slug，避免把中文写进数据层。
+        label = family
+        row = bind.execute(
+            sa.text("SELECT id FROM tool_categories WHERE slug = :slug"),
+            {"slug": family},
+        ).first()
+        if row is None:
+            category_id = str(uuid.uuid4())
+            bind.execute(
+                sa.text(
+                    "INSERT INTO tool_categories "
+                    "(id, created_at, updated_at, name, slug, description, sort_order, is_enabled) "
+                    "VALUES (:id, :now, :now, :name, :slug, :description, :sort_order, true)"
+                ),
+                {
+                    "id": category_id,
+                    "now": now,
+                    "name": label,
+                    "slug": family,
+                    "description": "模型能力族（由工具能力自动派生）",
+                    "sort_order": index,
+                },
+            )
+        else:
+            category_id = str(row[0])
+            bind.execute(
+                sa.text(
+                    "UPDATE tool_categories SET name = :name, description = :description, "
+                    "sort_order = :sort_order, is_enabled = true, updated_at = :now WHERE id = :id"
+                ),
+                {
+                    "id": category_id,
+                    "name": label,
+                    "description": "模型能力族（由工具能力自动派生）",
+                    "sort_order": index,
+                    "now": now,
+                },
+            )
+        category_ids[family] = category_id
+
+    for slug in slugs:
+        family = MODEL_FAMILY_BY_SLUG.get(slug)
+        category_id = category_ids.get(family or "")
+        if not family or not category_id:
+            continue
+        bind.execute(
+            sa.text(
+                "UPDATE tools SET category = :category, category_id = :category_id, "
+                "updated_at = :now WHERE slug = :slug"
+            ),
+            {
+                "category": family,
+                "category_id": category_id,
+                "now": now,
+                "slug": slug,
+            },
+        )
+
+
 def apply_platform_tools(bind, *, owner_id: str | None = None) -> dict:
     """同步核心：按 slug 幂等补齐平台必备工具。
 
@@ -569,6 +652,7 @@ def apply_platform_tools(bind, *, owner_id: str | None = None) -> dict:
         )
         existing.append(spec.slug)
 
+    _sync_model_family_categories(bind, now)
     return {"created": created, "existing": existing, "skipped": skipped}
 
 
