@@ -312,11 +312,49 @@
             </div>
             <div v-show="activeStep === 3">
               <a-divider orientation="left">输入 / 输出契约</a-divider>
+              <template v-if="hasContractManifest">
+                <a-alert
+                  type="info"
+                  show-icon
+                  message="来自 Tool Package v2 的 Artifact 契约"
+                  description="在这里增删输入/输出槽，保存时会写回该版本的 manifest.artifacts。"
+                  style="margin-bottom: 12px"
+                />
+                <div class="contract-block">
+                  <div class="contract-block-title">输入（inputs）</div>
+                  <div v-for="(item, index) in contractInputs" :key="'in' + index" class="contract-row">
+                    <a-input v-model:value="item.name" placeholder="槽名称，如 receptor" style="width: 200px" />
+                    <a-select v-model:value="item.type" style="width: 200px">
+                      <a-select-option v-for="t in ARTIFACT_TYPES" :key="t" :value="t">{{ t }}</a-select-option>
+                    </a-select>
+                    <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+                    <a-button type="text" danger @click="contractInputs.splice(index, 1)">删除</a-button>
+                  </div>
+                  <a-button type="dashed" block @click="addContractInput">+ 添加输入槽</a-button>
+                </div>
+                <div class="contract-block" style="margin-top: 16px">
+                  <div class="contract-block-title">输出（outputs）</div>
+                  <div v-for="(item, index) in contractOutputs" :key="'out' + index" class="contract-row">
+                    <a-input v-model:value="item.name" placeholder="槽名称，如 ligands" style="width: 180px" />
+                    <a-select v-model:value="item.type" style="width: 180px">
+                      <a-select-option v-for="t in ARTIFACT_TYPES" :key="t" :value="t">{{ t }}</a-select-option>
+                    </a-select>
+                    <a-select v-model:value="item.cardinality" style="width: 110px">
+                      <a-select-option value="one">单值</a-select-option>
+                      <a-select-option value="many">多值</a-select-option>
+                    </a-select>
+                    <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+                    <a-button type="text" danger @click="contractOutputs.splice(index, 1)">删除</a-button>
+                  </div>
+                  <a-button type="dashed" block @click="addContractOutput">+ 添加输出槽</a-button>
+                </div>
+              </template>
               <a-alert
-                type="info"
+                v-else
+                type="warning"
                 show-icon
-                message="输入/输出使用平台标准 Artifact 类型"
-                description="protein_structure@1 / binding_pocket@1 / molecule_table@1 / ligand_structure@1 / run_report@1；运行参数由 Tool Package v2 管理。"
+                message="当前没有可编辑的 Tool Package 契约"
+                description="手工注册工具的输入/输出契约由 Tool Package v2 manifest 声明；从「工具包」导入（带 package_id）或编辑已关联 manifest 的版本后，可在此增删 Artifact 槽。"
               />
             </div>
             <div v-show="activeStep === 4">
@@ -387,7 +425,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted } from 'vue'
+  import { ref, reactive, computed, onMounted, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
@@ -455,6 +493,32 @@
   const originalNotes = ref('')
   const originalConfigSnapshot = ref('')
   const packageManifest = ref<Record<string, unknown> | null>(null)
+  const ARTIFACT_TYPES = ['protein_structure', 'binding_pocket', 'molecule_table', 'ligand_structure', 'complex_structure', 'peptide_sequence', 'admet_table', 'affinity_table', 'md_trajectory', 'confidence_report', 'molecule_set', 'run_report']
+  const contractInputs = ref<Array<Record<string, any>>>([])
+  const contractOutputs = ref<Array<Record<string, any>>>([])
+  const hasContractManifest = computed(() => Boolean((packageManifest.value as any)?.artifacts))
+  function syncContractFromManifest() {
+    const artifacts = (packageManifest.value as any)?.artifacts
+    contractInputs.value = Array.isArray(artifacts?.inputs)
+      ? artifacts.inputs.map((x: any) => ({ name: x?.name ?? '', type: x?.type ?? 'protein_structure', required: x?.required !== false }))
+      : []
+    contractOutputs.value = Array.isArray(artifacts?.outputs)
+      ? artifacts.outputs.map((x: any) => ({ name: x?.name ?? '', type: x?.type ?? 'run_report', cardinality: x?.cardinality === 'many' ? 'many' : 'one', required: x?.required !== false }))
+      : []
+  }
+  function syncContractToManifest() {
+    if (!packageManifest.value) return
+    const manifest = packageManifest.value as any
+    const base = manifest.artifacts && typeof manifest.artifacts === 'object' ? manifest.artifacts : {}
+    manifest.artifacts = {
+      ...base,
+      inputs: contractInputs.value.map(i => ({ ...i, name: String(i.name || '').trim(), type: i.type, required: i.required !== false })),
+      outputs: contractOutputs.value.map(o => ({ ...o, name: String(o.name || '').trim(), type: o.type, cardinality: o.cardinality === 'many' ? 'many' : 'one', required: o.required !== false }))
+    }
+  }
+  function addContractInput() { contractInputs.value.push({ name: '', type: 'protein_structure', required: true }) }
+  function addContractOutput() { contractOutputs.value.push({ name: '', type: 'run_report', cardinality: 'one', required: true }) }
+  watch([contractInputs, contractOutputs], syncContractToManifest, { deep: true })
   const packageLoading = ref(false)
 
   // 判断是编辑还是创建
@@ -669,6 +733,7 @@
         return
       }
       packageManifest.value = version.manifest
+      syncContractFromManifest()
       formState.name = pkg.name
       formState.slug = pkg.slug
       formState.description = pkg.description || ''
@@ -746,6 +811,7 @@
 
     submitting.value = true
     try {
+      syncContractToManifest()
       let submission: ReturnType<typeof createToolCreateSubmission>
       try {
         submission = createToolCreateSubmission({
@@ -940,5 +1006,25 @@
       flex: 0 0 100%;
       max-width: 100%;
     }
+  }
+
+  .contract-block {
+    border: 1px solid @border-color;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .contract-block-title {
+    font-size: @font-size-xs;
+    color: @text-secondary;
+    margin-bottom: 8px;
+  }
+
+  .contract-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
   }
 </style>
