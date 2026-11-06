@@ -248,6 +248,8 @@ export interface ProjectResultSummary {
   tool_id: string | null
   tool_name: string | null
   tool_slug: string | null
+  /** 规范化的模型能力族（后端 model_family），用于选择结果详情 profile。 */
+  model_family?: string | null
   submitted_by: string | null
   created_at: string
   started_at: string | null

@@ -1,6 +1,6 @@
 ---
-name: molecule-admet-detail
-description: 单分子 ADMET 详细报告抽屉，按吸收/分布/代谢/排泄/毒性/Tox21/生态毒性分组展示预测结果，支持雷达视图与单分子 CSV/PDF 导出。
+name: molecule-predict-detail
+description: 单分子预测结果详情抽屉，按模型能力族（ADMET / 亲和力 / 通用）选择字段与分组；同族不同模型复用，新模型无需单独建页面。
 ---
 
 <script setup lang="ts">
@@ -10,26 +10,22 @@ import * as echarts from 'echarts'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { downloadCsv } from '@/views/predict/csv-export'
 import { chartColors } from '@/utils/chartTheme'
+import {
+  resolvePredictDetailProfile,
+  type PredictDetailMetricDef,
+  type PredictDetailPolarity,
+  type PredictDetailProfile
+} from '@/views/predict/predictDetailProfiles'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
-
-type Polarity = 'good' | 'risk' | 'neutral'
-
-interface MetricDef {
-  label: string
-  aliases: string[]
-  polarity?: Polarity
-  unit?: string
-}
-
-interface MetricSection {
-  titleKey: string
-  defs: MetricDef[]
-}
 
 const props = defineProps<{
   row: CsvPreviewRow | null
   columns: CsvPreviewColumn[]
   taskId: string
+  /** 模型能力族（后端 model_family；缺失时上层按 slug 兜底）。 */
+  family?: string | null
+  /** 任务使用的模型/工具名，用于报告信息，不再硬编码某个模型。 */
+  toolName?: string | null
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -49,113 +45,7 @@ function readTheme(): boolean {
   return document.documentElement.getAttribute('data-theme') === 'dark'
 }
 
-const SECTIONS: MetricSection[] = [
-  {
-    titleKey: 'predict.result.detailSectionBasic',
-    defs: [
-      { label: 'Molecular Weight (MW)', aliases: ['mol_weight', 'molecularweight', 'mw'], unit: 'g/mol' },
-      { label: 'LogP', aliases: ['logp', 'xlogp'] },
-      { label: 'TPSA', aliases: ['tpsa'], unit: 'Å²' },
-      { label: 'H-bond Donors', aliases: ['hbd', 'hbonddonors'] },
-      { label: 'H-bond Acceptors', aliases: ['hba', 'hbondacceptors'] },
-      { label: 'Rotatable Bonds', aliases: ['rotb', 'rotatablebonds'] },
-      { label: 'QED', aliases: ['qed'] },
-      { label: 'SA Score', aliases: ['sa_score', 'sascore'] },
-      { label: 'InChIKey', aliases: ['inchi_key', 'inchikey'] }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionAbsorption',
-    defs: [
-      { label: 'F20', aliases: ['F20'], polarity: 'good' },
-      { label: 'F30', aliases: ['F30'], polarity: 'good' },
-      { label: 'HIA', aliases: ['HIA'], polarity: 'good' },
-      { label: 'PAMPA', aliases: ['PAMPA_NCATS', 'PAMPA'], polarity: 'good' },
-      { label: 'P-gp Inhibitor', aliases: ['Pgp-inhibitor', 'PgpInhibitor'], polarity: 'risk' },
-      { label: 'P-gp Substrate', aliases: ['Pgp-substrate', 'PgpSubstrate'] },
-      { label: 'Caco-2 Permeability', aliases: ['Caco2', 'Caco-2'] },
-      { label: 'MDCK Permeability (cm/s)', aliases: ['MDCK Permeability', 'MDCK'] }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionDistribution',
-    defs: [
-      { label: 'BBB', aliases: ['BBB'], polarity: 'good' },
-      { label: 'Fraction Unbound (Fu)', aliases: ['Fu'], polarity: 'good' },
-      { label: 'PPB', aliases: ['PPB'], unit: '%' },
-      { label: 'VDss', aliases: ['VD', 'VDss'], unit: 'L/kg' }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionMetabolism',
-    defs: [
-      { label: 'CYP1A2 Inhibitor', aliases: ['CYP1A2 inhibitor'], polarity: 'risk' },
-      { label: 'CYP1A2 Substrate', aliases: ['CYP1A2 substrate'] },
-      { label: 'CYP2C19 Inhibitor', aliases: ['CYP2C19 inhibitor'], polarity: 'risk' },
-      { label: 'CYP2C19 Substrate', aliases: ['CYP2C19 substrate'] },
-      { label: 'CYP2C9 Inhibitor', aliases: ['CYP2C9 inhibitor'], polarity: 'risk' },
-      { label: 'CYP2C9 Substrate', aliases: ['CYP2C9 substrate'] },
-      { label: 'CYP2D6 Inhibitor', aliases: ['CYP2D6 inhibitor'], polarity: 'risk' },
-      { label: 'CYP2D6 Substrate', aliases: ['CYP2D6 substrate'] },
-      { label: 'CYP3A4 Inhibitor', aliases: ['CYP3A4 inhibitor'], polarity: 'risk' },
-      { label: 'CYP3A4 Substrate', aliases: ['CYP3A4 substrate'] }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionExcretion',
-    defs: [
-      { label: 'T1/2', aliases: ['T0.5', 'T1/2', 'halflife'], unit: 'h' },
-      { label: 'CL', aliases: ['CL', 'clearance'], unit: 'mL/min/kg' }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionToxicity',
-    defs: [
-      { label: 'AMES', aliases: ['AMES'], polarity: 'risk' },
-      { label: 'Carcinogenicity', aliases: ['Carcinogenicity'], polarity: 'risk' },
-      { label: 'ClinTox', aliases: ['ClinTox'], polarity: 'risk' },
-      { label: 'DILI', aliases: ['DILI'], polarity: 'risk' },
-      { label: 'Eye Corrosion', aliases: ['Eye Corrosion'], polarity: 'risk' },
-      { label: 'Eye Irritation', aliases: ['Eye Irritation'], polarity: 'risk' },
-      { label: 'FDAMDD', aliases: ['FDAMDD'], polarity: 'risk' },
-      { label: 'H-HT-2', aliases: ['H-HT-2'], polarity: 'risk' },
-      { label: 'hERG Blockers', aliases: ['hERG'], polarity: 'risk' },
-      { label: 'Respiratory Toxicity', aliases: ['Respiratory'], polarity: 'risk' },
-      { label: 'ROA', aliases: ['ROA'], polarity: 'risk' },
-      { label: 'Skin Sensitization', aliases: ['Skin Sensitization'], polarity: 'risk' }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionTox21',
-    defs: [
-      { label: 'NR-AhR', aliases: ['NR-AhR'], polarity: 'risk' },
-      { label: 'NR-AR', aliases: ['NR-AR'], polarity: 'risk' },
-      { label: 'NR-AR-LBD', aliases: ['NR-AR-LBD'], polarity: 'risk' },
-      { label: 'NR-Aromatase', aliases: ['NR-Aromatase'], polarity: 'risk' },
-      { label: 'NR-ER', aliases: ['NR-ER'], polarity: 'risk' },
-      { label: 'NR-ER-LBD', aliases: ['NR-ER-LBD'], polarity: 'risk' },
-      { label: 'NR-PPAR-gamma', aliases: ['NR-PPAR-gamma'], polarity: 'risk' },
-      { label: 'SR-ARE', aliases: ['SR-ARE'], polarity: 'risk' },
-      { label: 'SR-ATAD5', aliases: ['SR-ATAD5'], polarity: 'risk' },
-      { label: 'SR-HSE', aliases: ['SR-HSE'], polarity: 'risk' },
-      { label: 'SR-MMP', aliases: ['SR-MMP'], polarity: 'risk' },
-      { label: 'SR-p53', aliases: ['SR-p53'], polarity: 'risk' }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionEcotoxicity',
-    defs: [
-      { label: 'BCF', aliases: ['BCF'], polarity: 'risk' },
-      { label: 'IGC50', aliases: ['IGC50'], polarity: 'risk' },
-      { label: 'LC50', aliases: ['LC50'], polarity: 'risk' },
-      { label: 'LC50DM', aliases: ['LC50DM'], polarity: 'risk' }
-    ]
-  },
-  {
-    titleKey: 'predict.result.detailSectionLd50',
-    defs: [{ label: 'LD50 (Zhu)', aliases: ['LD50_zhu', 'LD50'], unit: 'log(mol/kg)' }]
-  }
-]
+const profile = computed<PredictDetailProfile>(() => resolvePredictDetailProfile(props.family))
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -206,7 +96,7 @@ const basic = computed<BasicItem[]>(() => {
     return []
   }
   const items: BasicItem[] = []
-  for (const def of SECTIONS[0]?.defs ?? []) {
+  for (const def of profile.value.basic?.defs ?? []) {
     const column = def.aliases.map(alias => columnIndex.value.get(normalize(alias))).find(Boolean)
     if (!column) {
       continue
@@ -215,37 +105,82 @@ const basic = computed<BasicItem[]>(() => {
     if (!raw) {
       continue
     }
-    items.push({ label: def.label, value: formatValue(raw), unit: def.unit })
+    items.push({ label: metricLabel(def), value: formatValue(raw), unit: def.unit })
   }
   return items
 })
+
+function metricLabel(def: PredictDetailMetricDef): string {
+  return def.labelKey ? t(def.labelKey) : (def.label ?? '')
+}
+
+function buildMetrics(defs: PredictDetailMetricDef[], row: CsvPreviewRow): SectionMetric[] {
+  const metrics: SectionMetric[] = []
+  for (const def of defs) {
+    const column = def.aliases.map(alias => columnIndex.value.get(normalize(alias))).find(Boolean)
+    if (!column) {
+      continue
+    }
+    const raw = String(row[column.key] ?? '').trim()
+    if (!raw) {
+      continue
+    }
+    const label = metricLabel(def)
+    metrics.push({
+      label,
+      raw,
+      value: formatValue(raw),
+      unit: def.unit,
+      status: statusOf(raw, def.polarity ?? 'neutral'),
+      title: `${label}: ${raw}`
+    })
+  }
+  return metrics
+}
+
+/** 未知能力族：按 CSV 列自动生成一个「全部字段」分组。 */
+function buildGenericMetrics(row: CsvPreviewRow): SectionMetric[] {
+  const skip = new Set(['smiles'])
+  for (const def of profile.value.basic?.defs ?? []) {
+    for (const alias of def.aliases) {
+      skip.add(normalize(alias))
+    }
+  }
+  const metrics: SectionMetric[] = []
+  for (const column of props.columns) {
+    if (skip.has(normalize(column.key)) || skip.has(normalize(column.originalKey))) {
+      continue
+    }
+    const raw = String(row[column.key] ?? '').trim()
+    if (!raw) {
+      continue
+    }
+    const label = column.title || column.originalKey || column.key
+    metrics.push({
+      label,
+      raw,
+      value: formatValue(raw),
+      status: 'neutral',
+      title: `${label}: ${raw}`
+    })
+  }
+  return metrics
+}
 
 const sections = computed<SectionView[]>(() => {
   const row = props.row
   if (!row) {
     return []
   }
+  if (profile.value.generic) {
+    const metrics = buildGenericMetrics(row)
+    return metrics.length
+      ? [{ titleKey: 'predict.result.detailSectionGeneric', metrics }]
+      : []
+  }
   const result: SectionView[] = []
-  for (const section of SECTIONS.slice(1)) {
-    const metrics: SectionMetric[] = []
-    for (const def of section.defs) {
-      const column = def.aliases.map(alias => columnIndex.value.get(normalize(alias))).find(Boolean)
-      if (!column) {
-        continue
-      }
-      const raw = String(row[column.key] ?? '').trim()
-      if (!raw) {
-        continue
-      }
-      metrics.push({
-        label: def.label,
-        raw,
-        value: formatValue(raw),
-        unit: def.unit,
-        status: statusOf(raw, def.polarity ?? 'neutral'),
-        title: `${def.label}: ${raw}`
-      })
-    }
+  for (const section of profile.value.sections) {
+    const metrics = buildMetrics(section.defs, row)
     if (metrics.length) {
       result.push({ titleKey: section.titleKey, metrics })
     }
@@ -257,22 +192,16 @@ const metricCount = computed(
   () => sections.value.reduce((sum, section) => sum + section.metrics.length, basic.value.length)
 )
 
+const showLegend = computed(() =>
+  sections.value.some(section => section.metrics.some(metric => metric.status !== 'neutral'))
+)
+
 const radarMetrics = computed(() => {
   const row = props.row
   if (!row) {
     return []
   }
-  const wanted: Array<[string, string[]]> = [
-    ['HIA', ['HIA']],
-    ['F20', ['F20']],
-    ['F30', ['F30']],
-    ['BBB', ['BBB']],
-    ['Fu', ['Fu']],
-    ['hERG', ['hERG']],
-    ['DILI', ['DILI']],
-    ['AMES', ['AMES']]
-  ]
-  return wanted
+  return profile.value.radar
     .map(([label, aliases]) => {
       const column = aliases.map(alias => columnIndex.value.get(normalize(alias))).find(Boolean)
       if (!column) {
@@ -306,7 +235,7 @@ function formatValue(raw: string): string {
   return String(Number(value.toFixed(3)))
 }
 
-function statusOf(raw: string, polarity: Polarity): 'good' | 'warn' | 'bad' | 'neutral' {
+function statusOf(raw: string, polarity: PredictDetailPolarity): 'good' | 'warn' | 'bad' | 'neutral' {
   const value = Number(raw)
   if (polarity === 'neutral' || !Number.isFinite(value) || value < 0 || value > 1) {
     return 'neutral'
@@ -326,7 +255,7 @@ function handleExportCsv(): void {
     return
   }
   const columns = props.columns.map(column => ({ key: column.key, title: column.title }))
-  downloadCsv(`molecule-admet-${props.taskId}.csv`, columns, [props.row])
+  downloadCsv(`molecule-predict-${props.taskId}.csv`, columns, [props.row])
 }
 
 function handleExportPdf(): void {
@@ -406,7 +335,7 @@ onBeforeUnmount(() => {
 <template>
   <a-drawer
     v-model:open="open"
-    :title="t('predict.result.detailTitle')"
+    :title="t(profile.titleKey)"
     placement="right"
     :width="'min(1360px, 96vw)'"
     :body-style="{ padding: '0' }"
@@ -414,9 +343,9 @@ onBeforeUnmount(() => {
   >
     <div v-if="row" ref="detailRef" class="admet-detail" :class="{ 'admet-detail--dark': isDark }">
       <div class="admet-detail__toolbar">
-        <div class="admet-detail__smiles">{{ smiles || '-' }}</div>
+        <div v-if="profile.showSmiles" class="admet-detail__smiles">{{ smiles || '-' }}</div>
         <div class="admet-detail__actions">
-          <a-radio-group v-model:value="view" size="small" button-style="solid">
+          <a-radio-group v-if="profile.showRadar" v-model:value="view" size="small" button-style="solid">
             <a-radio-button value="table">{{ t('predict.result.detailTable') }}</a-radio-button>
             <a-radio-button value="radar">{{ t('predict.result.detailRadar') }}</a-radio-button>
           </a-radio-group>
@@ -425,14 +354,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div v-if="view === 'radar'" class="admet-detail__radar-wrap">
+      <div v-if="profile.showRadar && view === 'radar'" class="admet-detail__radar-wrap">
         <a-empty v-if="!radarMetrics.length" :description="t('predict.result.detailNoData')" />
         <div v-else ref="radarRef" class="admet-detail__radar" />
       </div>
 
       <div v-else class="admet-detail__body">
         <aside class="admet-detail__aside">
-          <section class="admet-block admet-block--structure">
+          <section v-if="profile.showSmiles" class="admet-block admet-block--structure">
             <h3>{{ t('predict.result.detailSectionStructure') }}</h3>
             <div class="admet-block__structure">
               <Smiles2DCell :smiles="smiles" block />
@@ -440,7 +369,7 @@ onBeforeUnmount(() => {
           </section>
 
           <section v-if="basic.length" class="admet-block admet-block--physchem">
-            <h3>{{ t('predict.result.detailSectionBasic') }}</h3>
+            <h3>{{ t(profile.basic?.titleKey ?? 'predict.result.detailSectionBasic') }}</h3>
             <dl class="admet-list">
               <template v-for="item in basic" :key="item.label">
                 <dt>{{ item.label }}</dt>
@@ -455,7 +384,7 @@ onBeforeUnmount(() => {
               <dt>{{ t('predict.result.detailTask') }}</dt>
               <dd class="admet-mono">{{ taskId }}</dd>
               <dt>{{ t('predict.result.detailTool') }}</dt>
-              <dd>MolP-PC</dd>
+              <dd>{{ toolName || '-' }}</dd>
               <dt>{{ t('predict.result.detailMetricCount') }}</dt>
               <dd>{{ metricCount }}</dd>
               <dt>{{ t('predict.result.detailSource') }}</dt>
@@ -486,7 +415,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="admet-detail__legend">
+      <div v-if="showLegend" class="admet-detail__legend">
         <span><i class="admet-dot admet-dot--good" /> {{ t('predict.result.detailLegendGood') }}</span>
         <span><i class="admet-dot admet-dot--warn" /> {{ t('predict.result.detailLegendWarn') }}</span>
         <span><i class="admet-dot admet-dot--bad" /> {{ t('predict.result.detailLegendBad') }}</span>

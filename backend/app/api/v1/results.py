@@ -58,6 +58,7 @@ from app.services.report_pdf import (
     extract_conclusions,
 )
 from app.services.task_access import ensure_task_read_access
+from app.tools.capabilities import resolve_model_family
 from app.services.traceability import (
     build_traceability_package,
     load_task_snapshots,
@@ -145,6 +146,8 @@ def _serialize_result(task: Task) -> dict[str, Any]:
         "tool_id": str(task.tool_id) if task.tool_id else None,
         "tool_name": task.tool.name if task.tool else None,
         "tool_slug": task.tool.slug if task.tool else None,
+        # 结果详情前端按模型能力族选择单分子详情 profile，而不是写死某个工具。
+        "model_family": resolve_model_family(task.tool.slug if task.tool else None),
         "submitted_by": (
             (submitter.username or submitter.email or str(task.user_id))
             if submitter is not None and task.user_id

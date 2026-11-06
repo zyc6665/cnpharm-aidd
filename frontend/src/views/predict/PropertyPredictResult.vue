@@ -5,11 +5,12 @@ import { useRoute } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import HistogramChart from './HistogramChart.vue'
-import MoleculeAdmetDetail from './MoleculeAdmetDetail.vue'
+import MoleculePredictDetail from './MoleculePredictDetail.vue'
 import { loadMoleculeTable } from './molecule-table'
 import { isNumericColumn, toNumericValues } from './histogram'
 import { downloadCsv } from './csv-export'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
+import { resolveModelFamily } from '@/domain/design/modelFamilies'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
 
 const route = useRoute()
@@ -20,6 +21,8 @@ const loading = ref(true)
 const errorMessage = ref('')
 const columns = ref<CsvPreviewColumn[]>([])
 const rows = ref<CsvPreviewRow[]>([])
+const modelFamily = ref<string | null>(null)
+const toolName = ref('')
 
 const searchText = ref('')
 const filterColumn = ref<string>('')
@@ -114,6 +117,9 @@ async function load(): Promise<void> {
     const data = await loadMoleculeTable(taskId.value)
     columns.value = data.columns
     rows.value = data.rows
+    toolName.value = data.detail.tool_name ?? ''
+    modelFamily.value = data.detail.model_family
+      ?? resolveModelFamily({ slug: data.detail.tool_slug ?? undefined })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : t('predict.result.loadFailed')
   } finally {
@@ -223,11 +229,13 @@ onMounted(() => {
         </div>
       </a-card>
 
-      <MoleculeAdmetDetail
+      <MoleculePredictDetail
         v-model:open="detailOpen"
         :row="detailRow"
         :columns="columns"
         :task-id="taskId"
+        :family="modelFamily"
+        :tool-name="toolName"
       />
     </template>
   </main>
