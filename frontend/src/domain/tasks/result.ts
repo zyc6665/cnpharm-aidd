@@ -1,5 +1,6 @@
 import type { Task } from '@/types/models'
 import { findDesignRunCategory } from '@/domain/design/runs'
+import { toDisplayFileName } from './file-display'
 
 /**
  * 任务结果页的渲染类型。后端按 tool slug 区分任务领域，前端只负责把它映射成
@@ -100,9 +101,10 @@ export function getPocketResultRows(task: Task | null | undefined): PocketResult
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
     .map((item, index) => ({
       id: String(item.id ?? item.pocket_id ?? `P${index + 1}`),
-      atomPdb: typeof item.pdb === 'string' ? item.pdb : undefined,
-      residuePdb: typeof item.residue_pdb === 'string' ? item.residue_pdb : undefined,
-      metadata: typeof item.metadata === 'string' ? item.metadata : undefined,
+      atomPdb: typeof item.pdb === 'string' ? toDisplayFileName(item.pdb) : undefined,
+      residuePdb:
+        typeof item.residue_pdb === 'string' ? toDisplayFileName(item.residue_pdb) : undefined,
+      metadata: typeof item.metadata === 'string' ? toDisplayFileName(item.metadata) : undefined,
     }))
 }
 

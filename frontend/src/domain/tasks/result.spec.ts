@@ -47,7 +47,7 @@ describe('task result payload helpers', () => {
         metrics: {
           pocket_count: 2,
           pockets: [
-            { id: 'P1', pdb: 'pocket0.pdb' },
+            { id: 'P1', pdb: 'artifacts/lv_results/protein/pocket0.pdb' },
             { id: 'P2', pdb: 'pocket1.pdb' },
           ],
         },
