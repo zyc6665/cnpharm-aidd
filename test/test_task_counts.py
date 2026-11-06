@@ -223,6 +223,46 @@ async def test_tool_slugs_filter_matches_only_requested_tools(
 
 
 @pytest.mark.asyncio
+async def test_counts_support_tool_slugs_filter(
+    db_session: AsyncSession,
+    owner: User,
+    project: Project,
+    api_client: AsyncClient,
+) -> None:
+    """任务中心按「任务类型」筛选时，顶部计数也必须跟着工具集合收窄。"""
+    design_tool = await _make_tool(db_session, owner.id, "tool-counts-design")
+    other_tool = await _make_tool(db_session, owner.id, "tool-counts-other")
+    await _make_task(
+        db_session,
+        owner=owner,
+        project=project,
+        tool=design_tool,
+        status=TaskStatus.SUCCESS.value,
+        name="设计任务",
+    )
+    await _make_task(
+        db_session,
+        owner=owner,
+        project=project,
+        tool=other_tool,
+        status=TaskStatus.SUCCESS.value,
+        name="别的任务",
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/tasks/counts",
+        params={"project_id": project.id, "tool_slugs": "tool-counts-design"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["all"] == 1
+    assert data["recent_results"] == 1
+    assert data["history"] == 1
+
+
+@pytest.mark.asyncio
 async def test_tool_slugs_filter_rejects_unknown_slug_as_empty(
     db_session: AsyncSession,
     owner: User,

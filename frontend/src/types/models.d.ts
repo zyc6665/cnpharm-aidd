@@ -588,6 +588,7 @@ export interface Task {
   tool_id: string  // UUID
   tool_name?: string  // 工具名称（API额外返回）
   tool_slug?: string  // 工具标识（API额外返回）
+  domain?: Record<string, unknown> | null  // 领域任务的上下文（如结构/口袋预测的目标与模型）
   tool?: Tool
   user_id?: string  // UUID
   user_name?: string

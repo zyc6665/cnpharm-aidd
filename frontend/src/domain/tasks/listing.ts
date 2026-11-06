@@ -10,6 +10,7 @@ export interface TaskListQueryInput {
   pageSize: number
   projectId?: string
   toolId?: string
+  toolSlugs?: readonly string[]
   keyword?: string
   createdFrom?: string
   createdTo?: string
@@ -24,6 +25,7 @@ export interface TaskListQueryParams {
   page_size: number
   project_id?: string
   tool_id?: string
+  tool_slugs?: string[]
   keyword?: string
   created_from?: string
   created_to?: string
@@ -35,6 +37,7 @@ export interface TaskListQueryParams {
 export interface TaskCountQueryParams {
   project_id?: string
   tool_id?: string
+  tool_slugs?: string[]
   keyword?: string
   created_from?: string
   created_to?: string
@@ -124,6 +127,11 @@ function taskWorkflowScopePart(
   return normalizedValue ? { key, value: normalizedValue } : null
 }
 
+function normalizeToolSlugs(values: readonly string[] | undefined): string[] {
+  if (!values?.length) return []
+  return [...new Set(values.map(value => value.trim()).filter(Boolean))]
+}
+
 export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQueryParams {
   const params: TaskListQueryParams = {
     view: taskSystemViewForTab(input.tab),
@@ -136,6 +144,9 @@ export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQue
 
   const toolId = input.toolId?.trim()
   if (toolId) params.tool_id = toolId
+
+  const toolSlugs = normalizeToolSlugs(input.toolSlugs)
+  if (toolSlugs.length) params.tool_slugs = toolSlugs
 
   const keyword = input.keyword?.trim()
   if (keyword) params.keyword = keyword
@@ -165,6 +176,9 @@ export function buildTaskCountQueryParams(input: TaskListQueryInput): TaskCountQ
 
   const toolId = input.toolId?.trim()
   if (toolId) params.tool_id = toolId
+
+  const toolSlugs = normalizeToolSlugs(input.toolSlugs)
+  if (toolSlugs.length) params.tool_slugs = toolSlugs
 
   const keyword = input.keyword?.trim()
   if (keyword) params.keyword = keyword

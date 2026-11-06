@@ -49,7 +49,7 @@ describe('TaskContextBar', () => {
     expect(wrapper.find('[data-testid="task-context-back"]').exists()).toBe(true)
   })
 
-  it('hides the result switch for structure and pocket tasks', () => {
+  it('shows the result switch for structure and pocket tasks too', () => {
     const wrapper = mountBar({
       taskId: 't2',
       active: 'detail',
@@ -61,7 +61,7 @@ describe('TaskContextBar', () => {
       }
     })
 
-    expect(wrapper.find('[data-testid="task-context-result"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="task-context-result"]').exists()).toBe(true)
   })
 
   it('navigates to the dedicated result page when switching views', async () => {
@@ -77,6 +77,6 @@ describe('TaskContextBar', () => {
     })
 
     await wrapper.find('[data-testid="task-context-result"]').trigger('click')
-    expect(push).toHaveBeenCalledWith('/tasks/t3/results')
+    expect(push).toHaveBeenCalledWith('/tasks/t3/result')
   })
 })

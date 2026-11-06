@@ -98,17 +98,14 @@ export function resolveDesignRunPath(toolSlug: string | undefined, taskId: strin
 }
 
 /**
- * 该任务是否有「独立于任务详情」的专属结果页。
+ * 任务结果页统一入口。
  *
- * 结构预测 / 口袋预测目前的 resultPath 就是任务详情本身，不能再给用户一个
- * 「查看结果」入口——点进去和任务详情是同一页，会让人误以为丢了一层页面。
- * 返回值可直接用于按钮显隐；无专属结果页时返回 null。
+ * 任务详情讲「怎么跑的」，结果页讲「产出了什么」。所有任务都进同一个结果路由，
+ * 由结果页按 tool slug 选择对应视图；未知类型走通用产物兜底，不再把结构/口袋
+ * 任务直接丢回任务详情。
  */
-export function resolveTaskResultPath(toolSlug: string | undefined, taskId: string): string | null {
-  const category = findDesignRunCategory(toolSlug)
-  if (!category) return null
-  const path = category.resultPath(taskId)
-  return path === `/tasks/${taskId}` ? null : path
+export function resolveTaskResultPath(_toolSlug: string | undefined, taskId: string): string {
+  return `/tasks/${taskId}/result`
 }
 
 /** 设计任务页签的「进行中」口径：还没出结果。 */

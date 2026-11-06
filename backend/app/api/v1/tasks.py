@@ -422,6 +422,9 @@ async def list_tasks(
 @router.get("/counts", response_model=dict)
 async def get_task_counts(
     tool_id: Optional[str] = None,
+    tool_slugs: Optional[list[str]] = Query(
+        None, description="按工具 slug 集合筛选（任务中心按任务类型筛选）"
+    ),
     keyword: Optional[str] = None,
     project_id: Optional[str] = Query(None, min_length=1, max_length=36),
     created_from: Optional[datetime] = Query(None, description="创建时间起点"),
@@ -438,6 +441,7 @@ async def get_task_counts(
         TaskQueryInput(
             current_user=current_user,
             tool_id=tool_id,
+            tool_slugs=tuple(tool_slugs) if tool_slugs else None,
             keyword=keyword,
             project_id=project_id,
             created_from=created_from,
@@ -578,6 +582,7 @@ async def get_task(
         "tool_slug": task.tool.slug if task.tool else None,
         "tool": _serialize_task_tool(task.tool),
         "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
+        "domain": (task.extra_data or {}).get("domain"),
         "mock": bool((task.extra_data or {}).get("mock")),
         "dispatch": (task.extra_data or {}).get("dispatch"),
         # docs/10 §8.3：任务详情页据此直接跳到追踪面板。老任务没有这个键（功能
