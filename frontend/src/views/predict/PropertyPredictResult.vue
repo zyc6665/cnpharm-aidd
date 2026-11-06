@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import { DownOutlined, UpOutlined } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
-import HistogramChart from './HistogramChart.vue'
 import MoleculePredictDetail from './MoleculePredictDetail.vue'
+import MetricDistributionChart from './MetricDistributionChart.vue'
 import { loadMoleculeTable } from './molecule-table'
 import { filterPredictRows } from './predict-filter'
-import { isNumericColumn, toNumericValues } from './histogram'
+import { isNumericColumn } from './histogram'
 import { downloadCsv } from './csv-export'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
 import { resolveModelFamily } from '@/domain/design/modelFamilies'
@@ -70,6 +71,75 @@ const isAffinityResult = computed(() => modelFamily.value === 'affinity' || Bool
 const filterRangeInvalid = computed(
   () => filterMin.value !== null && filterMax.value !== null && filterMin.value > filterMax.value
 )
+
+const distributionColumns = computed(() =>
+  numericColumns.value.filter(column => !FILTER_EXCLUDED_PATTERN.test(column.key))
+)
+
+const distributionKey = ref('')
+const distributionOpen = ref(false)
+
+const distributionOptions = computed(() =>
+  distributionColumns.value.map(column => ({
+    label: columnTitle(column.key, column.title),
+    value: column.key
+  }))
+)
+
+const activeDistributionKey = computed(
+  () => distributionKey.value || affinityColumnKey.value || distributionColumns.value[0]?.key || ''
+)
+
+const distributionColumn = computed(
+  () => distributionColumns.value.find(column => column.key === activeDistributionKey.value) ?? null
+)
+
+const distributionPoints = computed(() => {
+  const key = activeDistributionKey.value
+  if (!key) {
+    return []
+  }
+  return filteredRows.value
+    .map((row, index) => ({
+      label: String(row.molecule_id ?? row.complex_id ?? row.smiles ?? `#${index + 1}`),
+      value: Number(String(row[key] ?? '').trim())
+    }))
+    .filter(point => Number.isFinite(point.value))
+})
+
+const distributionValues = computed(() => distributionPoints.value.map(point => point.value))
+
+const distributionStats = computed(() => {
+  const values = [...distributionValues.value].sort((left, right) => left - right)
+  if (!values.length) {
+    return null
+  }
+  const middle = Math.floor(values.length / 2)
+  const median = values.length % 2
+    ? values[middle]!
+    : ((values[middle - 1] ?? 0) + (values[middle] ?? 0)) / 2
+  return {
+    count: values.length,
+    min: values[0]!,
+    median,
+    max: values[values.length - 1]!
+  }
+})
+
+watch(
+  [distributionColumns, affinityColumnKey],
+  ([columns, affinityKey]) => {
+    if (distributionKey.value && columns.some(column => column.key === distributionKey.value)) {
+      return
+    }
+    distributionKey.value = affinityKey || columns[0]?.key || ''
+  },
+  { immediate: true }
+)
+
+function formatStat(value: number): string {
+  return Number(value.toFixed(3)).toString()
+}
 
 const matrixColumns = computed(() => {
   const mapped = columns.value.map((column, index) => {
@@ -267,15 +337,46 @@ onMounted(() => {
         </a-table>
       </a-card>
 
-      <a-card :title="t('predict.result.histograms')">
-        <a-empty v-if="!numericColumns.length" :description="t('predict.result.noHistogram')" />
-        <div v-else class="predict-result__charts">
-          <div v-for="column in numericColumns" :key="column.key" class="predict-result__chart-cell">
-            <HistogramChart
-              :values="toNumericValues(rows, column.key)"
-              :title="columnTitle(column.key, column.title)"
-            />
+      <a-card class="predict-result__distribution">
+        <template #title>
+          <div class="predict-result__distribution-title">
+            <span>{{ t('predict.result.histograms') }}</span>
+            <span class="predict-result__distribution-hint">{{ t('predict.result.distributionHint') }}</span>
           </div>
+        </template>
+        <template #extra>
+          <a-button type="link" size="small" data-testid="predict-distribution-toggle" @click="distributionOpen = !distributionOpen">
+            {{ distributionOpen ? t('predict.result.distributionCollapse') : t('predict.result.distributionExpand') }}
+            <UpOutlined v-if="distributionOpen" />
+            <DownOutlined v-else />
+          </a-button>
+        </template>
+        <div v-if="distributionOpen">
+          <a-empty v-if="!distributionColumns.length" :description="t('predict.result.noHistogram')" />
+          <template v-else>
+            <div class="predict-result__distribution-toolbar">
+              <span class="predict-result__distribution-label">{{ t('predict.result.distributionMetric') }}</span>
+              <a-select
+                v-model:value="distributionKey"
+                style="width: 260px"
+                :options="distributionOptions"
+                data-testid="predict-distribution-metric"
+              />
+            </div>
+            <div v-if="distributionStats" class="predict-result__distribution-stats">
+              <div><span>{{ t('predict.result.distributionCount') }}</span><strong>{{ distributionStats.count }}</strong></div>
+              <div><span>{{ t('predict.result.distributionMin') }}</span><strong>{{ formatStat(distributionStats.min) }}</strong></div>
+              <div><span>{{ t('predict.result.distributionMedian') }}</span><strong>{{ formatStat(distributionStats.median) }}</strong></div>
+              <div><span>{{ t('predict.result.distributionMax') }}</span><strong>{{ formatStat(distributionStats.max) }}</strong></div>
+            </div>
+            <MetricDistributionChart
+              v-if="distributionColumn"
+              :points="distributionPoints"
+              :height="320"
+              :bins="12"
+              :median-label="t('predict.result.distributionMedian')"
+            />
+          </template>
         </div>
       </a-card>
 
@@ -330,5 +431,58 @@ onMounted(() => {
   border: 1px solid var(--ant-color-border, var(--theme-border));
   border-radius: 8px;
   padding: 8px;
+}
+
+.predict-result__distribution-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.predict-result__distribution-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
+}
+
+.predict-result__distribution-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.predict-result__distribution-label {
+  font-size: 13px;
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
+}
+
+.predict-result__distribution-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.predict-result__distribution-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border, var(--theme-border));
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.02));
+}
+
+.predict-result__distribution-stats span {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
+}
+
+.predict-result__distribution-stats strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ant-color-text, inherit);
 }
 </style>
