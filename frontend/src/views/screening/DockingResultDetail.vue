@@ -234,9 +234,14 @@ onMounted(() => {
   <main class="docking-detail" data-testid="docking-detail-page">
     <AppPageHeader :title="t('screening.detail.title')" :subtitle="t('screening.detail.subtitle')">
       <template #actions>
-        <router-link :to="`/tasks/${taskId}/screening`">
-          <a-button data-testid="docking-detail-back">{{ t('screening.detail.back') }}</a-button>
-        </router-link>
+        <a-space>
+          <router-link v-if="taskId" :to="`/tasks/${taskId}`">
+            <a-button data-testid="docking-detail-task-detail">{{ t('tasks.taskWorkspace.detail') }}</a-button>
+          </router-link>
+          <router-link :to="`/tasks/${taskId}/screening`">
+            <a-button data-testid="docking-detail-back">{{ t('screening.detail.back') }}</a-button>
+          </router-link>
+        </a-space>
       </template>
     </AppPageHeader>
 

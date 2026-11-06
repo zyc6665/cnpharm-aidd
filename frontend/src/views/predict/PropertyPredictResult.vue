@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import HistogramChart from './HistogramChart.vue'
 import MoleculeAdmetDetail from './MoleculeAdmetDetail.vue'
 import { loadMoleculeTable } from './molecule-table'
@@ -129,9 +130,6 @@ onMounted(() => {
   <main class="predict-result" data-testid="predict-result-page">
     <AppPageHeader :title="t('predict.result.title')" :subtitle="t('predict.result.subtitle')">
       <template #actions>
-        <router-link :to="`/tasks/${taskId}`">
-          <a-button>{{ t('predict.result.backToTask') }}</a-button>
-        </router-link>
         <a-button
           type="primary"
           :disabled="!filteredRows.length"
@@ -142,6 +140,8 @@ onMounted(() => {
         </a-button>
       </template>
     </AppPageHeader>
+
+    <TaskContextBar :task-id="taskId" active="result" :result-path="route.fullPath" />
 
     <a-alert
       v-if="errorMessage"

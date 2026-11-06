@@ -18,6 +18,14 @@
               <template #actions>
                 <a-space class="task-detail-actions" wrap>
                   <a-button
+                    v-if="taskStatus === 'success' && taskResultPath"
+                    type="primary"
+                    data-testid="task-detail-view-result"
+                    @click="goTaskResult"
+                  >
+                    {{ t('tasks.taskWorkspace.viewResult') }}
+                  </a-button>
+                  <a-button
                     v-if="canCancel"
                     danger
                     @click="handleCancel"
@@ -360,6 +368,7 @@ import {
   getTaskStatusTextKey,
   normalizeTaskStatus,
 } from '@/domain/tasks'
+import { resolveTaskResultPath } from '@/domain/design/runs'
 
 const route = useRoute()
 const router = useRouter()
@@ -419,6 +428,10 @@ const detailSubtitle = computed(() => {
 
   return `${getStatusText(taskStatus.value)} · ${formatTime(task.value.created_at)}`
 })
+// 只有存在「独立结果页」的任务才显示运行结果入口；结构/口袋预测返回 null。
+const taskResultPath = computed(() =>
+  resolveTaskResultPath(task.value?.tool_slug ?? task.value?.tool?.slug, taskId.value)
+)
 const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value))
 const resourceWait = computed(() => {
   const wait = task.value?.resource_wait
@@ -565,6 +578,12 @@ const goToTool = () => {
 
 const goBack = () => {
   router.push('/tasks')
+}
+
+const goTaskResult = () => {
+  if (taskResultPath.value) {
+    router.push(taskResultPath.value)
+  }
 }
 
 // 生命周期

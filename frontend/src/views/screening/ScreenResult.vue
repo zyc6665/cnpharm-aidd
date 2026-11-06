@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import FunnelChart from './FunnelChart.vue'
 import { countPasses, funnelFromRankedRows } from './funnel'
 import type { FunnelStageKey } from './funnel'
@@ -122,9 +123,6 @@ onMounted(() => {
   <main class="screen-result" data-testid="screen-result-page">
     <AppPageHeader :title="t('screening.result.title')" :subtitle="t('screening.result.subtitle')">
       <template #actions>
-        <router-link :to="`/tasks/${taskId}`">
-          <a-button>{{ t('screening.result.backToTask') }}</a-button>
-        </router-link>
         <a-button
           type="primary"
           :disabled="!rows.length"
@@ -135,6 +133,8 @@ onMounted(() => {
         </a-button>
       </template>
     </AppPageHeader>
+
+    <TaskContextBar :task-id="taskId" active="result" :result-path="route.fullPath" />
 
     <a-alert
       v-if="errorMessage"

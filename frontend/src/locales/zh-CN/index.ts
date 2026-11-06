@@ -2265,6 +2265,13 @@ export default {
     subtitle: '管理和监控您的计算任务',
     detail: '任务详情',
     taskDetail: '任务详情',
+    taskWorkspace: {
+      backToCenter: '返回任务中心',
+      views: '任务视图切换',
+      detail: '任务详情',
+      result: '运行结果',
+      viewResult: '查看结果'
+    },
     list: '任务列表',
     create: '创建任务',
     name: '任务名称',

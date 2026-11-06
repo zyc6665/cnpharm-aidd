@@ -97,5 +97,19 @@ export function resolveDesignRunPath(toolSlug: string | undefined, taskId: strin
   return category ? category.resultPath(taskId) : `/tasks/${taskId}`
 }
 
+/**
+ * 该任务是否有「独立于任务详情」的专属结果页。
+ *
+ * 结构预测 / 口袋预测目前的 resultPath 就是任务详情本身，不能再给用户一个
+ * 「查看结果」入口——点进去和任务详情是同一页，会让人误以为丢了一层页面。
+ * 返回值可直接用于按钮显隐；无专属结果页时返回 null。
+ */
+export function resolveTaskResultPath(toolSlug: string | undefined, taskId: string): string | null {
+  const category = findDesignRunCategory(toolSlug)
+  if (!category) return null
+  const path = category.resultPath(taskId)
+  return path === `/tasks/${taskId}` ? null : path
+}
+
 /** 设计任务页签的「进行中」口径：还没出结果。 */
 export const DESIGN_RUN_ACTIVE_STATUSES: readonly TaskStatus[] = ['pending', 'queued', 'running']

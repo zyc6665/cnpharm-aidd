@@ -86,7 +86,13 @@
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
-              <a-button type="link" size="small" @click="openResult(record)">
+              <a-button
+                v-if="hasDedicatedResult(record)"
+                type="link"
+                size="small"
+                data-testid="design-runs-open-result"
+                @click="openResult(record)"
+              >
                 {{ t('design.runs.openResult') }}
               </a-button>
               <a-button type="link" size="small" @click="openDetail(record)">
@@ -136,7 +142,8 @@ import {
   ALL_DESIGN_TOOL_SLUGS,
   DESIGN_RUN_CATEGORIES,
   findDesignRunCategory,
-  resolveDesignRunPath
+  resolveDesignRunPath,
+  resolveTaskResultPath
 } from '@/domain/design/runs'
 import {
   getTaskStatusColor,
@@ -200,8 +207,15 @@ function projectName(projectId: string): string {
   return projectNames.value[projectId] ?? projectId.slice(0, 8)
 }
 
+function hasDedicatedResult(task: Task): boolean {
+  return Boolean(resolveTaskResultPath(task.tool_slug, task.id))
+}
+
 function openResult(task: Task) {
-  void router.push(resolveDesignRunPath(task.tool_slug, task.id))
+  const path = resolveTaskResultPath(task.tool_slug, task.id)
+  if (path) {
+    void router.push(path)
+  }
 }
 
 function openDetail(task: Task) {

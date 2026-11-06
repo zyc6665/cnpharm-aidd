@@ -210,6 +210,15 @@
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
+              <a-button
+                v-if="taskResultPath(record)"
+                type="link"
+                size="small"
+                data-testid="tasks-open-result"
+                @click="goToResult(record)"
+              >
+                {{ t('tasks.taskWorkspace.viewResult') }}
+              </a-button>
               <a-button type="link" size="small" @click="goToDetail(record.id)">
                 {{ t('tasks.viewDetail') }}
               </a-button>
@@ -329,6 +338,7 @@
     type TaskActor,
     type TaskListTab
   } from '@/domain/tasks'
+  import { resolveTaskResultPath } from '@/domain/design/runs'
   import type { Task, TaskStatus } from '@/types/models'
   import type { ProjectRole, ResearchProject } from '@/types/projects'
 
@@ -406,7 +416,7 @@
     { title: t('tasks.columns.status'), key: 'status', width: 100 },
     { title: t('tasks.columns.progress'), key: 'progress', width: 150 },
     { title: t('tasks.columns.createdAt'), key: 'created_at', width: 170 },
-    { title: t('tasks.columns.actions'), key: 'actions', width: 220 },
+    { title: t('tasks.columns.actions'), key: 'actions', width: 300 },
   ])
 
   const canCancel = (task: Task) => canCancelTask({ ...task }, taskActor.value)
@@ -610,6 +620,16 @@
 
   const goToDetail = (id: string) => {
     router.push(`/tasks/${id}`)
+  }
+
+  const taskResultPath = (task: Task): string | null =>
+    resolveTaskResultPath(task.tool_slug ?? task.tool?.slug, task.id)
+
+  const goToResult = (task: Task) => {
+    const path = taskResultPath(task)
+    if (path) {
+      router.push(path)
+    }
   }
 
   const goToTools = () => {

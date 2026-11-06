@@ -2277,6 +2277,13 @@ export default {
     subtitle: 'Manage and monitor your computing tasks',
     detail: 'Task Detail',
     taskDetail: 'Task Detail',
+    taskWorkspace: {
+      backToCenter: 'Back to Task Center',
+      views: 'Switch task view',
+      detail: 'Task Detail',
+      result: 'Run Results',
+      viewResult: 'View Results'
+    },
     list: 'Task List',
     create: 'Create Task',
     name: 'Task Name',
