@@ -582,6 +582,19 @@ export interface ArtifactBindingDecision {
   suggested_tool_slug?: string | null
 }
 
+export interface TaskInputSnapshot {
+  inputRole?: string
+  ordinal?: number
+  entityType?: string | null
+  entityId?: string | null
+  urn?: string | null
+  sha256?: string | null
+  dataVersion?: number | null
+  fileId?: string | null
+  detail?: Record<string, unknown>
+  recordedAt?: string | null
+}
+
 export interface Task {
   id: string
   name?: string
@@ -624,6 +637,7 @@ export interface Task {
     content_type?: string
     url?: string
   }>
+  input_snapshots?: TaskInputSnapshot[]
   output_data?: unknown
   output_files?: Array<{
     id?: string | number

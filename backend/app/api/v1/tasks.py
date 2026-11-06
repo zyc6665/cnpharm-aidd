@@ -36,6 +36,7 @@ from app.tasks.naming import (
     _dedupe_file_ids,
     _extract_file_ids_from_result,
 )
+from app.services.traceability import load_task_snapshots, serialize_snapshot
 from app.auth.dependencies import get_current_user, get_current_user_optional, get_admin_user
 from app.config import settings, use_direct_task_execution
 from app.schemas.tasks import (
@@ -615,6 +616,9 @@ async def get_task(
         },
         "output_data": _extract_primary_output_data(task.outputs.result) if task.outputs else None,
         "input_files": await _load_files(db, input_file_ids),
+        "input_snapshots": [
+            serialize_snapshot(row) for row in await load_task_snapshots(db, task_id=task_id)
+        ],
         "output_files": await _load_files(db, output_file_ids),
     }
 

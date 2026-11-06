@@ -29,6 +29,8 @@
       </a-col>
     </a-row>
 
+    <PocketComplexViewer :task="task" />
+
     <a-card
       v-if="pocketRows.length"
       :bordered="false"
@@ -52,7 +54,6 @@
       </a-table>
     </a-card>
 
-    <ResultVisualizationPanel v-if="hasOutput" :task="task" />
     <TaskOutputSummary v-if="hasOutput" :task="task" />
     <AppEmptyState v-else :title="t('tasks.resultPage.noOutput')" />
   </div>
@@ -63,9 +64,9 @@
   import { useI18n } from 'vue-i18n'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
   import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
+  import PocketComplexViewer from '@/views/tasks/PocketComplexViewer.vue'
   import {
     getPocketCount,
     getPocketResultRows,

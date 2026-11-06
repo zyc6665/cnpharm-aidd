@@ -15,7 +15,7 @@ from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
-from app.models import File, Task, TaskInput, TaskLog, TaskOutput, Tool, ToolStatistics, ToolVersion, User
+from app.models import File, Task, TaskInput, TaskInputSnapshot, TaskLog, TaskOutput, Tool, ToolStatistics, ToolVersion, User
 from app.worker import tasks as worker_tasks
 from app.tasks.queue_manager import TaskQueueManager
 
@@ -159,8 +159,17 @@ async def seed_visualization_task(
             message="任务执行成功",
             log_data={"step": "completed"},
         )
+        snapshot = TaskInputSnapshot(
+            task_id=task_id,
+            input_role="RECEPTOR",
+            ordinal=0,
+            entity_type="file",
+            entity_id=input_file_id,
+            file_id=input_file_id,
+            detail={"filename": "pocket.pdb", "slots": ["protein"]},
+        )
 
-        session.add_all([tool, version, input_file, output_file, task, task_input, task_output, task_log])
+        session.add_all([tool, version, input_file, output_file, task, task_input, task_output, task_log, snapshot])
         await session.commit()
 
     return {
@@ -187,6 +196,9 @@ async def test_task_detail_returns_visualization_ready_payload(test_client):
     assert payload["input_files"][0]["original_name"] == "pocket_input.pdb"
     assert payload["input_files"][0]["sha256"] == "a" * 64
     assert payload["input_files"][0]["url"] == f"/api/v1/files/{seeded['input_file_id']}/download"
+    assert payload["input_snapshots"][0]["inputRole"] == "RECEPTOR"
+    assert payload["input_snapshots"][0]["fileId"] == seeded["input_file_id"]
+    assert payload["input_snapshots"][0]["detail"]["filename"] == "pocket.pdb"
     assert payload["output_files"][0]["id"] == seeded["output_file_id"]
     assert payload["output_files"][0]["original_name"] == "generated_ligand.sdf"
     assert payload["output_files"][0]["sha256"] == "b" * 64
