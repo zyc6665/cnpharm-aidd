@@ -92,6 +92,7 @@ interface DistributionOption {
 }
 
 interface DistributionGroup {
+  key: string
   label: string
   options: DistributionOption[]
 }
@@ -100,6 +101,7 @@ interface DistributionGroup {
 const distributionGroups = computed<DistributionGroup[]>(() => {
   const profile = resolvePredictDetailProfile(modelFamily.value)
   return buildPredictDistributionGroups(profile, distributionColumns.value).map(group => ({
+    key: group.titleKey,
     label: t(group.titleKey),
     options: group.columns.map(column => ({
       label: columnTitle(column.key, column.title),
@@ -111,11 +113,33 @@ const distributionGroups = computed<DistributionGroup[]>(() => {
 const distributionKey = ref('')
 const distributionOpen = ref(false)
 
-const distributionOptions = computed(() => distributionGroups.value)
+const distributionOptions = computed(() =>
+  distributionGroups.value.map(group => ({
+    value: group.key,
+    label: group.label,
+    children: group.options.map(option => ({ value: option.value, label: option.label }))
+  }))
+)
 
 const activeDistributionKey = computed(
   () => distributionKey.value || affinityColumnKey.value || distributionColumns.value[0]?.key || ''
 )
+
+const distributionCascadeValue = computed<Array<string | number>>(() => {
+  const key = activeDistributionKey.value
+  if (!key) {
+    return []
+  }
+  const group = distributionGroups.value.find(item => item.options.some(option => option.value === key))
+  return group ? [group.key, key] : []
+})
+
+function handleDistributionCascadeChange(value: Array<string | number> | undefined): void {
+  const selected = value?.length ? String(value[value.length - 1]) : ''
+  if (selected) {
+    distributionKey.value = selected
+  }
+}
 
 const distributionColumn = computed(
   () => distributionColumns.value.find(column => column.key === activeDistributionKey.value) ?? null
@@ -383,11 +407,15 @@ onMounted(() => {
           <template v-else>
             <div class="predict-result__distribution-toolbar">
               <span class="predict-result__distribution-label">{{ t('predict.result.distributionMetric') }}</span>
-              <a-select
-                v-model:value="distributionKey"
-                style="width: 260px"
+              <a-cascader
+                :value="distributionCascadeValue"
                 :options="distributionOptions"
+                :placeholder="t('predict.result.distributionMetric')"
+                expand-trigger="hover"
+                :show-search="true"
+                style="width: 320px"
                 data-testid="predict-distribution-metric"
+                @change="handleDistributionCascadeChange"
               />
             </div>
             <div v-if="distributionStats" class="predict-result__distribution-stats">
