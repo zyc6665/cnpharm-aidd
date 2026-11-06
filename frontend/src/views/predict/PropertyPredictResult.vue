@@ -232,10 +232,12 @@ onMounted(() => {
       <MoleculePredictDetail
         v-model:open="detailOpen"
         :row="detailRow"
+        :rows="rows"
         :columns="columns"
         :task-id="taskId"
         :family="modelFamily"
         :tool-name="toolName"
+        @select-candidate="detailRow = $event"
       />
     </template>
   </main>

@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { downloadCsv } from '@/views/predict/csv-export'
+import AffinityPredictDetail from './AffinityPredictDetail.vue'
 import { chartColors } from '@/utils/chartTheme'
 import {
   resolvePredictDetailProfile,
@@ -22,11 +23,15 @@ const props = defineProps<{
   row: CsvPreviewRow | null
   columns: CsvPreviewColumn[]
   taskId: string
+  /** 当前结果表全部行，用于同批候选对比。 */
+  rows?: CsvPreviewRow[]
   /** 模型能力族（后端 model_family；缺失时上层按 slug 兜底）。 */
   family?: string | null
   /** 任务使用的模型/工具名，用于报告信息，不再硬编码某个模型。 */
   toolName?: string | null
 }>()
+
+const emit = defineEmits<{ (event: 'selectCandidate', row: CsvPreviewRow): void }>()
 
 const open = defineModel<boolean>('open', { default: false })
 const { t } = useI18n()
@@ -358,6 +363,15 @@ onBeforeUnmount(() => {
         <a-empty v-if="!radarMetrics.length" :description="t('predict.result.detailNoData')" />
         <div v-else ref="radarRef" class="admet-detail__radar" />
       </div>
+
+      <AffinityPredictDetail
+        v-else-if="profile.key === 'affinity'"
+        :row="row"
+        :rows="rows ?? [row]"
+        :task-id="taskId"
+        :tool-name="toolName"
+        @select-candidate="emit('selectCandidate', $event)"
+      />
 
       <div v-else class="admet-detail__body">
         <aside class="admet-detail__aside">
