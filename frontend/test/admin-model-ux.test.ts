@@ -51,3 +51,22 @@ test('算力队列应使用等宽厂商分布卡片', () => {
     assert.equal(computeSource.includes(marker), true, `missing vendor card marker ${marker}`)
   }
 })
+
+test('模型登记弹窗应使用逐项向导并保留 JSON 快捷模式', () => {
+  const source = readSource('src/views/admin/ToolPackages.vue')
+
+  for (const marker of [
+    'registrationSteps',
+    'guidedStep',
+    'registration-step-body',
+    'registration-summary-grid',
+    'nextGuidedStep',
+    'previousGuidedStep',
+    'registration-footer-progress'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing registration wizard marker ${marker}`)
+  }
+  assert.equal(source.includes('逐项向导'), true)
+  assert.equal(source.includes('粘贴 JSON'), true)
+  assert.equal(source.includes('width="880px"'), true)
+})
