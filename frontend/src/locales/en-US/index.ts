@@ -1993,6 +1993,8 @@ export default {
       histograms: 'Distribution histograms',
       distributionHint: 'Pick a metric to inspect its distribution and summary',
       distributionMetric: 'Distribution metric',
+      distributionOther: 'Other metrics',
+      distributionAll: 'All metrics',
       distributionExpand: 'Expand',
       distributionCollapse: 'Collapse',
       distributionCount: 'Samples',

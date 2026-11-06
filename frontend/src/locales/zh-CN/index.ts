@@ -1982,6 +1982,8 @@ export default {
       histograms: '分布直方图',
       distributionHint: '选择指标查看分布与统计摘要',
       distributionMetric: '分布指标',
+      distributionOther: '其他指标',
+      distributionAll: '全部指标',
       distributionExpand: '展开',
       distributionCollapse: '收起',
       distributionCount: '样本数',

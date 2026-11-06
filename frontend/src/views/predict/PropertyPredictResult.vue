@@ -13,6 +13,8 @@ import { isNumericColumn } from './histogram'
 import { downloadCsv } from './csv-export'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
 import { resolveModelFamily } from '@/domain/design/modelFamilies'
+import { resolvePredictDetailProfile } from './predictDetailProfiles'
+import { buildPredictDistributionGroups } from './predict-distribution'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
 
 const route = useRoute()
@@ -72,19 +74,44 @@ const filterRangeInvalid = computed(
   () => filterMin.value !== null && filterMax.value !== null && filterMin.value > filterMax.value
 )
 
+function hasNumericValue(key: string): boolean {
+  return rows.value.some(row => {
+    const raw = String(row[key] ?? '').trim()
+    return raw !== '' && Number.isFinite(Number(raw))
+  })
+}
+
+/** 分布只要求该指标至少有一个数值，不因个别缺失值而整列被排除。 */
 const distributionColumns = computed(() =>
-  numericColumns.value.filter(column => !FILTER_EXCLUDED_PATTERN.test(column.key))
+  columns.value.filter(column => !FILTER_EXCLUDED_PATTERN.test(column.key) && hasNumericValue(column.key))
 )
+
+interface DistributionOption {
+  label: string
+  value: string
+}
+
+interface DistributionGroup {
+  label: string
+  options: DistributionOption[]
+}
+
+/** 按模型能力族的指标分组（如吸收/分布/代谢/毒性）给分布指标下拉分组。 */
+const distributionGroups = computed<DistributionGroup[]>(() => {
+  const profile = resolvePredictDetailProfile(modelFamily.value)
+  return buildPredictDistributionGroups(profile, distributionColumns.value).map(group => ({
+    label: t(group.titleKey),
+    options: group.columns.map(column => ({
+      label: columnTitle(column.key, column.title),
+      value: column.key
+    }))
+  }))
+})
 
 const distributionKey = ref('')
 const distributionOpen = ref(false)
 
-const distributionOptions = computed(() =>
-  distributionColumns.value.map(column => ({
-    label: columnTitle(column.key, column.title),
-    value: column.key
-  }))
-)
+const distributionOptions = computed(() => distributionGroups.value)
 
 const activeDistributionKey = computed(
   () => distributionKey.value || affinityColumnKey.value || distributionColumns.value[0]?.key || ''
