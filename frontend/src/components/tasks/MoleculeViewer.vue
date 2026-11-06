@@ -113,7 +113,7 @@ async function loadPresetStructure(
       ? {}
       : {
           representationPresetParams: {
-            theme: { globalName: 'uniform', globalParams: { value: Color(color) } },
+            theme: { globalName: 'uniform', globalColorParams: { value: Color(color) } },
           },
         }),
   })
