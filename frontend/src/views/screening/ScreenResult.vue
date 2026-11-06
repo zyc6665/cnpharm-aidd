@@ -24,7 +24,18 @@ const loading = ref(true)
 const errorMessage = ref('')
 const rows = ref<CsvPreviewRow[]>([])
 
-const NUMERIC_KEYS = ['mol_weight', 'logp', 'qed', 'docking_score', 'rank']
+const NUMERIC_KEYS = [
+  'pharmacophore_features',
+  'mol_weight',
+  'logp',
+  'tpsa',
+  'qed',
+  'docking_score',
+  'rmsd_lb',
+  'rmsd_ub',
+  'num_poses',
+  'rank'
+]
 
 function columnTitle(key: string): string {
   const suffix = SCREENING_RANKED_COLUMN_I18N[key]
@@ -37,7 +48,11 @@ function isPass(raw: string | undefined): boolean {
 }
 
 function isStageColumn(key: string): boolean {
-  return key === 'stage_pharmacophore' || key === 'stage_docking' || key === 'stage_rescore'
+  return (
+    key === 'stage_pharmacophore' ||
+    key === 'stage_docking' ||
+    key === 'stage_cutoff'
+  )
 }
 
 const tableColumns = computed(() =>
@@ -47,7 +62,7 @@ const tableColumns = computed(() =>
       title: columnTitle(key),
       dataIndex: key,
       key,
-      width: key === 'smiles' ? 220 : 120,
+      width: key === 'smiles' || key === 'error' ? 220 : 120,
       align: numeric ? 'right' : 'left',
       sorter: numeric
         ? (left: CsvPreviewRow, right: CsvPreviewRow): number =>
@@ -68,7 +83,8 @@ const stageLabels = computed<Record<FunnelStageKey, string>>(() => ({
   input: t('screening.result.stageInput'),
   pharmacophore: t('screening.result.stagePharmacophore'),
   docking: t('screening.result.stageDocking'),
-  rescore: t('screening.result.stageRescore')
+  cutoff: t('screening.result.stageCutoff'),
+  kept: t('screening.result.stageKept')
 }))
 
 const stageRows = computed(() =>

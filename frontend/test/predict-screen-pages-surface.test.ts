@@ -3,13 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  countPasses,
-  dockingPassRate,
-  estimateFunnel,
-  funnelFromRankedRows,
-  pharmacophorePassRate
-} from '../src/views/screening/funnel'
+import { countPasses, funnelFromRankedRows } from '../src/views/screening/funnel'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
@@ -62,27 +56,61 @@ test('tool slug 与冻结契约一致（molp-pc-property-prediction / autodock-v
   }
 })
 
-test('漏斗预估：输入配体数与阈值真实参与，每层剩余数计算正确', () => {
-  // 默认阈值：药效团 3 特征→70%；对接 -8 kcal/mol→50%；exhaustiveness 8→0.94
-  // 1000 → 700 → round(700 * 0.47)=329 → min(329, topN=50)=50
-  const stages = estimateFunnel({
-    ligandCount: 1000,
-    pharmacophoreMinFeatures: 3,
-    dockingScoreCutoff: -8,
-    exhaustiveness: 8,
-    topN: 50
-  })
+test('筛选参数契约：Vina 1.1.0 七个真实参数与默认值', () => {
+  const screeningTypes = read('src/types/screening.ts')
+  for (const key of [
+    'box_size',
+    'exhaustiveness',
+    'n_poses',
+    'pharmacophore_min_features',
+    'docking_score_cutoff',
+    'top_n',
+    'seed'
+  ]) {
+    assert.ok(screeningTypes.includes(`${key}:`), `ScreeningParams 缺少 ${key}`)
+  }
+  assert.ok(!screeningTypes.includes('device:'), 'Vina 1.1.0 不应暴露 device 参数')
+})
 
+test('漏斗真实统计：五层按 stage_pharmacophore/stage_docking/stage_cutoff/passes 计数', () => {
+  const rows: Array<Record<string, string>> = [
+    {
+      stage_pharmacophore: 'true',
+      stage_docking: 'true',
+      stage_cutoff: 'true',
+      passes: 'true'
+    },
+    {
+      stage_pharmacophore: 'true',
+      stage_docking: 'true',
+      stage_cutoff: 'false',
+      passes: 'false'
+    },
+    {
+      stage_pharmacophore: 'true',
+      stage_docking: 'false',
+      stage_cutoff: 'false',
+      passes: 'false'
+    },
+    {
+      stage_pharmacophore: 'false',
+      stage_docking: 'false',
+      stage_cutoff: 'false',
+      passes: 'false'
+    }
+  ]
+
+  const stages = funnelFromRankedRows(rows)
   assert.deepEqual(
     stages.map(stage => stage.key),
-    ['input', 'pharmacophore', 'docking', 'rescore']
+    ['input', 'pharmacophore', 'docking', 'cutoff', 'kept']
   )
   assert.deepEqual(
     stages.map(stage => stage.remaining),
-    [1000, 700, 329, 50]
+    [4, 3, 2, 1, 1]
   )
+  assert.equal(countPasses(rows), 1)
 
-  // 剩余数量必须单调不增
   for (let i = 1; i < stages.length; i += 1) {
     assert.ok(
       stages[i].remaining <= stages[i - 1].remaining,
@@ -91,67 +119,19 @@ test('漏斗预估：输入配体数与阈值真实参与，每层剩余数计�
   }
 })
 
-test('漏斗预估：更严格的阈值产出更少的剩余（不是写死）', () => {
-  const loose = estimateFunnel({
-    ligandCount: 1000,
-    pharmacophoreMinFeatures: 2,
-    dockingScoreCutoff: -4,
-    exhaustiveness: 16,
-    topN: 1000
-  })
-  const strict = estimateFunnel({
-    ligandCount: 1000,
-    pharmacophoreMinFeatures: 5,
-    dockingScoreCutoff: -12,
-    exhaustiveness: 1,
-    topN: 1000
-  })
-
-  assert.ok(loose[1].remaining > strict[1].remaining, '药效团更严格应剩余更少')
-  assert.ok(loose[2].remaining > strict[2].remaining, '对接更严格应剩余更少')
-  assert.ok(loose[3].remaining > strict[3].remaining, '整体更严格应剩余更少')
-})
-
-test('漏斗预估：top_n 限制最终剩余，输入非法时归零', () => {
-  const limited = estimateFunnel({
-    ligandCount: 100,
-    pharmacophoreMinFeatures: 1,
-    dockingScoreCutoff: 0,
-    exhaustiveness: 30,
-    topN: 10
-  })
-  assert.equal(limited[3].remaining, 10)
-
-  const zero = estimateFunnel({
-    ligandCount: 0,
-    pharmacophoreMinFeatures: 3,
-    dockingScoreCutoff: -8,
-    exhaustiveness: 8,
-    topN: 50
-  })
+test('漏斗真实统计：空表与全失败时各层归零', () => {
   assert.deepEqual(
-    zero.map(stage => stage.remaining),
-    [0, 0, 0, 0]
+    funnelFromRankedRows([]).map(stage => stage.remaining),
+    [0, 0, 0, 0, 0]
   )
-})
 
-test('通过率函数：默认参数与契约预估一致', () => {
-  assert.ok(Math.abs(pharmacophorePassRate(3) - 0.7) < 1e-9)
-  assert.ok(Math.abs(dockingPassRate(-8) - 0.5) < 1e-9)
-})
-
-test('漏斗真实统计：按 stage_pharmacophore/stage_docking/stage_rescore 逐层计数', () => {
-  const rows: Array<Record<string, string>> = [
-    { stage_pharmacophore: 'true', stage_docking: 'true', stage_rescore: 'true', passes: 'true' },
-    { stage_pharmacophore: 'true', stage_docking: 'true', stage_rescore: 'false', passes: 'false' },
-    { stage_pharmacophore: 'true', stage_docking: 'false', stage_rescore: 'false', passes: 'false' },
-    { stage_pharmacophore: 'false', stage_docking: 'false', stage_rescore: 'false', passes: 'false' }
+  const failed = [
+    { stage_pharmacophore: 'false', stage_docking: 'false', stage_cutoff: 'false', passes: 'false' },
+    { stage_pharmacophore: 'false', stage_docking: 'false', stage_cutoff: 'false', passes: 'false' }
   ]
-
-  const stages = funnelFromRankedRows(rows)
   assert.deepEqual(
-    stages.map(stage => stage.remaining),
-    [4, 3, 2, 1]
+    funnelFromRankedRows(failed).map(stage => stage.remaining),
+    [2, 0, 0, 0, 0]
   )
-  assert.equal(countPasses(rows), 1)
+  assert.equal(countPasses(failed), 0)
 })
