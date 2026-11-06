@@ -42,6 +42,20 @@
         </a-col>
       </a-row>
 
+      <a-card
+        v-if="vendorEntries.length > 0"
+        :title="t('admin.compute.byVendor')"
+        class="compute-vendor-card"
+      >
+        <div class="compute-vendor-grid">
+          <div v-for="[vendor, count] in vendorEntries" :key="vendor" class="compute-vendor-item">
+            <span class="compute-vendor-item__name">{{ vendor }}</span>
+            <strong class="compute-vendor-item__count">{{ count }}</strong>
+            <span class="compute-vendor-item__unit">{{ t('admin.compute.vendorUnit') }}</span>
+          </div>
+        </div>
+      </a-card>
+
       <a-card :title="t('admin.compute.k8s.nodes')" class="compute-state-card">
         <a-table
           :columns="k8sNodeColumns"
@@ -121,11 +135,13 @@
         </a-card>
       </a-col>
       <a-col :xs="24" :sm="24" :xl="12">
-        <a-card :title="t('admin.compute.byVendor')" :loading="loading">
-          <div v-if="vendorEntries.length > 0" class="compute-vendors">
-            <a-tag v-for="[vendor, count] in vendorEntries" :key="vendor" color="blue">
-              {{ vendor }}: {{ count }}
-            </a-tag>
+        <a-card :title="t('admin.compute.byVendor')" :loading="loading" class="compute-vendor-card">
+          <div v-if="vendorEntries.length > 0" class="compute-vendor-grid">
+            <div v-for="[vendor, count] in vendorEntries" :key="vendor" class="compute-vendor-item">
+              <span class="compute-vendor-item__name">{{ vendor }}</span>
+              <strong class="compute-vendor-item__count">{{ count }}</strong>
+              <span class="compute-vendor-item__unit">{{ t('admin.compute.vendorUnit') }}</span>
+            </div>
           </div>
           <AppEmptyState
             v-else
@@ -402,10 +418,43 @@ onMounted(refreshComputeData)
     justify-content: center;
   }
 
-  .compute-vendors {
+  .compute-vendor-card {
+    margin-bottom: @spacing-lg;
+  }
+
+  .compute-vendor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: @spacing-md;
+  }
+
+  .compute-vendor-item {
     display: flex;
-    flex-wrap: wrap;
-    gap: @spacing-sm;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 86px;
+    padding: @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-md;
+    background: @bg-color-light;
+  }
+
+  .compute-vendor-item__name {
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-medium;
+  }
+
+  .compute-vendor-item__count {
+    color: @text-color-light-primary;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .compute-vendor-item__unit {
+    color: @text-color-light-tertiary;
+    font-size: 11px;
   }
 
   .compute-state-card {

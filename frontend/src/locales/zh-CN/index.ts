@@ -290,10 +290,6 @@ export default {
     },
     title: '工具工作台',
     subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
-    entry: {
-      home: '进入工具工作台',
-      tools: '按分组使用工具'
-    },
     mode: {
       manual: '手动模式',
     },
@@ -2712,6 +2708,7 @@ export default {
       totalSlots: '总卡位',
       schedulableSlots: '可调度卡位',
       byVendor: '按厂商分布',
+      vendorUnit: '个卡位',
       slotState: '卡位状态概览',
       emptyState: '尚未声明卡位（DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE）',
       k8s: {
@@ -2818,6 +2815,12 @@ export default {
     currentVersion: '当前版本',
     imageDigest: '镜像摘要',
     publishNewVersion: '发布新版本',
+    modelAdminHintTitle: '模型由交付包注册，编辑页只维护元数据与运行参数',
+    modelAdminHint: '镜像、输入输出契约和参数 Schema 以模型交付包为准；修改镜像或运行配置时请发布新版本，避免覆盖正在运行的任务。',
+    modelColumn: '模型',
+    modelRuntime: '运行方式',
+    modelRuntimeLegacy: '旧版执行方式',
+    modelRuntimeUnknown: '未配置资源画像',
     role: '角色',
     registerTime: '注册时间',
     // 用户管理
@@ -2876,6 +2879,7 @@ export default {
     toolCategoriesSubtitle: '按模型能力自动归类；分类不可手工增删，随模型注册自动更新',
     toolCategoriesAutoTitle: '分类由模型能力自动派生',
     toolCategoriesAutoHint: '平台按工具 slug 归入结构预测、口袋预测、分子生成等能力族。新增模型注册后会自动进入对应分类，无需手工维护。',
+    modelGuide: '模型接入指南',
     createCategory: '新建分类',
     editCategory: '编辑分类',
     categoryName: '分类名称',

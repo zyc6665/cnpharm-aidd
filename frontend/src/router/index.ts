@@ -344,6 +344,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'admin.toolCategories' }
       },
       {
+        path: 'model-guide',
+        name: 'AdminModelGuide',
+        component: () => import('@/views/admin/ModelGuide.vue'),
+        meta: { title: 'admin.modelGuide' }
+      },
+      {
         path: 'tasks',
         name: 'AdminTasks',
         component: () => import('@/views/admin/Tasks.vue'),

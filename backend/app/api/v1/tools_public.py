@@ -44,6 +44,7 @@ from app.schemas.tools import (
     ToolContractResponse,
     ToolListPublicResponse,
     ToolPublicResponse,
+    ToolResponse,
     ToolWorkbenchGroupPublicResponse,
     ToolWorkbenchGroupToolResponse,
 )
@@ -172,9 +173,9 @@ async def list_tools(
         items=[
             serialize_tool(
                 tool,
-                ToolListPublicResponse,
+                ToolResponse if is_admin else ToolListPublicResponse,
                 tool_package=package_by_slug.get(tool.slug),
-                expose_runtime_config=False,
+                expose_runtime_config=bool(is_admin),
             )
             for tool in tools
         ],
@@ -401,11 +402,12 @@ async def get_tool(
         )
         is_favorited = favorite.scalar_one_or_none() is not None
     package_by_slug = await load_tool_packages_for_tools(db, [tool])
+    is_admin = current_user and current_user.role == "admin"
     payload = serialize_tool(
         tool,
-        ToolPublicResponse,
+        ToolResponse if is_admin else ToolPublicResponse,
         tool_package=package_by_slug.get(tool.slug),
-        expose_runtime_config=False,
+        expose_runtime_config=bool(is_admin),
     )
     payload["is_favorited"] = is_favorited
     return success_response(data=payload)

@@ -2,11 +2,32 @@
   <div class="admin-tools">
     <AppPageHeader :title="t('admin.tools')" :subtitle="t('admin.toolsSubtitle')">
       <template #actions>
-      <a-button type="primary" @click="openToolPackages">
-        {{ t('admin.toolRegistrationPackageTitle') }}
-      </a-button>
+        <a-space>
+          <a-button @click="openModelGuide">
+            <BookOutlined />
+            {{ t('admin.modelGuide') }}
+          </a-button>
+          <a-button type="primary" @click="openToolPackages">
+            <PlusOutlined />
+            {{ t('admin.toolRegistrationPackageTitle') }}
+          </a-button>
+        </a-space>
       </template>
     </AppPageHeader>
+
+    <a-alert
+      type="info"
+      show-icon
+      class="model-admin-hint"
+      :message="t('admin.modelAdminHintTitle')"
+      :description="t('admin.modelAdminHint')"
+    >
+      <template #action>
+        <a-button size="small" type="link" @click="openModelGuide">
+          {{ t('admin.modelGuide') }}
+        </a-button>
+      </template>
+    </a-alert>
 
     <AppFilterBar>
       <a-form layout="inline">
@@ -14,7 +35,8 @@
           <a-input
             v-model:value="filters.keyword"
             :placeholder="t('admin.searchToolPlaceholder')"
-            style="width: 220px"
+            style="width: 240px"
+            allow-clear
             @pressEnter="fetchTools"
           />
         </a-form-item>
@@ -34,7 +56,7 @@
           <a-select
             v-model:value="filters.status"
             :placeholder="t('common.all')"
-            style="width: 160px"
+            style="width: 150px"
             allow-clear
           >
             <a-select-option value="draft">draft</a-select-option>
@@ -58,7 +80,7 @@
       </a-form>
     </AppFilterBar>
 
-    <a-card>
+    <a-card :bordered="false" class="model-table-card">
       <SkeletonList v-if="loading && tools.length === 0" :count="6" />
 
       <AppInlineError
@@ -83,16 +105,16 @@
 
       <a-table
         v-else
-        :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="tools"
         :loading="loading"
         :pagination="pagination"
+        :row-class-name="rowClassName"
         row-key="id"
         @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'name'">
+          <template v-if="column.key === 'model'">
             <div class="tool-cell">
               <div class="tool-icon">{{ record.icon || '🧪' }}</div>
               <div class="tool-info">
@@ -101,61 +123,65 @@
               </div>
             </div>
           </template>
-          <template v-else-if="column.key === 'category'">
-            <a-tag>{{ record.category || '-' }}</a-tag>
-          </template>
-          <template v-else-if="column.key === 'status'">
-            <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
-          </template>
-          <template v-else-if="column.key === 'validation'">
-            <a-space size="small" wrap>
-              <a-tag
-                v-for="badge in toolValidationSummary(record).badges"
-                :key="badge.label"
-                :color="badge.color"
-              >
-                {{ badge.label }}
-              </a-tag>
-            </a-space>
-          </template>
-          <template v-else-if="column.key === 'stats'">
-            <a-space>
-              <span>{{ record.statistics?.usage_count ?? 0 }}</span>
-              <span>/</span>
-              <span>{{ record.statistics?.favorite_count ?? 0 }}</span>
-            </a-space>
-          </template>
-          <template v-else-if="column.key === 'modelFamily'">
+          <template v-else-if="column.key === 'family'">
             <a-tag v-if="record.contract?.model_family" color="blue">
               {{ record.contract.model_family }}
             </a-tag>
-            <span v-else>-</span>
+            <span v-else class="muted">未归类</span>
           </template>
           <template v-else-if="column.key === 'version'">
-            <span>{{ record.current_version?.version || '-' }}</span>
+            <div class="version-cell">
+              <span class="version-number">{{ record.current_version?.version || '-' }}</span>
+              <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'runtime'">
+            <div class="runtime-cell">
+              <a-tag :color="isLegacyTool(record) ? 'orange' : 'green'">
+                {{ isLegacyTool(record) ? t('admin.modelRuntimeLegacy') : 'K8s Job' }}
+              </a-tag>
+              <span class="runtime-profile">{{ resourceProfile(record) }}</span>
+            </div>
           </template>
           <template v-else-if="column.key === 'image'">
-            <span class="image-digest" :title="imageDigest(record)">{{ imageDigest(record) || '-' }}</span>
+            <span class="image-digest" :title="imageDigest(record)">
+              {{ shortDigest(record) || '-' }}
+            </span>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-space>
-              <a-button size="small" @click="handleEdit(record)">
+            <a-space :size="2">
+              <a-button type="link" size="small" @click="handleEdit(record)">
                 <EditOutlined />
                 {{ t('common.edit') }}
               </a-button>
-              <a-button size="small" @click="handleEdit(record)">
-                {{ t('admin.publishNewVersion') }}
-              </a-button>
-              <a-button size="small" danger @click="handleDelete(record)">
-                <DeleteOutlined />
-                {{ t('common.delete') }}
-              </a-button>
+              <a-dropdown>
+                <a-button type="link" size="small" @click.stop>
+                  {{ t('common.more') }}
+                  <DownOutlined />
+                </a-button>
+                <template #overlay>
+                  <a-menu @click="handleMenuClick($event, record)">
+                    <a-menu-item key="publish">
+                      <HistoryOutlined />
+                      {{ t('admin.publishNewVersion') }}
+                    </a-menu-item>
+                    <a-menu-item key="packages">
+                      <AppstoreOutlined />
+                      {{ t('admin.toolPackages') }}
+                    </a-menu-item>
+                    <a-menu-divider />
+                    <a-menu-item key="delete" danger>
+                      <DeleteOutlined />
+                      {{ t('common.delete') }}
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
             </a-space>
           </template>
         </template>
       </a-table>
     </a-card>
-
   </div>
 </template>
 
@@ -170,17 +196,21 @@ import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppInlineError from '@/components/common/AppInlineError.vue'
 import SkeletonList from '@/components/common/SkeletonList.vue'
 import {
+  AppstoreOutlined,
+  BookOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
+  HistoryOutlined,
+  PlusOutlined,
   ReloadOutlined,
-  SearchOutlined
+  SearchOutlined,
 } from '@ant-design/icons-vue'
 import type { Category, Tool } from '@/types/models'
-import { getToolValidationSummary } from '@/utils/tool-validation'
 import {
   adminGetToolCategories,
   deleteTool,
-  getToolList
+  getToolList,
 } from '@/api/tools'
 
 const { t } = useI18n()
@@ -195,34 +225,60 @@ const tools = ref<Tool[]>([])
 const filters = reactive({
   keyword: '',
   category: undefined as string | undefined,
-  status: undefined as string | undefined
+  status: undefined as string | undefined,
 })
 
 const pagination = reactive({
   current: 1,
   pageSize: 10,
   total: 0,
-  showSizeChanger: true
+  showSizeChanger: true,
 })
 
 const columns = computed(() => [
-  { title: t('admin.toolName'), key: 'name' },
-  { title: t('tools.category'), key: 'category', width: 150 },
-  { title: t('admin.modelFamily'), key: 'modelFamily', width: 160 },
-  { title: t('admin.currentVersion'), key: 'version', width: 110 },
-  { title: t('admin.imageDigest'), key: 'image', width: 200 },
-  { title: t('admin.status'), key: 'status', width: 120 },
-  { title: '验证等级', key: 'validation', width: 200 },
-  { title: t('admin.statistics'), key: 'stats', width: 120 },
-  { title: t('common.actions'), key: 'actions', width: 240 }
+  { title: t('admin.modelColumn'), key: 'model', width: 280 },
+  { title: t('admin.modelFamily'), key: 'family', width: 140 },
+  { title: t('admin.currentVersion'), key: 'version', width: 150 },
+  { title: t('admin.modelRuntime'), key: 'runtime', width: 180 },
+  { title: t('admin.imageDigest'), key: 'image', width: 170 },
+  { title: t('common.actions'), key: 'actions', width: 160, fixed: 'right' as const },
 ])
 
+function configOf(tool: Tool): Record<string, unknown> {
+  return (tool.current_version?.config ?? {}) as Record<string, unknown>
+}
+
+function isLegacyTool(tool: Tool): boolean {
+  const config = configOf(tool)
+  const toolType = config.tool_type ?? config.type
+  if (typeof toolType === 'string' && toolType) {
+    return toolType !== 'k8s_job'
+  }
+  return !config.k8s_image && !config.image
+}
+
+function resourceProfile(tool: Tool): string {
+  const config = configOf(tool)
+  const profile = config.k8s_resource_profile ?? config.resource_profile
+  if (typeof profile === 'string' && profile) return profile
+  const parts: string[] = []
+  if (config.cpu_limit != null && config.cpu_limit !== '') parts.push(`${config.cpu_limit} vCPU`)
+  if (typeof config.memory_limit === 'string' && config.memory_limit) parts.push(config.memory_limit)
+  if (config.gpu_required) parts.push('GPU')
+  return parts.length ? parts.join(' · ') : t('admin.modelRuntimeUnknown')
+}
+
 function imageDigest(tool: Tool): string {
-  const config = (tool.current_version?.config ?? {}) as Record<string, unknown>
+  const config = configOf(tool)
   const raw = config.k8s_image || config.image
   if (typeof raw !== 'string' || !raw) return ''
   const at = raw.indexOf('@sha256:')
   return at >= 0 ? raw.slice(at + '@sha256:'.length) : raw
+}
+
+function shortDigest(tool: Tool): string {
+  const digest = imageDigest(tool)
+  return digest ? `${digest.slice(0, 12)}…` : ''
 }
 
 const statusColor = (status: Tool['status']) => {
@@ -230,12 +286,14 @@ const statusColor = (status: Tool['status']) => {
     draft: 'default',
     published: 'green',
     disabled: 'orange',
-    deprecated: 'red'
+    deprecated: 'red',
   }
   return mapping[status]
 }
 
-const toolValidationSummary = (tool: Tool) => getToolValidationSummary(tool.current_version?.config)
+function rowClassName(record: Tool): string {
+  return isLegacyTool(record) ? 'model-row--legacy' : ''
+}
 
 const fetchCategories = async () => {
   const res = await adminGetToolCategories()
@@ -252,7 +310,7 @@ const fetchTools = async () => {
       page_size: pagination.pageSize,
       search: filters.keyword || undefined,
       category: filters.category,
-      status: filters.status
+      status: filters.status,
     })
     tools.value = res.data.items
     pagination.total = res.data.total
@@ -289,6 +347,10 @@ const openToolPackages = () => {
   router.push('/admin/tool-packages')
 }
 
+const openModelGuide = () => {
+  router.push('/admin/model-guide')
+}
+
 const handleEdit = (tool: Tool) => {
   router.push(`/admin/tools/${tool.id}/edit`)
 }
@@ -302,8 +364,26 @@ const handleDelete = (tool: Tool) => {
       await deleteTool(tool.id)
       message.success(t('common.success'))
       await fetchTools()
-    }
+    },
   })
+}
+
+const handleAction = (key: string, tool: Tool) => {
+  if (key === 'publish') {
+    handleEdit(tool)
+    return
+  }
+  if (key === 'packages') {
+    openToolPackages()
+    return
+  }
+  if (key === 'delete') {
+    handleDelete(tool)
+  }
+}
+
+const handleMenuClick = (info: { key: string | number }, tool: Tool) => {
+  handleAction(String(info.key), tool)
 }
 
 onMounted(async () => {
@@ -315,181 +395,105 @@ onMounted(async () => {
 @import '@/assets/styles/variables.less';
 
 .admin-tools {
-  .hidden-file-input {
-    display: none;
+  .model-admin-hint {
+    margin-bottom: @spacing-lg;
+    border-radius: @border-radius-lg;
   }
 
-  .import-config-description {
-    margin-bottom: @spacing-md;
-    color: @text-color-light-secondary;
-  }
-
-  .registration-description {
-    margin: 0 0 @spacing-lg;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    line-height: 1.6;
-  }
-
-  .registration-options {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .registration-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    min-width: 0;
-    min-height: 112px;
-    padding: 18px;
+  .model-table-card {
     border: 1px solid @border-color;
-    border-radius: @border-radius-md;
+    border-radius: @border-radius-lg;
     background: @bg-surface;
-    color: @text-color-light-primary;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color @transition-fast, background @transition-fast, box-shadow @transition-fast;
-
-    &:hover {
-      border-color: @primary-color;
-      background: @bg-hover;
-      box-shadow: @shadow-sm;
-    }
-
-    &:focus-visible {
-      outline: 2px solid @primary-color;
-      outline-offset: 2px;
-    }
-
-    &.is-recommended {
-      border-color: fade(@success-color, 45%);
-
-      &:hover {
-        border-color: @success-color;
-      }
-    }
-  }
-
-  .registration-option-icon {
-    display: inline-flex;
-    flex: 0 0 40px;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: @border-radius-md;
-    background: @bg-elevated;
-    color: @text-secondary;
-    font-size: 19px;
-  }
-
-  .registration-option--template .registration-option-icon {
-    background: @accent-color-light;
-    color: @primary-color;
-  }
-
-  .registration-option--package .registration-option-icon {
-    background: @success-color-light;
-    color: @success-color;
-  }
-
-  .registration-option--advanced .registration-option-icon {
-    background: @warning-color-light;
-    color: @warning-color;
-  }
-
-  .registration-option-copy {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 7px;
-    min-width: 0;
-
-    strong {
-      color: @text-color-light-primary;
-      font-size: @font-size-md;
-      font-weight: @font-weight-semibold;
-      line-height: 1.35;
-    }
-
-    span {
-      color: @text-color-light-secondary;
-      font-size: @font-size-xs;
-      line-height: 1.6;
-    }
-  }
-
-  .registration-option-heading {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .registration-recommended {
-    padding: 2px 7px;
-    border-radius: @border-radius-sm;
-    background: @success-color-light;
-    color: @success-color !important;
-    font-size: 11px !important;
-    font-weight: @font-weight-medium;
-    line-height: 1.4 !important;
-  }
-
-  .registration-option-arrow {
-    flex: 0 0 auto;
-    margin-top: 12px;
-    color: @text-tertiary;
-    transition: color @transition-fast, transform @transition-fast;
-  }
-
-  .registration-option:hover .registration-option-arrow {
-    color: @primary-color;
-    transform: translateX(2px);
-  }
-
-  .registration-option--package:hover .registration-option-arrow {
-    color: @success-color;
-  }
-
-  @media (max-width: 720px) {
-    .registration-options {
-      grid-template-columns: 1fr;
-    }
   }
 
   .tool-cell {
     display: flex;
     align-items: center;
     gap: @spacing-sm;
+    min-width: 0;
   }
 
   .tool-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
     display: flex;
+    flex: 0 0 38px;
     align-items: center;
     justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
     background: @accent-color-light;
-    font-size: 20px;
+    font-size: 19px;
   }
 
   .tool-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
 
   .name {
+    overflow: hidden;
+    color: @text-color-light-primary;
     font-weight: @font-weight-medium;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .meta {
+    overflow: hidden;
+    color: @text-color-light-tertiary;
+    font-family: @font-family-mono;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .version-cell,
+  .runtime-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .version-number {
+    color: @text-color-light-primary;
+    font-family: @font-family-mono;
+    font-size: 12px;
+  }
+
+  .runtime-profile {
+    color: @text-color-light-tertiary;
+    font-size: 11px;
+  }
+
+  .image-digest {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
     color: @text-color-light-secondary;
+    font-family: @font-family-mono;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .muted {
+    color: @text-color-light-tertiary;
     font-size: @font-size-sm;
+  }
+
+  :deep(.model-row--legacy) td {
+    background: fade(@warning-color, 3%);
+  }
+
+  :deep(.ant-table) {
+    table-layout: fixed;
+  }
+
+  :deep(.ant-table-cell) {
+    overflow: hidden;
   }
 }
 </style>

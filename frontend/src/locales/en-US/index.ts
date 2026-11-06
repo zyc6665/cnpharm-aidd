@@ -292,10 +292,6 @@ export default {
     },
     title: 'Tool Workbench',
     subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
-    entry: {
-      home: 'Open Tool Workbench',
-      tools: 'Use Tools by Group'
-    },
     mode: {
       manual: 'Manual Mode',
     },
@@ -2729,6 +2725,7 @@ export default {
       totalSlots: 'Total Slots',
       schedulableSlots: 'Schedulable Slots',
       byVendor: 'By Vendor',
+      vendorUnit: 'slots',
       slotState: 'Slot State Overview',
       emptyState: 'No slots declared yet (DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE)',
       k8s: {
@@ -2836,6 +2833,12 @@ export default {
     currentVersion: 'Current version',
     imageDigest: 'Image digest',
     publishNewVersion: 'Publish new version',
+    modelAdminHintTitle: 'Models are registered through delivery packages; this editor maintains metadata and runtime parameters',
+    modelAdminHint: 'Image, input/output contract and parameter schema come from the model delivery package. Publish a new version when changing the image or runtime configuration so running tasks are not affected.',
+    modelColumn: 'Model',
+    modelRuntime: 'Runtime',
+    modelRuntimeLegacy: 'Legacy runtime',
+    modelRuntimeUnknown: 'Resource profile not set',
     role: 'Role',
     registerTime: 'Registered',
     // User Management
@@ -2895,6 +2898,7 @@ export default {
     toolCategoriesSubtitle: 'Groups are derived from model capability and update automatically with model registration',
     toolCategoriesAutoTitle: 'Categories are derived automatically',
     toolCategoriesAutoHint: 'Each tool is grouped into a capability family such as structure prediction, pocket prediction or molecule generation. New models join their family automatically.',
+    modelGuide: 'Model onboarding guide',
     createCategory: 'Create Category',
     editCategory: 'Edit Category',
     categoryName: 'Category Name',
