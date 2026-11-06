@@ -1970,6 +1970,7 @@ export default {
       loadFailed: '加载预测结果失败。',
       empty: '没有找到预测结果表。',
       search: '按 SMILES 搜索',
+      filterTitle: '筛选条件',
       filterColumn: '筛选列',
       filterMin: '最小值',
       resetFilter: '重置筛选',

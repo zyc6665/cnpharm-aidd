@@ -49,6 +49,14 @@ const numericColumns = computed(() =>
   columns.value.filter(column => isNumericColumn(rows.value, column.key))
 )
 
+const hasSmilesColumn = computed(() =>
+  columns.value.some(column => column.key.toLowerCase() === 'smiles' || column.originalKey?.toLowerCase() === 'smiles')
+)
+
+const filterCardTitle = computed(() =>
+  hasSmilesColumn.value ? t('predict.result.search') : t('predict.result.filterTitle')
+)
+
 const matrixColumns = computed(() => {
   const mapped = columns.value.map((column, index) => {
     const numeric = isNumericColumn(rows.value, column.key)
@@ -168,9 +176,10 @@ onMounted(() => {
     />
 
     <template v-else-if="!errorMessage">
-      <a-card class="predict-result__filters" :title="t('predict.result.search')">
+      <a-card class="predict-result__filters" :title="filterCardTitle">
         <a-space wrap>
           <a-input
+            v-if="hasSmilesColumn"
             v-model:value="searchText"
             style="width: 220px"
             allow-clear

@@ -1981,6 +1981,7 @@ export default {
       loadFailed: 'Failed to load prediction results.',
       empty: 'No prediction table found.',
       search: 'Search by SMILES',
+      filterTitle: 'Filters',
       filterColumn: 'Filter column',
       filterMin: 'Min value',
       resetFilter: 'Reset filters',
