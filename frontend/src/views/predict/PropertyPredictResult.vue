@@ -7,6 +7,7 @@ import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import HistogramChart from './HistogramChart.vue'
 import MoleculePredictDetail from './MoleculePredictDetail.vue'
 import { loadMoleculeTable } from './molecule-table'
+import { filterPredictRows } from './predict-filter'
 import { isNumericColumn, toNumericValues } from './histogram'
 import { downloadCsv } from './csv-export'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
@@ -27,6 +28,8 @@ const toolName = ref('')
 const searchText = ref('')
 const filterColumn = ref<string>('')
 const filterMin = ref<number | null>(null)
+const filterMax = ref<number | null>(null)
+const affinityMin = ref<number | null>(null)
 
 const detailOpen = ref(false)
 const detailRow = ref<CsvPreviewRow | null>(null)
@@ -41,10 +44,6 @@ function columnTitle(key: string, fallback: string): string {
   return suffix ? t(`predict.result.${suffix}`) : fallback
 }
 
-const columnOptions = computed(() =>
-  columns.value.map(column => ({ label: columnTitle(column.key, column.title), value: column.key }))
-)
-
 const numericColumns = computed(() =>
   columns.value.filter(column => isNumericColumn(rows.value, column.key))
 )
@@ -53,8 +52,23 @@ const hasSmilesColumn = computed(() =>
   columns.value.some(column => column.key.toLowerCase() === 'smiles' || column.originalKey?.toLowerCase() === 'smiles')
 )
 
-const filterCardTitle = computed(() =>
-  hasSmilesColumn.value ? t('predict.result.search') : t('predict.result.filterTitle')
+/** 身份、时间和量表字段不适合作为筛选条件。 */
+const FILTER_EXCLUDED_PATTERN = /(^|\.)(complex_id|molecule_id|smiles|duration_sec|scale)$/i
+
+const filterColumnOptions = computed(() =>
+  numericColumns.value
+    .filter(column => !FILTER_EXCLUDED_PATTERN.test(column.key))
+    .map(column => ({ label: columnTitle(column.key, column.title), value: column.key }))
+)
+
+const affinityColumnKey = computed(
+  () => columns.value.find(column => /predicted_affinity/i.test(`${column.key} ${column.originalKey ?? ''}`))?.key ?? ''
+)
+
+const isAffinityResult = computed(() => modelFamily.value === 'affinity' || Boolean(affinityColumnKey.value))
+
+const filterRangeInvalid = computed(
+  () => filterMin.value !== null && filterMax.value !== null && filterMin.value > filterMax.value
 )
 
 const matrixColumns = computed(() => {
@@ -86,23 +100,18 @@ const matrixColumns = computed(() => {
   ]
 })
 
-const filteredRows = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase()
-  const column = filterColumn.value
-  const min = filterMin.value
-  return rows.value.filter(row => {
-    if (keyword && !(row.smiles ?? '').toLowerCase().includes(keyword)) {
-      return false
-    }
-    if (column && min !== null && Number.isFinite(min)) {
-      const value = Number((row[column] ?? '').trim())
-      if (!Number.isFinite(value) || value < min) {
-        return false
-      }
-    }
-    return true
+const filteredRows = computed(() =>
+  filterPredictRows(rows.value, {
+    searchText: searchText.value,
+    hasSmilesColumn: hasSmilesColumn.value,
+    isAffinityResult: isAffinityResult.value,
+    affinityColumnKey: affinityColumnKey.value,
+    affinityMin: affinityMin.value,
+    column: filterColumn.value,
+    min: filterMin.value,
+    max: filterMax.value
   })
-})
+)
 
 const exportColumns = computed(() =>
   matrixColumns.value.map(column => ({ key: column.key, title: String(column.title) }))
@@ -112,6 +121,15 @@ function resetFilter(): void {
   searchText.value = ''
   filterColumn.value = ''
   filterMin.value = null
+  filterMax.value = null
+  affinityMin.value = null
+}
+
+function handleFilterColumnChange(value: string | undefined): void {
+  if (!value) {
+    filterMin.value = null
+    filterMax.value = null
+  }
 }
 
 function handleExport(): void {
@@ -176,7 +194,7 @@ onMounted(() => {
     />
 
     <template v-else-if="!errorMessage">
-      <a-card class="predict-result__filters" :title="filterCardTitle">
+      <a-card class="predict-result__filters" :title="t('predict.result.filterTitle')">
         <a-space wrap>
           <a-input
             v-if="hasSmilesColumn"
@@ -185,22 +203,45 @@ onMounted(() => {
             allow-clear
             :placeholder="t('predict.result.search')"
           />
-          <a-select
-            v-model:value="filterColumn"
-            style="width: 200px"
-            allow-clear
-            :placeholder="t('predict.result.filterColumn')"
-            :options="columnOptions"
-          />
-          <a-input-number
-            v-model:value="filterMin"
-            style="width: 160px"
-            :placeholder="t('predict.result.filterMin')"
-          />
+          <template v-if="isAffinityResult">
+            <a-input-number
+              v-model:value="affinityMin"
+              style="width: 260px"
+              :addon-before="t('predict.result.affinityFilterLabel')"
+              :placeholder="t('predict.result.filterMin')"
+            />
+          </template>
+          <template v-else>
+            <a-select
+              v-model:value="filterColumn"
+              style="width: 200px"
+              allow-clear
+              :placeholder="t('predict.result.filterColumn')"
+              :options="filterColumnOptions"
+              @change="handleFilterColumnChange"
+            />
+            <a-input-number
+              v-model:value="filterMin"
+              style="width: 150px"
+              :disabled="!filterColumn"
+              :placeholder="t('predict.result.filterMin')"
+            />
+            <a-input-number
+              v-model:value="filterMax"
+              style="width: 150px"
+              :disabled="!filterColumn"
+              :placeholder="t('predict.result.filterMax')"
+            />
+          </template>
           <a-button data-testid="predict-result-reset" @click="resetFilter">
             {{ t('predict.result.resetFilter') }}
           </a-button>
-          <span class="predict-result__count">{{ t('predict.result.count') }}: {{ filteredRows.length }}</span>
+          <span class="predict-result__count">
+            {{ t('predict.result.filterCount', { shown: filteredRows.length, total: rows.length }) }}
+          </span>
+          <span v-if="filterRangeInvalid" class="predict-result__filter-warning">
+            {{ t('predict.result.filterRangeInvalid') }}
+          </span>
         </a-space>
       </a-card>
 
@@ -272,6 +313,11 @@ onMounted(() => {
 
 .predict-result__count {
   color: var(--ant-color-text-secondary, var(--theme-text-secondary));
+}
+
+.predict-result__filter-warning {
+  color: var(--ant-color-error, #e5484d);
+  font-size: 12px;
 }
 
 .predict-result__charts {
