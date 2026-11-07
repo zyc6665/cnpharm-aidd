@@ -83,27 +83,37 @@
 
           <a-row :gutter="16">
             <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.forceField')" required>
-                <a-select v-model:value="form.force_field" :options="forceFieldOptions" data-testid="md-force-field-select" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.durationNs')" required>
+              <a-form-item :label="t('md.submit.nsteps')" required>
                 <a-input-number
-                  v-model:value="form.duration_ns"
-                  :min="0.1"
-                  :step="10"
-                  :precision="1"
+                  v-model:value="form.nsteps"
+                  :min="0"
+                  :max="500000"
+                  :step="100"
+                  :precision="0"
                   class="md-submit__number"
-                  data-testid="md-duration-input"
+                  data-testid="md-nsteps-input"
                 />
               </a-form-item>
             </a-col>
             <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.temperatureK')" required>
+              <a-form-item :label="t('md.submit.dt')" required>
                 <a-input-number
-                  v-model:value="form.temperature_k"
-                  :min="1"
+                  v-model:value="form.dt"
+                  :min="0.001"
+                  :max="0.004"
+                  :step="0.001"
+                  :precision="3"
+                  class="md-submit__number"
+                  data-testid="md-dt-input"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :xs="24" :md="12" :lg="8">
+              <a-form-item :label="t('md.submit.temperature')" required>
+                <a-input-number
+                  v-model:value="form.temperature"
+                  :min="250"
+                  :max="400"
                   :step="5"
                   :precision="0"
                   class="md-submit__number"
@@ -112,26 +122,26 @@
               </a-form-item>
             </a-col>
             <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.pressureBar')" required>
+              <a-form-item :label="t('md.submit.boxDistance')" required>
                 <a-input-number
-                  v-model:value="form.pressure_bar"
-                  :min="0.1"
+                  v-model:value="form.box_distance"
+                  :min="0.8"
+                  :max="2.5"
                   :step="0.1"
                   :precision="2"
                   class="md-submit__number"
-                  data-testid="md-pressure-input"
+                  data-testid="md-box-distance-input"
                 />
               </a-form-item>
             </a-col>
             <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.seed')">
-                <a-input-number
-                  v-model:value="form.seed"
-                  :min="0"
-                  :precision="0"
-                  class="md-submit__number"
-                  data-testid="md-seed-input"
-                />
+              <a-form-item :label="t('md.submit.waterModel')">
+                <a-select v-model:value="form.water_model" :options="waterModelOptions" data-testid="md-water-model-select" />
+              </a-form-item>
+            </a-col>
+            <a-col :xs="24" :md="12" :lg="8">
+              <a-form-item :label="t('md.submit.device')">
+                <a-select v-model:value="form.device" :options="deviceOptions" data-testid="md-device-select" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -176,7 +186,7 @@
   import { estimateMdRuntimeHours } from './analysis'
   import type { ResearchProject } from '@/types/projects'
   import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
-  import type { MdForceField, MdSubmitParams } from '@/types/md'
+  import type { MdSubmitParams } from '@/types/md'
 
   const { t } = useI18n()
   const router = useRouter()
@@ -205,21 +215,23 @@
     targetId: string | undefined
     proteinId: string | undefined
     structureId: string | undefined
-    force_field: MdForceField
-    duration_ns: number
-    temperature_k: number
-    pressure_bar: number
-    seed: number | null
+    nsteps: number
+    dt: number
+    temperature: number
+    box_distance: number
+    water_model: string
+    device: 'auto' | 'cpu' | 'gpu'
   }>({
     projectId: undefined,
     targetId: undefined,
     proteinId: undefined,
     structureId: undefined,
-    force_field: 'amber99sb-ildn',
-    duration_ns: 100,
-    temperature_k: 300,
-    pressure_bar: 1,
-    seed: null
+    nsteps: 2500,
+    dt: 0.002,
+    temperature: 300,
+    box_distance: 1.0,
+    water_model: 'tip3p',
+    device: 'auto'
   })
 
   const projectOptions = computed(() => projects.value.map((project) => ({ value: project.id, label: project.name })))
@@ -231,9 +243,15 @@
       label: `#${index + 1}${structure.prepared_file_id ? ` ${t('md.submit.prepared')}` : ''}`
     }))
   )
-  const forceFieldOptions = computed(() => [
-    { value: 'amber99sb-ildn', label: t('md.submit.forceFieldAmber') },
-    { value: 'charmm36', label: t('md.submit.forceFieldCharmm') }
+  const waterModelOptions = computed(() => [
+    { value: 'tip3p', label: 'TIP3P' },
+    { value: 'spc', label: 'SPC' },
+    { value: 'tip4p', label: 'TIP4P' }
+  ])
+  const deviceOptions = computed(() => [
+    { value: 'auto', label: t('md.submit.deviceAuto') },
+    { value: 'cpu', label: 'CPU' },
+    { value: 'gpu', label: 'GPU' }
   ])
 
   const selectedStructure = computed(
@@ -246,10 +264,18 @@
     return structure.prepared_file_id ?? structure.structure_file_id ?? null
   })
 
-  const canSubmit = computed(() => Boolean(form.projectId && complexFileId.value && form.duration_ns > 0))
+  const durationNs = computed(() => (Number(form.nsteps) * Number(form.dt)) / 1000)
+
+  const canSubmit = computed(
+    () =>
+      Boolean(form.projectId && complexFileId.value) &&
+      Number(form.nsteps) > 0 &&
+      Number(form.dt) >= 0.001 &&
+      Number(form.dt) <= 0.004
+  )
 
   const estimateHours = computed(() =>
-    estimateMdRuntimeHours({ durationNs: Number(form.duration_ns) || 0, gpuCount: 1 })
+    estimateMdRuntimeHours({ durationNs: Number(durationNs.value) || 0, gpuCount: 1 })
   )
   const estimateText = computed(() =>
     Number.isFinite(estimateHours.value) ? `${estimateHours.value}` : '-'
@@ -345,11 +371,12 @@
     form.targetId = undefined
     form.proteinId = undefined
     form.structureId = undefined
-    form.force_field = 'amber99sb-ildn'
-    form.duration_ns = 100
-    form.temperature_k = 300
-    form.pressure_bar = 1
-    form.seed = null
+    form.nsteps = 2500
+    form.dt = 0.002
+    form.temperature = 300
+    form.box_distance = 1.0
+    form.water_model = 'tip3p'
+    form.device = 'auto'
     targets.value = []
     proteins.value = []
     structures.value = []
@@ -373,13 +400,12 @@
       }
       const toolVersionId = await resolveToolVersionId(tool)
       const params: MdSubmitParams = {
-        force_field: form.force_field,
-        duration_ns: Number(form.duration_ns),
-        temperature_k: Number(form.temperature_k),
-        pressure_bar: Number(form.pressure_bar)
-      }
-      if (form.seed !== null && form.seed !== undefined) {
-        params.seed = Number(form.seed)
+        nsteps: Number(form.nsteps),
+        dt: Number(form.dt),
+        temperature: Number(form.temperature),
+        box_distance: Number(form.box_distance),
+        water_model: form.water_model,
+        device: form.device
       }
       const taskId = await submitMdTask({
         projectId: form.projectId,
@@ -387,7 +413,7 @@
         toolVersionId,
         params,
         complexFileId: complexFileId.value,
-        name: `MD ${params.duration_ns}ns`
+        name: `MD ${durationNs.value.toFixed(2)}ns`
       })
       message.success(t('md.submit.submitSuccess'))
       await router.push(`/tasks/${taskId}/md`)

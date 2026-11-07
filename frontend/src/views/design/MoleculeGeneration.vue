@@ -18,7 +18,37 @@
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <PocketPicker v-model="pocketSelection" :default-project-id="initialProjectId" />
+        <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
+      </section>
+
+      <a-alert
+        v-if="pocketSelection && !pocketSelection.structureFileId"
+        type="warning"
+        show-icon
+        :message="t('design.molecule.pocketMissingFile')"
+        class="pocket-alert"
+      />
+      <a-alert
+        v-else-if="pocketSelection && !hasCenter"
+        type="warning"
+        show-icon
+        :message="t('design.molecule.pocketMissingCenter')"
+        class="pocket-alert"
+      />
+
+      <section v-if="pocketSelection" class="design-section pocket-summary" data-testid="molecule-pocket-summary">
+        <h3 class="design-section__title">{{ t('design.molecule.pocketSummary') }}</h3>
+        <a-descriptions :column="3" size="small" bordered>
+          <a-descriptions-item :label="t('design.molecule.pocketLabel')">
+            {{ pocketSelection.pocketLabel || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('design.molecule.pocketCenter')">
+            {{ centerText }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('design.molecule.pocketBox')">
+            {{ boxText }}
+          </a-descriptions-item>
+        </a-descriptions>
       </section>
 
       <section class="design-section">
@@ -26,9 +56,9 @@
         <a-form layout="vertical" data-testid="molecule-form">
           <a-row :gutter="16">
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.numMolecules')">
+              <a-form-item :label="t('design.molecule.numSamples')">
                 <a-input-number
-                  v-model:value="form.numMolecules"
+                  v-model:value="form.numSamples"
                   class="number-input"
                   :min="1"
                   :max="1000"
@@ -38,43 +68,24 @@
               </a-form-item>
             </a-col>
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.seed')">
+              <a-form-item :label="t('design.molecule.pocketRadius')">
                 <a-input-number
-                  v-model:value="form.seed"
+                  v-model:value="form.pocketRadius"
                   class="number-input"
-                  :min="0"
-                  :precision="0"
-                  data-testid="molecule-seed"
+                  :min="1"
+                  :max="100"
+                  :step="0.5"
+                  data-testid="molecule-pocket-radius"
                 />
               </a-form-item>
             </a-col>
-          </a-row>
-
-          <a-row :gutter="16">
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.mwMin')">
-                <a-input-number v-model:value="form.mwMin" class="number-input" :min="1" data-testid="molecule-mw-min" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.mwMax')">
-                <a-input-number v-model:value="form.mwMax" class="number-input" :min="1" data-testid="molecule-mw-max" />
+              <a-form-item :label="t('design.molecule.device')">
+                <a-select v-model:value="form.device" :options="deviceOptions" data-testid="molecule-device" />
               </a-form-item>
             </a-col>
           </a-row>
-
-          <a-row :gutter="16">
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.logpMin')">
-                <a-input-number v-model:value="form.logpMin" class="number-input" data-testid="molecule-logp-min" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.logpMax')">
-                <a-input-number v-model:value="form.logpMax" class="number-input" data-testid="molecule-logp-max" />
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <p class="param-hint">{{ t('design.molecule.paramHint') }}</p>
         </a-form>
       </section>
 
@@ -82,7 +93,7 @@
         <a-button
           type="primary"
           :loading="submitting"
-          :disabled="!pocketSelection || !resolvedTool"
+          :disabled="!canSubmit"
           data-testid="molecule-submit"
           @click="handleSubmit"
         >
@@ -94,27 +105,29 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, reactive, ref, watch } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { computed, onMounted, reactive, ref, watch } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import PocketPicker from './components/PocketPicker.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
-  import {
-    resolvePocketInputBinding,
-    resolveToolBySlug,
-    submitDesignTask,
-  } from '@/api/design'
+  import { resolveToolBySlug, submitDesignTask } from '@/api/design'
   import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
   import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
   const router = useRouter()
+  const route = useRoute()
   const { t } = useI18n()
 
   const props = withDefaults(defineProps<{ initialProjectId?: string }>(), {
     initialProjectId: ''
+  })
+
+  const defaultProjectId = computed(() => {
+    if (props.initialProjectId) return props.initialProjectId
+    return typeof route.query.project_id === 'string' ? route.query.project_id : ''
   })
 
   const resolving = ref(false)
@@ -128,16 +141,48 @@
     options: modelOptions,
     selectedSlug,
     loading: modelLoading,
-    load: loadModels,
+    load: loadModels
   } = useModelOptions('molecule_generation', { defaultSlug: MOLECULE_GENERATION_TOOL_SLUG })
 
   const form = reactive({
-    numMolecules: 100,
-    mwMin: 200,
-    mwMax: 600,
-    logpMin: -1,
-    logpMax: 5,
-    seed: 42,
+    numSamples: 100,
+    pocketRadius: 10,
+    device: 'auto' as 'auto' | 'cpu' | 'gpu'
+  })
+
+  const deviceOptions = computed(() => [
+    { value: 'auto', label: t('design.molecule.deviceAuto') },
+    { value: 'cpu', label: 'CPU' },
+    { value: 'gpu', label: 'GPU' }
+  ])
+
+  const hasCenter = computed(() => {
+    const center = pocketSelection.value?.center
+    return Boolean(
+      center &&
+        center.x !== null &&
+        center.y !== null &&
+        center.z !== null &&
+        Number.isFinite(center.x) &&
+        Number.isFinite(center.y) &&
+        Number.isFinite(center.z)
+    )
+  })
+
+  const canSubmit = computed(
+    () => Boolean(resolvedTool.value && pocketSelection.value?.structureFileId && hasCenter.value)
+  )
+
+  const centerText = computed(() => {
+    const center = pocketSelection.value?.center
+    if (!center || center.x === null || center.y === null || center.z === null) return '-'
+    return `${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)} Å`
+  })
+
+  const boxText = computed(() => {
+    const box = pocketSelection.value?.boxSize
+    if (!box || box.x === null || box.y === null || box.z === null) return '-'
+    return `${box.x.toFixed(1)} × ${box.y.toFixed(1)} × ${box.z.toFixed(1)} Å`
   })
 
   function toNumber(value: unknown, fallback: number): number {
@@ -146,24 +191,19 @@
   }
 
   function validate(): string | null {
-    const numMolecules = toNumber(form.numMolecules, 100)
-    const mwMin = toNumber(form.mwMin, 200)
-    const mwMax = toNumber(form.mwMax, 600)
-    const logpMin = toNumber(form.logpMin, -1)
-    const logpMax = toNumber(form.logpMax, 5)
-    const seed = toNumber(form.seed, 42)
-
-    if (numMolecules < 1 || numMolecules > 1000) {
+    const numSamples = toNumber(form.numSamples, 100)
+    const pocketRadius = toNumber(form.pocketRadius, 10)
+    if (numSamples < 1 || numSamples > 1000) {
       return t('design.molecule.invalidNum')
     }
-    if (mwMin <= 0 || mwMax <= mwMin) {
-      return t('design.molecule.invalidMw')
+    if (pocketRadius <= 0 || pocketRadius > 100) {
+      return t('design.molecule.invalidRadius')
     }
-    if (logpMax <= logpMin) {
-      return t('design.molecule.invalidLogp')
+    if (!pocketSelection.value?.structureFileId) {
+      return t('design.molecule.pocketMissingFile')
     }
-    if (seed < 0) {
-      return t('design.molecule.invalidSeed')
+    if (!hasCenter.value) {
+      return t('design.molecule.pocketMissingCenter')
     }
     return null
   }
@@ -194,28 +234,26 @@
       return
     }
 
+    const selection = pocketSelection.value
+    const center = selection.center
     const params = {
-      num_molecules: toNumber(form.numMolecules, 100),
-      mw_min: toNumber(form.mwMin, 200),
-      mw_max: toNumber(form.mwMax, 600),
-      logp_min: toNumber(form.logpMin, -1),
-      logp_max: toNumber(form.logpMax, 5),
-      seed: toNumber(form.seed, 42),
+      device: form.device,
+      num_samples: toNumber(form.numSamples, 100),
+      center_x: toNumber(center?.x, 0),
+      center_y: toNumber(center?.y, 0),
+      center_z: toNumber(center?.z, 0),
+      pocket_radius: toNumber(form.pocketRadius, 10)
     }
 
     submitting.value = true
     try {
-      const inputBindings = await resolvePocketInputBinding(
-        pocketSelection.value.projectId,
-        pocketSelection.value.pocketId
-      )
       const response = await submitDesignTask({
         name: t('design.molecule.taskName'),
-        projectId: pocketSelection.value.projectId,
+        projectId: selection.projectId,
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
         params,
-        inputBindings,
+        standardInputUploads: { protein_pdb: selection.structureFileId as string }
       })
       message.success(t('design.molecule.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
@@ -225,6 +263,21 @@
       submitting.value = false
     }
   }
+
+  watch(
+    pocketSelection,
+    selection => {
+      const box = selection?.boxSize
+      if (!box) return
+      const dims = [box.x, box.y, box.z].filter(
+        (value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
+      )
+      if (dims.length > 0) {
+        form.pocketRadius = Number((Math.max(...dims) / 2).toFixed(1))
+      }
+    },
+    { deep: true }
+  )
 
   onMounted(() => {
     void loadModels().then(() => loadTool())
@@ -258,8 +311,18 @@
     font-weight: 600;
   }
 
+  .pocket-alert {
+    margin-bottom: 24px;
+  }
+
   .number-input {
     width: 100%;
+  }
+
+  .param-hint {
+    margin: 0;
+    color: @text-tertiary;
+    font-size: @font-size-sm;
   }
 
   .design-actions {

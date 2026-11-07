@@ -7,25 +7,43 @@
             <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
           </a-form-item>
         </a-col>
-        <a-col :xs="24" :sm="8">
-          <a-form-item :label="t('targets.predict.numRecycles')">
+        <a-col :xs="12" :sm="4">
+          <a-form-item :label="t('targets.predict.samplingSteps')">
             <a-input-number
-              v-model:value="form.numRecycles"
+              v-model:value="form.samplingSteps"
               class="number-input"
-              :min="1"
-              :max="20"
+              :min="10"
+              :max="1000"
+              :step="10"
               :precision="0"
             />
           </a-form-item>
         </a-col>
-        <a-col :xs="24" :sm="8">
-          <a-form-item :label="t('targets.predict.seed')">
-            <a-input-number v-model:value="form.seed" class="number-input" :min="0" :precision="0" />
+        <a-col :xs="12" :sm="4">
+          <a-form-item :label="t('targets.predict.recyclingSteps')">
+            <a-input-number
+              v-model:value="form.recyclingSteps"
+              class="number-input"
+              :min="1"
+              :max="10"
+              :precision="0"
+            />
           </a-form-item>
         </a-col>
-        <a-col :xs="24" :sm="8">
-          <a-form-item :label="t('targets.predict.useMsa')" :extra="t('targets.predict.useMsaHint')">
-            <a-switch v-model:checked="form.useMsa" />
+        <a-col :xs="12" :sm="4">
+          <a-form-item :label="t('targets.predict.diffusionSamples')">
+            <a-input-number
+              v-model:value="form.diffusionSamples"
+              class="number-input"
+              :min="1"
+              :max="10"
+              :precision="0"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :xs="12" :sm="4">
+          <a-form-item :label="t('targets.predict.seed')">
+            <a-input-number v-model:value="form.seed" class="number-input" :min="0" :precision="0" />
           </a-form-item>
         </a-col>
       </a-row>
@@ -78,7 +96,7 @@ const {
 watch(
   selectedSlug,
   slug => {
-    form.modelName = slug
+    form.modelSlug = slug
   },
   { immediate: true }
 )
@@ -89,7 +107,7 @@ onMounted(() => {
 
 const errorText = computed(() => {
   if (!error.value) return ''
-  if (error.value === 'invalid-num-recycles' || error.value === 'invalid-seed') {
+  if (error.value.startsWith('invalid-')) {
     return t('targets.predict.invalidNumber')
   }
   return t('targets.predict.failed')

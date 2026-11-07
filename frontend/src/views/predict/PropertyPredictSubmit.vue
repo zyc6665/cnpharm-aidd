@@ -40,6 +40,7 @@ const smilesFile = ref<File | null>(null)
 const smilesFileName = ref('')
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
+const admetDevice = ref<'auto' | 'cpu' | 'gpu'>('auto')
 
 // 同类 ADMET/性质预测模型可自由选择；默认 molp-pc。
 const {
@@ -65,18 +66,23 @@ const ligandSdfFile = ref<File | null>(null)
 const ligandSdfName = ref('')
 const ligandSmilesFile = ref<File | null>(null)
 const ligandSmilesName = ref('')
+const affinitySequence = ref('')
 
 const affinityInputFields = computed(() => affinitySelected.value?.inputFields ?? [])
+const affinityNeedsSequence = computed(() => affinitySlug.value === 'boltz2-affinity-prediction')
 const affinityCanSubmit = computed(() => {
   if (submitting.value) return false
   const fields = affinityInputFields.value
   if (fields.includes('protein_pdb') && !proteinPdbFile.value) return false
   const needsLigand = fields.includes('ligand_sdf') || fields.includes('ligand_smiles')
-  if (!needsLigand) return true
-  return (
-    (fields.includes('ligand_sdf') && Boolean(ligandSdfFile.value)) ||
-    (fields.includes('ligand_smiles') && Boolean(ligandSmilesFile.value))
-  )
+  if (needsLigand) {
+    const hasLigand =
+      (fields.includes('ligand_sdf') && Boolean(ligandSdfFile.value)) ||
+      (fields.includes('ligand_smiles') && Boolean(ligandSmilesFile.value))
+    if (!hasLigand) return false
+  }
+  if (affinityNeedsSequence.value && affinitySequence.value.trim().length < 4) return false
+  return true
 })
 const selectedGroups = ref<PredictTaskGroup[]>(
   props.initialGroups?.length ? [...props.initialGroups] : [...PREDICT_DEFAULT_TASK_GROUPS]
@@ -94,6 +100,12 @@ const groupOptions = computed(() =>
 const candidateSetOptions = computed(() =>
   candidateSets.value.map(item => ({ label: item.name, value: item.id }))
 )
+
+const admetDeviceOptions = computed(() => [
+  { value: 'auto', label: t('predict.submit.deviceAuto') },
+  { value: 'cpu', label: 'CPU' },
+  { value: 'gpu', label: 'GPU' }
+])
 
 const canSubmit = computed(() => {
   if (predictType.value === 'affinity') {
@@ -151,7 +163,7 @@ async function handleAffinitySubmit(): Promise<void> {
       toolSlug: affinitySlug.value,
       projectId: projectId.value || undefined,
       name: `亲和力预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: {},
+      params: affinityNeedsSequence.value ? { sequence: affinitySequence.value.trim() } : {},
       standardInputUploads
     })
     message.success(t('predict.submit.success'))
@@ -220,7 +232,7 @@ async function handleSubmit(): Promise<void> {
       toolSlug: selectedSlug.value,
       projectId: projectId.value || undefined,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: { device: 'cpu' },
+      params: { device: admetDevice.value },
       standardInputUploads: { smiles_csv: fileId }
     })
     message.success(t('predict.submit.success'))
@@ -256,6 +268,10 @@ onMounted(() => {
 
     <a-card v-if="predictType === 'admet'" class="predict-submit__card" :title="t('design.modelSelect.label')">
       <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      <div class="predict-submit__block">
+        <p class="predict-submit__hint">{{ t('predict.submit.device') }}</p>
+        <a-select v-model:value="admetDevice" :options="admetDeviceOptions" style="width: 180px" />
+      </div>
     </a-card>
     <a-card v-else class="predict-submit__card" :title="t('design.modelSelect.label')">
       <ModelSelect v-model="affinitySlug" :options="affinityOptions" :loading="affinityLoading" />
@@ -308,6 +324,16 @@ onMounted(() => {
     </a-card>
 
     <a-card v-if="predictType === 'affinity'" class="predict-submit__card" :title="t('predict.submit.affinityInputs')">
+      <div v-if="affinityNeedsSequence" class="predict-submit__block">
+        <p class="predict-submit__hint">{{ t('predict.submit.affinitySequence') }}</p>
+        <a-textarea
+          v-model:value="affinitySequence"
+          :rows="4"
+          :maxlength="2000"
+          show-count
+          :placeholder="t('predict.submit.affinitySequenceHint')"
+        />
+      </div>
       <div v-if="affinityInputFields.includes('protein_pdb')" class="predict-submit__block">
         <p class="predict-submit__hint">{{ t('predict.submit.proteinPdb') }}</p>
         <a-upload :before-upload="handleProteinUpload" :max-count="1" accept=".pdb,.cif,.ent" :file-list="[]">

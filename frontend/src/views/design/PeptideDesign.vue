@@ -17,60 +17,61 @@
       </section>
 
       <section class="design-section">
+        <h3 class="design-section__title">{{ t('design.peptide.project') }}</h3>
+        <a-select
+          v-model:value="projectId"
+          :options="projectOptions"
+          :placeholder="t('design.peptide.projectPlaceholder')"
+          show-search
+          option-filter-prop="label"
+          data-testid="peptide-project"
+        />
+      </section>
+
+      <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <PocketPicker v-model="pocketSelection" :default-project-id="initialProjectId" />
+        <a-form layout="vertical" data-testid="peptide-form">
+          <a-form-item :label="t('design.peptide.sequence')" :extra="t('design.peptide.sequenceHint')">
+            <a-textarea
+              v-model:value="form.sequence"
+              :rows="7"
+              :maxlength="20000"
+              show-count
+              :placeholder="t('design.peptide.sequencePlaceholder')"
+              data-testid="peptide-sequence"
+            />
+          </a-form-item>
+        </a-form>
       </section>
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
-        <a-form layout="vertical" data-testid="peptide-form">
+        <a-form layout="vertical" data-testid="peptide-params">
           <a-row :gutter="16">
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.numPeptides')">
-                <a-input-number
-                  v-model:value="form.numPeptides"
-                  class="number-input"
-                  :min="1"
-                  :max="500"
-                  :precision="0"
-                  data-testid="peptide-num"
+              <a-form-item :label="t('design.peptide.predictionMode')">
+                <a-select
+                  v-model:value="form.predictionMode"
+                  :options="predictionModeOptions"
+                  data-testid="peptide-mode"
                 />
               </a-form-item>
             </a-col>
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.seed')">
+              <a-form-item :label="t('design.peptide.batchSize')">
                 <a-input-number
-                  v-model:value="form.seed"
-                  class="number-input"
-                  :min="0"
-                  :precision="0"
-                  data-testid="peptide-seed"
-                />
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-row :gutter="16">
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.lengthMin')">
-                <a-input-number
-                  v-model:value="form.lengthMin"
+                  v-model:value="form.batchSize"
                   class="number-input"
                   :min="1"
+                  :max="256"
                   :precision="0"
-                  data-testid="peptide-length-min"
+                  data-testid="peptide-batch-size"
                 />
               </a-form-item>
             </a-col>
             <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.lengthMax')">
-                <a-input-number
-                  v-model:value="form.lengthMax"
-                  class="number-input"
-                  :min="1"
-                  :precision="0"
-                  data-testid="peptide-length-max"
-                />
+              <a-form-item :label="t('design.peptide.deduplicate')">
+                <a-switch v-model:checked="form.deduplicate" data-testid="peptide-deduplicate" />
               </a-form-item>
             </a-col>
           </a-row>
@@ -81,7 +82,7 @@
         <a-button
           type="primary"
           :loading="submitting"
-          :disabled="!pocketSelection || !resolvedTool"
+          :disabled="!canSubmit"
           data-testid="peptide-submit"
           @click="handleSubmit"
         >
@@ -93,23 +94,20 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, reactive, ref, watch } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { computed, onMounted, reactive, ref, watch } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import PocketPicker from './components/PocketPicker.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
-  import {
-    resolvePocketInputBinding,
-    resolveToolBySlug,
-    submitDesignTask,
-  } from '@/api/design'
-  import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
+  import { listDesignProjects, resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import type { ResearchProject } from '@/types/projects'
+  import type { ResolvedDesignTool } from '@/types/design'
   import { PEPTIDE_DESIGN_TOOL_SLUG } from '@/types/design'
 
   const router = useRouter()
+  const route = useRoute()
   const { t } = useI18n()
 
   const props = withDefaults(defineProps<{ initialProjectId?: string }>(), {
@@ -118,46 +116,55 @@
 
   const resolving = ref(false)
   const submitting = ref(false)
-  const resolvedTool = ref<ResolvedDesignTool | null>(null)
   const toolError = ref(false)
-  const pocketSelection = ref<DesignPocketSelection | null>(null)
+  const resolvedTool = ref<ResolvedDesignTool | null>(null)
+  const projects = ref<ResearchProject[]>([])
+  const projectId = ref(
+    props.initialProjectId ||
+      (typeof route.query.project_id === 'string' ? route.query.project_id : '')
+  )
 
-  // 同类多肽设计模型可自由选择；默认 therapainter。
   const {
     options: modelOptions,
     selectedSlug,
     loading: modelLoading,
-    load: loadModels,
+    load: loadModels
   } = useModelOptions('peptide_design', { defaultSlug: PEPTIDE_DESIGN_TOOL_SLUG })
 
   const form = reactive({
-    numPeptides: 50,
-    lengthMin: 8,
-    lengthMax: 15,
-    seed: 42,
+    sequence: '',
+    predictionMode: 'joint' as 'joint' | 'activity' | 'toxicity',
+    deduplicate: true,
+    batchSize: 16
   })
 
-  function toNumber(value: unknown, fallback: number): number {
-    const parsed = typeof value === 'number' ? value : Number(value)
-    return Number.isFinite(parsed) ? parsed : fallback
-  }
+  const projectOptions = computed(() =>
+    projects.value.map(project => ({ value: project.id, label: project.name }))
+  )
 
-  function validate(): string | null {
-    const numPeptides = toNumber(form.numPeptides, 50)
-    const lengthMin = toNumber(form.lengthMin, 8)
-    const lengthMax = toNumber(form.lengthMax, 15)
-    const seed = toNumber(form.seed, 42)
+  const predictionModeOptions = computed(() => [
+    { value: 'joint', label: t('design.peptide.modeJoint') },
+    { value: 'activity', label: t('design.peptide.modeActivity') },
+    { value: 'toxicity', label: t('design.peptide.modeToxicity') }
+  ])
 
-    if (numPeptides < 1 || numPeptides > 500) {
-      return t('design.peptide.invalidNum')
+  const sequenceLength = computed(() => form.sequence.replace(/\s/g, '').length)
+  const canSubmit = computed(
+    () =>
+      Boolean(resolvedTool.value && projectId.value) &&
+      sequenceLength.value >= 4 &&
+      sequenceLength.value <= 20000
+  )
+
+  async function loadProjects(): Promise<void> {
+    try {
+      projects.value = await listDesignProjects()
+      if (!projectId.value && projects.value.length > 0) {
+        projectId.value = projects.value[0]?.id ?? ''
+      }
+    } catch {
+      projects.value = []
     }
-    if (lengthMin < 1 || lengthMax <= lengthMin) {
-      return t('design.peptide.invalidLength')
-    }
-    if (seed < 0) {
-      return t('design.peptide.invalidSeed')
-    }
-    return null
   }
 
   async function loadTool(): Promise<void> {
@@ -165,9 +172,7 @@
     toolError.value = false
     try {
       resolvedTool.value = await resolveToolBySlug(selectedSlug.value)
-      if (!resolvedTool.value) {
-        toolError.value = true
-      }
+      toolError.value = !resolvedTool.value
     } catch {
       toolError.value = true
     } finally {
@@ -175,9 +180,20 @@
     }
   }
 
+  function validate(): string | null {
+    if (!projectId.value) return t('design.peptide.projectRequired')
+    if (sequenceLength.value < 4) return t('design.peptide.sequenceTooShort')
+    if (sequenceLength.value > 20000) return t('design.peptide.sequenceTooLong')
+    const batchSize = Number(form.batchSize)
+    if (!Number.isFinite(batchSize) || batchSize < 1 || batchSize > 256) {
+      return t('design.peptide.invalidBatchSize')
+    }
+    return null
+  }
+
   async function handleSubmit(): Promise<void> {
-    if (!resolvedTool.value || !pocketSelection.value) {
-      message.warning(t('design.peptide.selectPocketFirst'))
+    if (!resolvedTool.value) {
+      message.warning(t('design.peptide.toolMissing'))
       return
     }
     const invalid = validate()
@@ -185,27 +201,19 @@
       message.warning(invalid)
       return
     }
-
-    const params = {
-      num_peptides: toNumber(form.numPeptides, 50),
-      length_min: toNumber(form.lengthMin, 8),
-      length_max: toNumber(form.lengthMax, 15),
-      seed: toNumber(form.seed, 42),
-    }
-
     submitting.value = true
     try {
-      const inputBindings = await resolvePocketInputBinding(
-        pocketSelection.value.projectId,
-        pocketSelection.value.pocketId
-      )
       const response = await submitDesignTask({
         name: t('design.peptide.taskName'),
-        projectId: pocketSelection.value.projectId,
+        projectId: projectId.value,
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
-        params,
-        inputBindings,
+        params: {
+          sequence: form.sequence.trim(),
+          prediction_mode: form.predictionMode,
+          deduplicate: form.deduplicate,
+          batch_size: Number(form.batchSize)
+        }
       })
       message.success(t('design.peptide.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
@@ -217,6 +225,7 @@
   }
 
   onMounted(() => {
+    void loadProjects()
     void loadModels().then(() => loadTool())
   })
 

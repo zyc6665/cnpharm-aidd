@@ -70,7 +70,7 @@ test('api/md.ts 的 tool slug 与冻结契约一致', () => {
 
 test('MdSubmit 只提交契约参数并使用 gromacs-md slug', () => {
   const source = readSource('src/views/md/MdSubmit.vue')
-  for (const key of ['force_field', 'duration_ns', 'temperature_k', 'pressure_bar', 'seed']) {
+  for (const key of ['nsteps', 'dt', 'temperature', 'box_distance', 'water_model', 'device']) {
     assert.ok(source.includes(key), `MdSubmit 缺少参数 ${key}`)
   }
   assert.ok(source.includes('MD_TOOL_SLUG'), 'MdSubmit 未引用 MD_TOOL_SLUG')

@@ -1,27 +1,31 @@
 import { reactive, ref, type Ref } from 'vue'
 import { predictStructure } from '@/api/targets'
+import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
 import type { StructurePredictInput } from '@/types/targets'
 
 export interface StructurePredictValues {
-  modelName: string
-  numRecycles: number
+  modelSlug: string
+  samplingSteps: number
+  recyclingSteps: number
+  diffusionSamples: number
   seed: number
-  useMsa: boolean
 }
 
 const DEFAULT_VALUES: StructurePredictValues = {
-  modelName: 'boltz-2',
-  numRecycles: 3,
-  seed: 42,
-  useMsa: false,
+  modelSlug: STRUCTURE_PREDICT_TOOL_SLUG,
+  samplingSteps: 200,
+  recyclingSteps: 3,
+  diffusionSamples: 1,
+  seed: 0,
 }
 
 export function buildStructurePredictPayload(values: StructurePredictValues): StructurePredictInput {
   return {
-    model_ref: { name: values.modelName.trim() || DEFAULT_VALUES.modelName },
+    model_ref: { name: values.modelSlug.trim() || DEFAULT_VALUES.modelSlug },
     params: {
-      useMsa: values.useMsa,
-      numRecycles: values.numRecycles,
+      sampling_steps: values.samplingSteps,
+      recycling_steps: values.recyclingSteps,
+      diffusion_samples: values.diffusionSamples,
       seed: values.seed,
     },
   }
@@ -38,17 +42,29 @@ export function useStructurePrediction(options: { defaults?: Partial<StructurePr
 
   async function submit(proteinId: string): Promise<string | null> {
     error.value = ''
-    const numRecycles = Number(form.numRecycles)
+    const samplingSteps = Number(form.samplingSteps)
+    const recyclingSteps = Number(form.recyclingSteps)
+    const diffusionSamples = Number(form.diffusionSamples)
     const seed = Number(form.seed)
-    if (!Number.isFinite(numRecycles) || numRecycles < 1) {
-      error.value = 'invalid-num-recycles'
+    if (!Number.isFinite(samplingSteps) || samplingSteps < 10 || samplingSteps > 1000) {
+      error.value = 'invalid-sampling-steps'
+      return null
+    }
+    if (!Number.isFinite(recyclingSteps) || recyclingSteps < 1 || recyclingSteps > 10) {
+      error.value = 'invalid-recycling-steps'
+      return null
+    }
+    if (!Number.isFinite(diffusionSamples) || diffusionSamples < 1 || diffusionSamples > 10) {
+      error.value = 'invalid-diffusion-samples'
       return null
     }
     if (!Number.isFinite(seed) || seed < 0) {
       error.value = 'invalid-seed'
       return null
     }
-    form.numRecycles = numRecycles
+    form.samplingSteps = samplingSteps
+    form.recyclingSteps = recyclingSteps
+    form.diffusionSamples = diffusionSamples
     form.seed = seed
     submitting.value = true
     try {

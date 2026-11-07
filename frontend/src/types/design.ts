@@ -9,6 +9,7 @@
  */
 import type { ProjectResultDetail } from '@/types/compounds'
 import type { Tool, ToolVersion } from '@/types/models'
+import type { AxisVector } from '@/types/targets'
 
 /** P-15 分子生成工具 slug（契约冻结，不可改）。 */
 export const MOLECULE_GENERATION_TOOL_SLUG = 'pocket2mol-pocket-ligand-generation'
@@ -29,22 +30,22 @@ export interface ResolvedDesignTool {
   version: ToolVersion
 }
 
-/** P-15 参数（与 mock 包 `tool.yaml` 的 input schema 对齐）。 */
+/** P-15 参数（Pocket2Mol 真实工具契约）。 */
 export interface MoleculeGenerationParams {
-  num_molecules: number
-  mw_min: number
-  mw_max: number
-  logp_min: number
-  logp_max: number
-  seed: number
+  device: 'auto' | 'cpu' | 'gpu'
+  num_samples: number
+  center_x: number
+  center_y: number
+  center_z: number
+  pocket_radius: number
 }
 
-/** P-16 参数（与 mock 包 `tool.yaml` 的 input schema 对齐）。 */
+/** P-16 参数（TheraPainter 真实工具契约：多肽活性/毒性预测）。 */
 export interface PeptideDesignParams {
-  num_peptides: number
-  length_min: number
-  length_max: number
-  seed: number
+  sequence: string
+  prediction_mode: 'joint' | 'activity' | 'toxicity'
+  deduplicate: boolean
+  batch_size: number
 }
 
 /** 提交任务的载荷（页面构造，`api/design.ts` 转成 `TaskCreateParams`）。 */
@@ -53,7 +54,7 @@ export interface DesignTaskSubmission {
   projectId: string
   toolId: string
   toolVersionId?: string
-  params: Record<string, number>
+  params: Record<string, string | number | boolean>
   inputBindings?: Record<string, string>
   standardInputUploads?: Record<string, string>
 }
@@ -67,6 +68,12 @@ export interface DesignPocketSelection {
   pocketId: string
   pocketLabel: string
   score: number | null
+  /** 结构主文件；分子生成以此作为 `protein_pdb` 输入。 */
+  structureFileId: string | null
+  /** 口袋中心（Å），来自口袋预测结果的 center。 */
+  center: AxisVector | null
+  /** 口袋包围盒（Å），用于推导默认对接盒半径。 */
+  boxSize: AxisVector | null
 }
 
 /** 结果详情 + 契约里的 `mock` 标记。 */

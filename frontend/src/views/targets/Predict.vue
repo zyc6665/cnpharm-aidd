@@ -45,16 +45,37 @@
 
       <a-form class="predict-form" layout="vertical" data-testid="predict-form">
         <a-form-item :label="t('targets.predict.model')">
-          <a-input v-model:value="form.modelName" data-testid="predict-model-input" />
+          <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
         </a-form-item>
-        <a-form-item :label="t('targets.predict.numRecycles')">
+        <a-form-item :label="t('targets.predict.samplingSteps')">
           <a-input-number
-            v-model:value="form.numRecycles"
+            v-model:value="form.samplingSteps"
+            class="number-input"
+            :min="10"
+            :max="1000"
+            :step="10"
+            :precision="0"
+            data-testid="predict-sampling-steps"
+          />
+        </a-form-item>
+        <a-form-item :label="t('targets.predict.recyclingSteps')">
+          <a-input-number
+            v-model:value="form.recyclingSteps"
             class="number-input"
             :min="1"
-            :max="20"
+            :max="10"
             :precision="0"
-            data-testid="predict-num-recycles"
+            data-testid="predict-recycling-steps"
+          />
+        </a-form-item>
+        <a-form-item :label="t('targets.predict.diffusionSamples')">
+          <a-input-number
+            v-model:value="form.diffusionSamples"
+            class="number-input"
+            :min="1"
+            :max="10"
+            :precision="0"
+            data-testid="predict-diffusion-samples"
           />
         </a-form-item>
         <a-form-item :label="t('targets.predict.seed')">
@@ -65,9 +86,6 @@
             :precision="0"
             data-testid="predict-seed"
           />
-        </a-form-item>
-        <a-form-item :label="t('targets.predict.useMsa')" :extra="t('targets.predict.useMsaHint')">
-          <a-switch v-model:checked="form.useMsa" data-testid="predict-use-msa" />
         </a-form-item>
 
         <p class="resource-note" data-testid="predict-resource-note">
@@ -93,15 +111,18 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onMounted, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import ModelSelect from '@/components/design/ModelSelect.vue'
   import { getProtein } from '@/api/targets'
   import { useStructurePrediction } from '@/composables/useStructurePrediction'
+  import { useModelOptions } from '@/composables/useModelOptions'
+  import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
   import type { ProteinDetail } from '@/types/targets'
 
   const route = useRoute()
@@ -115,6 +136,20 @@
 
   // 与「上游接力条」共用同一套结构预测表单/提交逻辑，避免两份实现漂移。
   const { form, submitting, error, submit } = useStructurePrediction()
+  const {
+    options: modelOptions,
+    selectedSlug,
+    loading: modelLoading,
+    load: loadModels
+  } = useModelOptions('structure_prediction', { defaultSlug: STRUCTURE_PREDICT_TOOL_SLUG })
+
+  watch(
+    selectedSlug,
+    slug => {
+      form.modelSlug = slug
+    },
+    { immediate: true }
+  )
 
   const sequenceMissing = computed(() => {
     if (!protein.value) {
@@ -161,6 +196,7 @@
 
   onMounted(() => {
     void load()
+    void loadModels()
   })
 </script>
 

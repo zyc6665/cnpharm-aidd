@@ -231,6 +231,7 @@ function emitPocketSelection(pocket: PocketSummary): void {
     emit('update:modelValue', null)
     return
   }
+  const structure = structures.value.find(item => item.id === selectedStructure.value)
   emit('update:modelValue', {
     projectId: selectedProject.value,
     targetId: selectedTarget.value,
@@ -239,6 +240,9 @@ function emitPocketSelection(pocket: PocketSummary): void {
     pocketId: pocket.id,
     pocketLabel: pocketLabel(pocket),
     score: pocket.score,
+    structureFileId: structure?.prepared_file_id ?? structure?.structure_file_id ?? null,
+    center: pocket.center ?? null,
+    boxSize: pocket.box_size ?? null,
   })
 }
 

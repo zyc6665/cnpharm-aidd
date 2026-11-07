@@ -16,6 +16,15 @@
       <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
     </div>
 
+    <div class="panel-config">
+      <a-form-item :label="t('targets.pockets.modelChoice')" class="panel-config-item">
+        <a-select v-model:value="modelChoice" :options="modelChoiceOptions" size="small" />
+      </a-form-item>
+      <a-form-item :label="t('targets.pockets.device')" class="panel-config-item">
+        <a-select v-model:value="device" :options="deviceOptions" size="small" />
+      </a-form-item>
+    </div>
+
     <a-spin :spinning="loading">
       <p v-if="!sorted.length && !loading" class="panel-empty">{{ t('targets.pockets.emptyHint') }}</p>
       <a-table
@@ -73,6 +82,21 @@ const { sorted, loading, error, selectingId, selected, load, select } = useStruc
 const { predicting, error: predictError, predict } = usePocketPrediction()
 const waiting = ref(false)
 const runError = ref('')
+const modelChoice = ref('auto')
+const device = ref('auto')
+const modelChoiceOptions = computed(() => [
+  { value: 'auto', label: t('targets.pockets.modelChoiceAuto') },
+  { value: 'all_scpdb', label: t('targets.pockets.modelChoiceAllScpdb') },
+  { value: 'alpha', label: 'alpha' },
+  { value: 'beta', label: 'beta' },
+  { value: 'alpha_beta', label: 'alpha + beta' },
+  { value: 'alpha_and_beta', label: 'alpha and beta' }
+])
+const deviceOptions = computed(() => [
+  { value: 'auto', label: t('targets.pockets.deviceAuto') },
+  { value: 'cpu', label: 'CPU' },
+  { value: 'gpu', label: 'GPU' }
+])
 
 // 口袋预测模型：同类可自由选择，默认 lvpocket。
 const {
@@ -107,7 +131,10 @@ watch(structureIdRef, () => void load(), { immediate: true })
 async function handlePredict(): Promise<void> {
   if (!props.structureId) return
   runError.value = ''
-  const taskId = await predict(props.structureId, selectedSlug.value)
+  const taskId = await predict(props.structureId, selectedSlug.value, {
+    model_choice: modelChoice.value,
+    device: device.value
+  })
   if (!taskId) return
   emit('predicted', taskId)
   waiting.value = true
@@ -151,6 +178,17 @@ async function handleSelect(pocket: PocketSummary): Promise<void> {
     margin: @spacing-sm 0;
     color: @text-tertiary;
     font-size: @font-size-sm;
+  }
+
+  .panel-config {
+    display: flex;
+    gap: @spacing-md;
+    margin: @spacing-sm 0;
+  }
+
+  .panel-config-item {
+    flex: 1;
+    margin-bottom: 0;
   }
 
   .panel-error {

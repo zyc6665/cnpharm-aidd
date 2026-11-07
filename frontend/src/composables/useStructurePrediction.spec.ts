@@ -8,7 +8,7 @@ describe('useStructurePrediction', () => {
 
   it('rejects invalid numbers', async () => {
     const p = useStructurePrediction()
-    p.form.numRecycles = 0
+    p.form.samplingSteps = 0
     expect(await p.submit('protein-1')).toBeNull()
     expect(predictStructure).not.toHaveBeenCalled()
   })
@@ -18,8 +18,8 @@ describe('useStructurePrediction', () => {
     const p = useStructurePrediction()
     expect(await p.submit('protein-1')).toBe('task-1')
     expect(predictStructure).toHaveBeenCalledWith('protein-1', {
-      model_ref: { name: 'boltz-2' },
-      params: { useMsa: false, numRecycles: 3, seed: 42 },
+      model_ref: { name: 'boltz2-structure-prediction' },
+      params: { sampling_steps: 200, recycling_steps: 3, diffusion_samples: 1, seed: 0 },
     })
   })
 })
