@@ -442,7 +442,10 @@ class Settings(BaseSettings):
     # ==================== 缓存配置 ====================
     # 缓存后端: memory | redis
     CACHE_BACKEND: Literal["memory", "redis"] = "memory"
-    REQUEST_RATE_LIMIT_PER_MINUTE: int = 60
+    # 单页应用一次页面加载会并发多个列表/统计/详情请求，60 次/分钟会让正常
+    # 浏览和连续操作频繁触发 429。登录暴力破解由 login_throttle 单独约束，
+    # 因此这里使用更宽松的全局 IP 上限。
+    REQUEST_RATE_LIMIT_PER_MINUTE: int = 600
     RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
     # 限流计数后端：auto 表示预发布/生产用 Redis、开发用进程内缓存；
     # redis/memory 可显式覆盖。多 worker 部署必须使用 redis，否则各进程计数

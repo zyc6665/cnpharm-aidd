@@ -67,20 +67,24 @@ def test_admin_tool_form_is_k8s_only_and_links_to_package_registration():
     create_source = read_source("frontend/src/views/tools/Create.vue")
 
     assert "模型接入教程" in create_source
-    assert "showGuide" in create_source
+    assert "goGuide" in create_source
+    assert "/admin/model-guide" in create_source
     assert "k8s_job" in create_source
     assert "k8s_image" in create_source
     assert "k8s_resource_profile" in create_source
     assert "Agent 编排能力" not in create_source
-    assert "agent_capability_enabled" not in create_source
+    # 旧版 Agent 能力不再由管理员编辑；加载旧工具时仅静默关闭兼容字段。
+    assert "agent_capability_enabled = false" in create_source
 
 
-def test_tool_form_uses_structured_executor_config_editors():
-    """执行器常用映射和列表不应要求管理员手写 JSON。"""
+def test_tool_form_uses_structured_k8s_runtime_editors():
+    """工具编辑页只维护 k8s 镜像与资源画像，不再暴露执行器 JSON。"""
     create_source = read_source("frontend/src/views/tools/Create.vue")
 
-    assert "StructuredKeyValueEditor" in create_source
-    assert "StructuredStringListEditor" in create_source
+    assert "镜像 digest" in create_source
+    assert "资源画像" in create_source
+    assert "k8s_image" in create_source
+    assert "k8s_resource_profile" in create_source
     assert "apiHeadersText" not in create_source
     assert "dockerEnvText" not in create_source
     assert "sshEnvText" not in create_source
