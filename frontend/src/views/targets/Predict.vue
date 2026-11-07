@@ -47,46 +47,13 @@
         <a-form-item :label="t('targets.predict.model')">
           <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
         </a-form-item>
-        <a-form-item :label="t('targets.predict.samplingSteps')">
-          <a-input-number
-            v-model:value="form.samplingSteps"
-            class="number-input"
-            :min="10"
-            :max="1000"
-            :step="10"
-            :precision="0"
-            data-testid="predict-sampling-steps"
-          />
-        </a-form-item>
-        <a-form-item :label="t('targets.predict.recyclingSteps')">
-          <a-input-number
-            v-model:value="form.recyclingSteps"
-            class="number-input"
-            :min="1"
-            :max="10"
-            :precision="0"
-            data-testid="predict-recycling-steps"
-          />
-        </a-form-item>
-        <a-form-item :label="t('targets.predict.diffusionSamples')">
-          <a-input-number
-            v-model:value="form.diffusionSamples"
-            class="number-input"
-            :min="1"
-            :max="10"
-            :precision="0"
-            data-testid="predict-diffusion-samples"
-          />
-        </a-form-item>
-        <a-form-item :label="t('targets.predict.seed')">
-          <a-input-number
-            v-model:value="form.seed"
-            class="number-input"
-            :min="0"
-            :precision="0"
-            data-testid="predict-seed"
-          />
-        </a-form-item>
+        <ModelParameterForm
+          v-if="selectedOption?.parameterSchema"
+          v-model="form.params"
+          :schema="selectedOption.parameterSchema"
+          :overrides="hiddenParams"
+          :disabled="submitting"
+        />
 
         <p class="resource-note" data-testid="predict-resource-note">
           <a-typography-text type="secondary">
@@ -119,10 +86,12 @@
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
+  import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { getProtein } from '@/api/targets'
   import { useStructurePrediction } from '@/composables/useStructurePrediction'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
+  import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
   import type { ProteinDetail } from '@/types/targets'
 
   const route = useRoute()
@@ -134,19 +103,26 @@
   const loading = ref(false)
   const loadError = ref(false)
 
+  const hiddenParams: Record<string, ParameterFieldOverride> = {
+    sequence: { hidden: true },
+    seq_length: { hidden: true }
+  }
+
   // 与「上游接力条」共用同一套结构预测表单/提交逻辑，避免两份实现漂移。
-  const { form, submitting, error, submit } = useStructurePrediction()
+  const { form, submitting, error, setSchema, submit } = useStructurePrediction()
   const {
     options: modelOptions,
     selectedSlug,
+    selectedOption,
     loading: modelLoading,
     load: loadModels
   } = useModelOptions('structure_prediction', { defaultSlug: STRUCTURE_PREDICT_TOOL_SLUG })
 
   watch(
-    selectedSlug,
-    slug => {
-      form.modelSlug = slug
+    selectedOption,
+    option => {
+      form.modelSlug = option?.slug ?? selectedSlug.value
+      setSchema(option?.parameterSchema ?? null)
     },
     { immediate: true }
   )
@@ -181,7 +157,7 @@
   }
 
   async function handleSubmit() {
-    const taskId = await submit(proteinId.value)
+    const taskId = await submit(proteinId.value, selectedOption.value?.parameterSchema ?? null)
     if (!taskId) {
       message.warning(
         error.value === 'submit-failed'

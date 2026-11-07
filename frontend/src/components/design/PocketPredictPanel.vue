@@ -16,14 +16,12 @@
       <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
     </div>
 
-    <div class="panel-config">
-      <a-form-item :label="t('targets.pockets.modelChoice')" class="panel-config-item">
-        <a-select v-model:value="modelChoice" :options="modelChoiceOptions" size="small" />
-      </a-form-item>
-      <a-form-item :label="t('targets.pockets.device')" class="panel-config-item">
-        <a-select v-model:value="device" :options="deviceOptions" size="small" />
-      </a-form-item>
-    </div>
+    <ModelParameterForm
+      v-if="selectedOption?.parameterSchema"
+      v-model="pocketParams"
+      :schema="selectedOption.parameterSchema"
+      :disabled="predicting || waiting"
+    />
 
     <a-spin :spinning="loading">
       <p v-if="!sorted.length && !loading" class="panel-empty">{{ t('targets.pockets.emptyHint') }}</p>
@@ -67,6 +65,8 @@ import { useStructurePockets } from '@/composables/useStructurePockets'
 import { waitForTaskCompletion } from '@/composables/useTaskCompletion'
 import { useModelOptions } from '@/composables/useModelOptions'
 import ModelSelect from '@/components/design/ModelSelect.vue'
+import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
+import { buildDefaultValues, normalizeParameters, validateParameters, type ParameterValues } from '@/domain/tools/parameterSchema'
 import { POCKET_PREDICT_TOOL_SLUG } from '@/types/design'
 import type { PocketSummary } from '@/types/targets'
 
@@ -82,29 +82,24 @@ const { sorted, loading, error, selectingId, selected, load, select } = useStruc
 const { predicting, error: predictError, predict } = usePocketPrediction()
 const waiting = ref(false)
 const runError = ref('')
-const modelChoice = ref('auto')
-const device = ref('auto')
-const modelChoiceOptions = computed(() => [
-  { value: 'auto', label: t('targets.pockets.modelChoiceAuto') },
-  { value: 'all_scpdb', label: t('targets.pockets.modelChoiceAllScpdb') },
-  { value: 'alpha', label: 'alpha' },
-  { value: 'beta', label: 'beta' },
-  { value: 'alpha_beta', label: 'alpha + beta' },
-  { value: 'alpha_and_beta', label: 'alpha and beta' }
-])
-const deviceOptions = computed(() => [
-  { value: 'auto', label: t('targets.pockets.deviceAuto') },
-  { value: 'cpu', label: 'CPU' },
-  { value: 'gpu', label: 'GPU' }
-])
+const pocketParams = ref<ParameterValues>({})
 
-// 口袋预测模型：同类可自由选择，默认 lvpocket。
+// 口袋预测模型：同类可自由选择，默认 lvpocket；参数 schema 随模型切换。
 const {
   options: modelOptions,
   selectedSlug,
+  selectedOption,
   loading: modelLoading,
   load: loadModels
 } = useModelOptions('pocket_prediction', { defaultSlug: POCKET_PREDICT_TOOL_SLUG })
+
+watch(
+  selectedOption,
+  option => {
+    pocketParams.value = buildDefaultValues(option?.parameterSchema ?? null)
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   void loadModels()
@@ -131,10 +126,16 @@ watch(structureIdRef, () => void load(), { immediate: true })
 async function handlePredict(): Promise<void> {
   if (!props.structureId) return
   runError.value = ''
-  const taskId = await predict(props.structureId, selectedSlug.value, {
-    model_choice: modelChoice.value,
-    device: device.value
-  })
+  const schema = selectedOption.value?.parameterSchema ?? null
+  if (validateParameters(schema, pocketParams.value).length > 0) {
+    runError.value = 'predict-failed'
+    return
+  }
+  const taskId = await predict(
+    props.structureId,
+    selectedSlug.value,
+    normalizeParameters(schema, pocketParams.value)
+  )
   if (!taskId) return
   emit('predicted', taskId)
   waiting.value = true

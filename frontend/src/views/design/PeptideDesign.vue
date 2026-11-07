@@ -29,53 +29,13 @@
       </section>
 
       <section class="design-section">
-        <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <a-form layout="vertical" data-testid="peptide-form">
-          <a-form-item :label="t('design.peptide.sequence')" :extra="t('design.peptide.sequenceHint')">
-            <a-textarea
-              v-model:value="form.sequence"
-              :rows="7"
-              :maxlength="20000"
-              show-count
-              :placeholder="t('design.peptide.sequencePlaceholder')"
-              data-testid="peptide-sequence"
-            />
-          </a-form-item>
-        </a-form>
-      </section>
-
-      <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
-        <a-form layout="vertical" data-testid="peptide-params">
-          <a-row :gutter="16">
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.predictionMode')">
-                <a-select
-                  v-model:value="form.predictionMode"
-                  :options="predictionModeOptions"
-                  data-testid="peptide-mode"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.batchSize')">
-                <a-input-number
-                  v-model:value="form.batchSize"
-                  class="number-input"
-                  :min="1"
-                  :max="256"
-                  :precision="0"
-                  data-testid="peptide-batch-size"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.peptide.deduplicate')">
-                <a-switch v-model:checked="form.deduplicate" data-testid="peptide-deduplicate" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-        </a-form>
+        <ModelParameterForm
+          v-if="selectedOption?.parameterSchema"
+          v-model="form.params"
+          :schema="selectedOption.parameterSchema"
+          :disabled="submitting"
+        />
       </section>
 
       <div class="design-actions">
@@ -100,8 +60,15 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
+  import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { listDesignProjects, resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import {
+    buildDefaultValues,
+    normalizeParameters,
+    validateParameters,
+    type ParameterValues
+  } from '@/domain/tools/parameterSchema'
   import type { ResearchProject } from '@/types/projects'
   import type { ResolvedDesignTool } from '@/types/design'
   import { PEPTIDE_DESIGN_TOOL_SLUG } from '@/types/design'
@@ -127,33 +94,24 @@
   const {
     options: modelOptions,
     selectedSlug,
+    selectedOption,
     loading: modelLoading,
     load: loadModels
   } = useModelOptions('peptide_design', { defaultSlug: PEPTIDE_DESIGN_TOOL_SLUG })
 
-  const form = reactive({
-    sequence: '',
-    predictionMode: 'joint' as 'joint' | 'activity' | 'toxicity',
-    deduplicate: true,
-    batchSize: 16
-  })
+  const form = reactive<{ params: ParameterValues }>({ params: {} })
 
   const projectOptions = computed(() =>
     projects.value.map(project => ({ value: project.id, label: project.name }))
   )
 
-  const predictionModeOptions = computed(() => [
-    { value: 'joint', label: t('design.peptide.modeJoint') },
-    { value: 'activity', label: t('design.peptide.modeActivity') },
-    { value: 'toxicity', label: t('design.peptide.modeToxicity') }
-  ])
-
-  const sequenceLength = computed(() => form.sequence.replace(/\s/g, '').length)
+  const sequenceLength = computed(() => String(form.params.sequence ?? '').replace(/\s/g, '').length)
   const canSubmit = computed(
     () =>
       Boolean(resolvedTool.value && projectId.value) &&
       sequenceLength.value >= 4 &&
-      sequenceLength.value <= 20000
+      sequenceLength.value <= 20000 &&
+      validateParameters(selectedOption.value?.parameterSchema ?? null, form.params).length === 0
   )
 
   async function loadProjects(): Promise<void> {
@@ -184,10 +142,8 @@
     if (!projectId.value) return t('design.peptide.projectRequired')
     if (sequenceLength.value < 4) return t('design.peptide.sequenceTooShort')
     if (sequenceLength.value > 20000) return t('design.peptide.sequenceTooLong')
-    const batchSize = Number(form.batchSize)
-    if (!Number.isFinite(batchSize) || batchSize < 1 || batchSize > 256) {
-      return t('design.peptide.invalidBatchSize')
-    }
+    const errors = validateParameters(selectedOption.value?.parameterSchema ?? null, form.params)
+    if (errors.length > 0) return t('design.peptide.invalidBatchSize')
     return null
   }
 
@@ -208,12 +164,7 @@
         projectId: projectId.value,
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
-        params: {
-          sequence: form.sequence.trim(),
-          prediction_mode: form.predictionMode,
-          deduplicate: form.deduplicate,
-          batch_size: Number(form.batchSize)
-        }
+        params: normalizeParameters(selectedOption.value?.parameterSchema ?? null, form.params)
       })
       message.success(t('design.peptide.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
@@ -223,6 +174,14 @@
       submitting.value = false
     }
   }
+
+  watch(
+    selectedOption,
+    option => {
+      form.params = buildDefaultValues(option?.parameterSchema ?? null)
+    },
+    { immediate: true }
+  )
 
   onMounted(() => {
     void loadProjects()

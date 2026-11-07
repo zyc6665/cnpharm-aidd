@@ -68,11 +68,10 @@ test('api/md.ts 的 tool slug 与冻结契约一致', () => {
   assert.ok(apiSource.includes("MOLECULE_TABLE_STANDARD_TYPE = 'molecule_table@1'"), 'molecule_table 标准类型不符')
 })
 
-test('MdSubmit 只提交契约参数并使用 gromacs-md slug', () => {
+test('MdSubmit 参数由 gromacs-md 模型 schema 动态渲染', () => {
   const source = readSource('src/views/md/MdSubmit.vue')
-  for (const key of ['nsteps', 'dt', 'temperature', 'box_distance', 'water_model', 'device']) {
-    assert.ok(source.includes(key), `MdSubmit 缺少参数 ${key}`)
-  }
+  assert.ok(source.includes('ModelParameterForm'), 'MdSubmit 未使用模型参数表单')
+  assert.ok(source.includes('selectedOption?.parameterSchema'), 'MdSubmit 未读取模型参数 schema')
   assert.ok(source.includes('MD_TOOL_SLUG'), 'MdSubmit 未引用 MD_TOOL_SLUG')
   assert.ok(source.includes('estimateMdRuntimeHours'), 'MdSubmit 未使用耗时估算')
 })

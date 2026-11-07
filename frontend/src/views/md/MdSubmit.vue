@@ -81,70 +81,12 @@
 
           <a-divider orientation="left">{{ t('md.submit.paramsTitle') }}</a-divider>
 
-          <a-row :gutter="16">
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.nsteps')" required>
-                <a-input-number
-                  v-model:value="form.nsteps"
-                  :min="0"
-                  :max="500000"
-                  :step="100"
-                  :precision="0"
-                  class="md-submit__number"
-                  data-testid="md-nsteps-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.dt')" required>
-                <a-input-number
-                  v-model:value="form.dt"
-                  :min="0.001"
-                  :max="0.004"
-                  :step="0.001"
-                  :precision="3"
-                  class="md-submit__number"
-                  data-testid="md-dt-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.temperature')" required>
-                <a-input-number
-                  v-model:value="form.temperature"
-                  :min="250"
-                  :max="400"
-                  :step="5"
-                  :precision="0"
-                  class="md-submit__number"
-                  data-testid="md-temperature-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.boxDistance')" required>
-                <a-input-number
-                  v-model:value="form.box_distance"
-                  :min="0.8"
-                  :max="2.5"
-                  :step="0.1"
-                  :precision="2"
-                  class="md-submit__number"
-                  data-testid="md-box-distance-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.waterModel')">
-                <a-select v-model:value="form.water_model" :options="waterModelOptions" data-testid="md-water-model-select" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.device')">
-                <a-select v-model:value="form.device" :options="deviceOptions" data-testid="md-device-select" />
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <ModelParameterForm
+            v-if="selectedOption?.parameterSchema"
+            v-model="params"
+            :schema="selectedOption.parameterSchema"
+            :disabled="submitting"
+          />
 
           <a-alert
             type="info"
@@ -182,7 +124,14 @@
   import { getTarget, listStructures, listTargets } from '@/api/targets'
   import { findToolBySlug, MD_TOOL_SLUG, resolveToolVersionId, submitMdTask } from '@/api/md'
   import ModelSelect from '@/components/design/ModelSelect.vue'
+  import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
+  import {
+    buildDefaultValues,
+    normalizeParameters,
+    validateParameters,
+    type ParameterValues
+  } from '@/domain/tools/parameterSchema'
   import { estimateMdRuntimeHours } from './analysis'
   import type { ResearchProject } from '@/types/projects'
   import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
@@ -202,10 +151,11 @@
   const loadingStructures = ref(false)
   const submitting = ref(false)
 
-  // 同类 MD 模型可自由选择；默认 gromacs。
+  // 同类 MD 模型可自由选择；默认 gromacs；参数 schema 随模型切换。
   const {
     options: modelOptions,
     selectedSlug,
+    selectedOption,
     loading: modelLoading,
     load: loadModels
   } = useModelOptions('molecular_dynamics', { defaultSlug: MD_TOOL_SLUG })
@@ -215,24 +165,13 @@
     targetId: string | undefined
     proteinId: string | undefined
     structureId: string | undefined
-    nsteps: number
-    dt: number
-    temperature: number
-    box_distance: number
-    water_model: string
-    device: 'auto' | 'cpu' | 'gpu'
   }>({
     projectId: undefined,
     targetId: undefined,
     proteinId: undefined,
-    structureId: undefined,
-    nsteps: 2500,
-    dt: 0.002,
-    temperature: 300,
-    box_distance: 1.0,
-    water_model: 'tip3p',
-    device: 'auto'
+    structureId: undefined
   })
+  const params = ref<ParameterValues>({})
 
   const projectOptions = computed(() => projects.value.map((project) => ({ value: project.id, label: project.name })))
   const targetOptions = computed(() => targets.value.map((target) => ({ value: target.id, label: target.name })))
@@ -243,17 +182,6 @@
       label: `#${index + 1}${structure.prepared_file_id ? ` ${t('md.submit.prepared')}` : ''}`
     }))
   )
-  const waterModelOptions = computed(() => [
-    { value: 'tip3p', label: 'TIP3P' },
-    { value: 'spc', label: 'SPC' },
-    { value: 'tip4p', label: 'TIP4P' }
-  ])
-  const deviceOptions = computed(() => [
-    { value: 'auto', label: t('md.submit.deviceAuto') },
-    { value: 'cpu', label: 'CPU' },
-    { value: 'gpu', label: 'GPU' }
-  ])
-
   const selectedStructure = computed(
     () => structures.value.find((structure) => structure.id === form.structureId) ?? null
   )
@@ -264,14 +192,14 @@
     return structure.prepared_file_id ?? structure.structure_file_id ?? null
   })
 
-  const durationNs = computed(() => (Number(form.nsteps) * Number(form.dt)) / 1000)
+  const durationNs = computed(
+    () => (Number(params.value.nsteps ?? 0) * Number(params.value.dt ?? 0)) / 1000
+  )
 
   const canSubmit = computed(
     () =>
       Boolean(form.projectId && complexFileId.value) &&
-      Number(form.nsteps) > 0 &&
-      Number(form.dt) >= 0.001 &&
-      Number(form.dt) <= 0.004
+      validateParameters(selectedOption.value?.parameterSchema ?? null, params.value).length === 0
   )
 
   const estimateHours = computed(() =>
@@ -371,12 +299,7 @@
     form.targetId = undefined
     form.proteinId = undefined
     form.structureId = undefined
-    form.nsteps = 2500
-    form.dt = 0.002
-    form.temperature = 300
-    form.box_distance = 1.0
-    form.water_model = 'tip3p'
-    form.device = 'auto'
+    params.value = buildDefaultValues(selectedOption.value?.parameterSchema ?? null)
     targets.value = []
     proteins.value = []
     structures.value = []
@@ -399,19 +322,15 @@
         return
       }
       const toolVersionId = await resolveToolVersionId(tool)
-      const params: MdSubmitParams = {
-        nsteps: Number(form.nsteps),
-        dt: Number(form.dt),
-        temperature: Number(form.temperature),
-        box_distance: Number(form.box_distance),
-        water_model: form.water_model,
-        device: form.device
-      }
+      const params2 = normalizeParameters(
+        selectedOption.value?.parameterSchema ?? null,
+        params.value
+      ) as unknown as MdSubmitParams
       const taskId = await submitMdTask({
         projectId: form.projectId,
         toolId: tool.id,
         toolVersionId,
-        params,
+        params: params2,
         complexFileId: complexFileId.value,
         name: `MD ${durationNs.value.toFixed(2)}ns`
       })
@@ -423,6 +342,14 @@
       submitting.value = false
     }
   }
+
+  watch(
+    selectedOption,
+    option => {
+      params.value = buildDefaultValues(option?.parameterSchema ?? null)
+    },
+    { immediate: true }
+  )
 
   onMounted(() => {
     void loadModels()

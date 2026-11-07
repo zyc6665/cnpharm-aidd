@@ -53,40 +53,14 @@
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
-        <a-form layout="vertical" data-testid="molecule-form">
-          <a-row :gutter="16">
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.numSamples')">
-                <a-input-number
-                  v-model:value="form.numSamples"
-                  class="number-input"
-                  :min="1"
-                  :max="1000"
-                  :precision="0"
-                  data-testid="molecule-num"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.pocketRadius')">
-                <a-input-number
-                  v-model:value="form.pocketRadius"
-                  class="number-input"
-                  :min="1"
-                  :max="100"
-                  :step="0.5"
-                  data-testid="molecule-pocket-radius"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12" :lg="8">
-              <a-form-item :label="t('design.molecule.device')">
-                <a-select v-model:value="form.device" :options="deviceOptions" data-testid="molecule-device" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-          <p class="param-hint">{{ t('design.molecule.paramHint') }}</p>
-        </a-form>
+        <ModelParameterForm
+          v-if="selectedOption?.parameterSchema"
+          v-model="form.params"
+          :schema="selectedOption.parameterSchema"
+          :overrides="hiddenParams"
+          :disabled="submitting"
+        />
+        <p class="param-hint">{{ t('design.molecule.paramHint') }}</p>
       </section>
 
       <div class="design-actions">
@@ -112,9 +86,17 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import PocketPicker from './components/PocketPicker.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
+  import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import {
+    buildDefaultValues,
+    normalizeParameters,
+    validateParameters,
+    type ParameterValues
+  } from '@/domain/tools/parameterSchema'
   import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
+  import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
   import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
   const router = useRouter()
@@ -136,25 +118,23 @@
   const toolError = ref(false)
   const pocketSelection = ref<DesignPocketSelection | null>(null)
 
-  // 同类分子生成模型可自由选择；默认 pocket2mol。
+  // 同类分子生成模型可自由选择；默认 pocket2mol；参数 schema 随模型切换。
   const {
     options: modelOptions,
     selectedSlug,
+    selectedOption,
     loading: modelLoading,
     load: loadModels
   } = useModelOptions('molecule_generation', { defaultSlug: MOLECULE_GENERATION_TOOL_SLUG })
 
-  const form = reactive({
-    numSamples: 100,
-    pocketRadius: 10,
-    device: 'auto' as 'auto' | 'cpu' | 'gpu'
-  })
+  const form = reactive<{ params: ParameterValues }>({ params: {} })
 
-  const deviceOptions = computed(() => [
-    { value: 'auto', label: t('design.molecule.deviceAuto') },
-    { value: 'cpu', label: 'CPU' },
-    { value: 'gpu', label: 'GPU' }
-  ])
+  const hiddenParams: Record<string, ParameterFieldOverride> = {
+    center_x: { hidden: true },
+    center_y: { hidden: true },
+    center_z: { hidden: true },
+    pocket_radius: { hidden: false }
+  }
 
   const hasCenter = computed(() => {
     const center = pocketSelection.value?.center
@@ -170,7 +150,13 @@
   })
 
   const canSubmit = computed(
-    () => Boolean(resolvedTool.value && pocketSelection.value?.structureFileId && hasCenter.value)
+    () =>
+      Boolean(
+        resolvedTool.value &&
+          pocketSelection.value?.structureFileId &&
+          hasCenter.value &&
+          validateParameters(selectedOption.value?.parameterSchema ?? null, form.params).length === 0
+      )
   )
 
   const centerText = computed(() => {
@@ -191,20 +177,14 @@
   }
 
   function validate(): string | null {
-    const numSamples = toNumber(form.numSamples, 100)
-    const pocketRadius = toNumber(form.pocketRadius, 10)
-    if (numSamples < 1 || numSamples > 1000) {
-      return t('design.molecule.invalidNum')
-    }
-    if (pocketRadius <= 0 || pocketRadius > 100) {
-      return t('design.molecule.invalidRadius')
-    }
     if (!pocketSelection.value?.structureFileId) {
       return t('design.molecule.pocketMissingFile')
     }
     if (!hasCenter.value) {
       return t('design.molecule.pocketMissingCenter')
     }
+    const errors = validateParameters(selectedOption.value?.parameterSchema ?? null, form.params)
+    if (errors.length > 0) return t('design.molecule.invalidNum')
     return null
   }
 
@@ -236,13 +216,12 @@
 
     const selection = pocketSelection.value
     const center = selection.center
+    const schema = selectedOption.value?.parameterSchema ?? null
     const params = {
-      device: form.device,
-      num_samples: toNumber(form.numSamples, 100),
+      ...normalizeParameters(schema, form.params),
       center_x: toNumber(center?.x, 0),
       center_y: toNumber(center?.y, 0),
-      center_z: toNumber(center?.z, 0),
-      pocket_radius: toNumber(form.pocketRadius, 10)
+      center_z: toNumber(center?.z, 0)
     }
 
     submitting.value = true
@@ -265,6 +244,14 @@
   }
 
   watch(
+    selectedOption,
+    option => {
+      form.params = buildDefaultValues(option?.parameterSchema ?? null)
+    },
+    { immediate: true }
+  )
+
+  watch(
     pocketSelection,
     selection => {
       const box = selection?.boxSize
@@ -273,7 +260,10 @@
         (value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
       )
       if (dims.length > 0) {
-        form.pocketRadius = Number((Math.max(...dims) / 2).toFixed(1))
+        form.params = {
+          ...form.params,
+          pocket_radius: Number((Math.max(...dims) / 2).toFixed(1))
+        }
       }
     },
     { deep: true }

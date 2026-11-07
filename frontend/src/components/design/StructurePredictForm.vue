@@ -1,52 +1,16 @@
 <template>
   <div class="structure-predict-form" data-testid="structure-predict-form">
     <a-form layout="vertical">
-      <a-row :gutter="12">
-        <a-col :xs="24" :sm="8">
-          <a-form-item :label="t('targets.predict.model')">
-            <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
-          </a-form-item>
-        </a-col>
-        <a-col :xs="12" :sm="4">
-          <a-form-item :label="t('targets.predict.samplingSteps')">
-            <a-input-number
-              v-model:value="form.samplingSteps"
-              class="number-input"
-              :min="10"
-              :max="1000"
-              :step="10"
-              :precision="0"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :xs="12" :sm="4">
-          <a-form-item :label="t('targets.predict.recyclingSteps')">
-            <a-input-number
-              v-model:value="form.recyclingSteps"
-              class="number-input"
-              :min="1"
-              :max="10"
-              :precision="0"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :xs="12" :sm="4">
-          <a-form-item :label="t('targets.predict.diffusionSamples')">
-            <a-input-number
-              v-model:value="form.diffusionSamples"
-              class="number-input"
-              :min="1"
-              :max="10"
-              :precision="0"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :xs="12" :sm="4">
-          <a-form-item :label="t('targets.predict.seed')">
-            <a-input-number v-model:value="form.seed" class="number-input" :min="0" :precision="0" />
-          </a-form-item>
-        </a-col>
-      </a-row>
+      <a-form-item :label="t('targets.predict.model')">
+        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      </a-form-item>
+      <ModelParameterForm
+        v-if="selectedOption?.parameterSchema"
+        v-model="form.params"
+        :schema="selectedOption.parameterSchema"
+        :overrides="hiddenParams"
+        :disabled="submitting || waiting"
+      />
 
       <a-alert v-if="errorText" type="error" show-icon :message="errorText" class="form-error" />
 
@@ -72,7 +36,9 @@ import { useStructurePrediction } from '@/composables/useStructurePrediction'
 import { waitForTaskCompletion } from '@/composables/useTaskCompletion'
 import { useModelOptions } from '@/composables/useModelOptions'
 import ModelSelect from '@/components/design/ModelSelect.vue'
+import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
 import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
+import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
 
 const props = defineProps<{ proteinId: string }>()
 const emit = defineEmits<{
@@ -82,21 +48,28 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { form, submitting, error, submit } = useStructurePrediction()
+const { form, submitting, error, setSchema, submit } = useStructurePrediction()
 const waiting = ref(false)
 
-// 结构预测模型：同类可自由选择，默认 boltz2；把所选写成 model_ref.name(slug)。
+const hiddenParams: Record<string, ParameterFieldOverride> = {
+  sequence: { hidden: true },
+  seq_length: { hidden: true }
+}
+
+// 结构预测模型：同类可自由选择，默认 boltz2；参数 schema 随模型切换。
 const {
   options: modelOptions,
   selectedSlug,
+  selectedOption,
   loading: modelLoading,
   load: loadModels
 } = useModelOptions('structure_prediction', { defaultSlug: STRUCTURE_PREDICT_TOOL_SLUG })
 
 watch(
-  selectedSlug,
-  slug => {
-    form.modelSlug = slug
+  selectedOption,
+  option => {
+    form.modelSlug = option?.slug ?? selectedSlug.value
+    setSchema(option?.parameterSchema ?? null)
   },
   { immediate: true }
 )
@@ -115,7 +88,7 @@ const errorText = computed(() => {
 
 async function handleSubmit(): Promise<void> {
   if (!props.proteinId) return
-  const taskId = await submit(props.proteinId)
+  const taskId = await submit(props.proteinId, selectedOption.value?.parameterSchema ?? null)
   if (!taskId) {
     emit('error', error.value || 'submit-failed')
     return
