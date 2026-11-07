@@ -4,9 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
-import FunnelChart from './FunnelChart.vue'
-import { estimateFunnel } from './funnel'
-import type { FunnelStageKey } from './funnel'
 import { uploadFile } from '@/api/files'
 import { submitToolTask } from '@/api/screening'
 import ModelSelect from '@/components/design/ModelSelect.vue'
@@ -26,7 +23,6 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
-// 同类对接/筛选模型可自由选择；默认 autodock-vina。
 const {
   options: modelOptions,
   selectedSlug,
@@ -45,71 +41,33 @@ const projectId = computed(() => {
 
 const receptorFile = ref<File | null>(null)
 const receptorName = ref('')
-const ligandsFile = ref<File | null>(null)
-const ligandsName = ref('')
+const ligandFiles = ref<File[]>([])
+const ligandFormat = ref<'' | 'sdf' | 'csv'>('')
+const ligandCount = ref(0)
+const ligandError = ref('')
 const pocketFile = ref<File | null>(null)
 const pocketName = ref('')
 
-const ligandCount = ref(1000)
 const params = reactive<ScreeningParams>({ ...SCREENING_PARAM_DEFAULTS })
 const submitting = ref(false)
 const formError = ref('')
-
-const stageLabels = computed<Record<FunnelStageKey, string>>(() => ({
-  input: t('screening.config.stageInput'),
-  pharmacophore: t('screening.config.stagePharmacophore'),
-  docking: t('screening.config.stageDocking'),
-  rescore: t('screening.config.stageRescore')
-}))
-
-const funnelStages = computed(() =>
-  estimateFunnel({
-    ligandCount: ligandCount.value,
-    pharmacophoreMinFeatures: params.pharmacophore_min_features,
-    dockingScoreCutoff: params.docking_score_cutoff,
-    exhaustiveness: params.exhaustiveness,
-    topN: params.top_n
-  })
-)
-
-const stageRows = computed(() =>
-  funnelStages.value.map((stage, index) => {
-    const previous =
-      index === 0 ? stage.remaining : (funnelStages.value[index - 1]?.remaining ?? stage.remaining)
-    return {
-      key: stage.key,
-      label: stageLabels.value[stage.key],
-      remaining: stage.remaining,
-      eliminated: index === 0 ? 0 : previous - stage.remaining
-    }
-  })
-)
 
 const canSubmit = computed(
   () =>
     !submitting.value &&
     Boolean(receptorFile.value) &&
-    Boolean(ligandsFile.value) &&
-    Number.isFinite(ligandCount.value) &&
+    ligandFiles.value.length > 0 &&
+    !ligandError.value &&
     ligandCount.value > 0
 )
+
+function fileStem(name: string): string {
+  return name.replace(/\.[^.]+$/, '')
+}
 
 function handleReceptorUpload(file: File): boolean {
   receptorFile.value = file
   receptorName.value = file.name
-  return false
-}
-
-async function handleLigandsUpload(file: File): Promise<boolean> {
-  ligandsFile.value = file
-  ligandsName.value = file.name
-  try {
-    const text = await file.text()
-    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0)
-    ligandCount.value = Math.max(0, lines.length - 1)
-  } catch {
-    // 读取失败时保留当前输入，允许用户手动填写。
-  }
   return false
 }
 
@@ -119,32 +77,180 @@ function handlePocketUpload(file: File): boolean {
   return false
 }
 
+function detectFormat(name: string): 'sdf' | 'csv' | '' {
+  const lower = name.toLowerCase()
+  if (lower.endsWith('.csv')) return 'csv'
+  if (lower.endsWith('.sdf') || lower.endsWith('.mol')) return 'sdf'
+  return ''
+}
+
+let ligandCountSeq = 0
+
+async function handleLigandUpload(file: File): Promise<boolean> {
+  const format = detectFormat(file.name)
+  if (!format) {
+    ligandError.value = t('screening.config.onlySdfOrCsv')
+    return false
+  }
+  if (ligandFormat.value && ligandFormat.value !== format) {
+    ligandError.value = t('screening.config.mixedLigandFormats')
+    return false
+  }
+  ligandFormat.value = format
+  ligandFiles.value = [...ligandFiles.value, file]
+  ligandError.value = ''
+  const seq = ++ligandCountSeq
+  try {
+    const count = await countLigands([...ligandFiles.value], format)
+    if (seq === ligandCountSeq) ligandCount.value = count
+  } catch {
+    if (seq === ligandCountSeq) {
+      ligandCount.value = 0
+      ligandError.value = t('screening.config.ligandsUnreadable')
+    }
+  }
+  return false
+}
+
+function clearLigands(): void {
+  ligandCountSeq += 1
+  ligandFiles.value = []
+  ligandFormat.value = ''
+  ligandCount.value = 0
+  ligandError.value = ''
+}
+
+async function countLigands(files: File[], format: 'sdf' | 'csv'): Promise<number> {
+  if (format === 'csv') {
+    let total = 0
+    for (const file of files) {
+      total += parseCsv(await file.text()).rows.length
+    }
+    return total
+  }
+  let total = 0
+  for (const file of files) {
+    total += splitSdfRecords(await file.text()).length
+  }
+  return total
+}
+
+function splitSdfRecords(text: string): string[] {
+  return text
+    .split(/\$\$\$\$\s*/)
+    .map(record => record.trim())
+    .filter(Boolean)
+}
+
+async function buildSdfPayload(): Promise<File> {
+  const blocks: string[] = []
+  for (const file of ligandFiles.value) {
+    const stem = fileStem(file.name)
+    const records = splitSdfRecords(await file.text())
+    records.forEach((record, index) => {
+      const lines = record.split(/\r?\n/)
+      lines[0] = records.length === 1 ? stem : `${stem}_${index + 1}`
+      blocks.push(`${lines.join('\n')}\n$$$$`)
+    })
+  }
+  return new File([blocks.join('\n')], 'ligands.sdf', { type: 'chemical/x-mdl-sdfile' })
+}
+
+function parseCsv(text: string): { headers: string[]; rows: string[][] } {
+  const source = text.replace(/^\uFEFF/, '')
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i]
+    if (inQuotes) {
+      if (char === '"' && source[i + 1] === '"') {
+        field += '"'
+        i += 1
+      } else if (char === '"') {
+        inQuotes = false
+      } else {
+        field += char
+      }
+      continue
+    }
+    if (char === '"') {
+      inQuotes = true
+    } else if (char === ',') {
+      row.push(field)
+      field = ''
+    } else if (char === '\n') {
+      row.push(field)
+      if (row.some(cell => cell.trim())) rows.push(row)
+      row = []
+      field = ''
+    } else if (char !== '\r') {
+      field += char
+    }
+  }
+  row.push(field)
+  if (row.some(cell => cell.trim())) rows.push(row)
+  const headers = (rows.shift() ?? []).map(header => header.trim())
+  return { headers, rows }
+}
+
+async function buildCsvPayload(): Promise<File> {
+  const output = ['molecule_id,SMILES']
+  for (const file of ligandFiles.value) {
+    const { headers, rows } = parseCsv(await file.text())
+    const smilesIndex = headers.findIndex(header => header.toLowerCase().includes('smiles'))
+    if (smilesIndex < 0) {
+      throw new Error(t('screening.config.csvMissingSmiles'))
+    }
+    const idIndex = headers.findIndex(header =>
+      ['molecule_id', 'ligand_id', 'name', 'id'].includes(header.toLowerCase())
+    )
+    const stem = fileStem(file.name)
+    rows.forEach((cells, index) => {
+      const smiles = (cells[smilesIndex] ?? '').trim()
+      if (!smiles) return
+      const rawId = idIndex >= 0 ? (cells[idIndex] ?? '').trim() : ''
+      const moleculeId = rawId || (rows.length === 1 ? stem : `${stem}_${index + 1}`)
+      output.push(`${moleculeId},${smiles}`)
+    })
+  }
+  return new File([output.join('\n')], 'ligands.csv', { type: 'text/csv' })
+}
+
 async function handleSubmit(): Promise<void> {
   formError.value = ''
   if (!receptorFile.value) {
     formError.value = t('screening.config.needReceptor')
     return
   }
-  if (!ligandsFile.value) {
+  if (!ligandFiles.value.length) {
     formError.value = t('screening.config.needLigands')
     return
   }
-  if (!Number.isFinite(ligandCount.value) || ligandCount.value <= 0) {
-    formError.value = t('screening.config.ligandCountInvalid')
+  if (ligandError.value || ligandCount.value <= 0) {
+    formError.value = ligandError.value || t('screening.config.needLigands')
     return
   }
 
   submitting.value = true
   try {
     const receptor = await uploadFile(receptorFile.value)
-    const ligands = await uploadFile(ligandsFile.value)
     const standardInputUploads: Record<string, string> = {
-      receptor: receptor.data.id,
-      ligands: ligands.data.id
+      protein_pdb: receptor.data.id
+    }
+    if (ligandFormat.value === 'csv') {
+      const payload = await buildCsvPayload()
+      const uploaded = await uploadFile(payload)
+      standardInputUploads.ligand_smiles = uploaded.data.id
+    } else {
+      const payload = await buildSdfPayload()
+      const uploaded = await uploadFile(payload)
+      standardInputUploads.ligand_sdf = uploaded.data.id
     }
     if (pocketFile.value) {
       const pocket = await uploadFile(pocketFile.value)
-      standardInputUploads.pocket = pocket.data.id
+      standardInputUploads.binding_pocket = pocket.data.id
     }
     const task = await submitToolTask({
       toolSlug: selectedSlug.value,
@@ -161,6 +267,24 @@ async function handleSubmit(): Promise<void> {
     submitting.value = false
   }
 }
+
+const paramFields = computed(() => [
+  {
+    key: 'pharmacophore_min_features' as const,
+    label: t('screening.config.pharmacophoreMinFeatures'),
+    step: 1
+  },
+  {
+    key: 'docking_score_cutoff' as const,
+    label: t('screening.config.dockingScoreCutoff'),
+    step: 0.5
+  },
+  { key: 'top_n' as const, label: t('screening.config.topN'), step: 1 },
+  { key: 'exhaustiveness' as const, label: t('screening.config.exhaustiveness'), step: 1 },
+  { key: 'n_poses' as const, label: t('screening.config.nPoses'), step: 1 },
+  { key: 'box_size' as const, label: t('screening.config.boxSize'), step: 1 },
+  { key: 'seed' as const, label: t('screening.config.seed'), step: 1 }
+])
 </script>
 
 <template>
@@ -174,100 +298,90 @@ async function handleSubmit(): Promise<void> {
     <a-card :title="t('screening.config.inputs')">
       <a-form layout="vertical">
         <a-form-item :label="t('screening.config.receptor')" required>
-          <a-upload :before-upload="handleReceptorUpload" :max-count="1" accept=".pdb,.ent,.cif,.pdbqt" :file-list="[]">
+          <a-upload :before-upload="handleReceptorUpload" :max-count="1" accept=".pdb,.cif,.ent" :file-list="[]">
             <a-button>{{ t('screening.config.chooseFile') }}</a-button>
           </a-upload>
           <span v-if="receptorName" class="screen-config__file">{{ receptorName }}</span>
         </a-form-item>
-        <a-form-item :label="t('screening.config.ligands')" required>
-          <a-upload :before-upload="handleLigandsUpload" :max-count="1" accept=".csv" :file-list="[]">
-            <a-button>{{ t('screening.config.chooseFile') }}</a-button>
+
+        <a-form-item :label="t('screening.config.ligandLibrary')" required>
+          <a-upload
+            :before-upload="handleLigandUpload"
+            multiple
+            accept=".sdf,.mol,.csv"
+            :file-list="[]"
+            data-testid="screen-config-ligands-upload"
+          >
+            <a-button>{{ t('screening.config.chooseFiles') }}</a-button>
           </a-upload>
-          <span v-if="ligandsName" class="screen-config__file">{{ ligandsName }}</span>
+          <a-button v-if="ligandFiles.length" type="link" size="small" @click="clearLigands">
+            {{ t('screening.config.clearLigands') }}
+          </a-button>
+          <p class="screen-config__hint">{{ t('screening.config.ligandLibraryHint') }}</p>
+          <div v-if="ligandFiles.length" class="screen-config__files" data-testid="screen-config-ligand-files">
+            <a-tag v-for="file in ligandFiles" :key="file.name">{{ file.name }}</a-tag>
+            <span class="screen-config__hint">{{ t('screening.config.ligandCountValue', { count: ligandCount }) }}</span>
+          </div>
+          <a-alert v-if="ligandError" type="warning" show-icon :message="ligandError" />
         </a-form-item>
+
         <a-form-item :label="t('screening.config.pocket')">
-          <a-upload :before-upload="handlePocketUpload" :max-count="1" accept=".pdb,.mol2,.sdf" :file-list="[]">
+          <a-upload :before-upload="handlePocketUpload" :max-count="1" accept=".pdb" :file-list="[]">
             <a-button>{{ t('screening.config.chooseFile') }}</a-button>
           </a-upload>
           <span v-if="pocketName" class="screen-config__file">{{ pocketName }}</span>
-        </a-form-item>
-        <a-form-item :label="t('screening.config.ligandCount')">
-          <a-input-number
-            v-model:value="ligandCount"
-            :min="1"
-            :step="1"
-            style="width: 200px"
-            data-testid="screen-config-ligand-count"
-          />
-          <p class="screen-config__hint">{{ t('screening.config.ligandCountHint') }}</p>
+          <p class="screen-config__hint">{{ t('screening.config.pocketHint') }}</p>
         </a-form-item>
       </a-form>
     </a-card>
 
     <a-row :gutter="16">
-      <a-col :xs="24" :lg="10">
+      <a-col :xs="24" :lg="12">
         <a-card :title="t('screening.config.params')">
           <a-form layout="vertical">
-            <a-form-item :label="t('screening.config.pharmacophoreMinFeatures')">
-              <a-input-number
-                v-model:value="params.pharmacophore_min_features"
-                :min="SCREENING_PARAM_RANGES.pharmacophore_min_features.min"
-                :max="SCREENING_PARAM_RANGES.pharmacophore_min_features.max"
-                style="width: 100%"
-              />
-            </a-form-item>
-            <a-form-item :label="t('screening.config.dockingScoreCutoff')">
-              <a-input-number
-                v-model:value="params.docking_score_cutoff"
-                :min="SCREENING_PARAM_RANGES.docking_score_cutoff.min"
-                :max="SCREENING_PARAM_RANGES.docking_score_cutoff.max"
-                :step="0.5"
-                style="width: 100%"
-              />
-            </a-form-item>
-            <a-form-item :label="t('screening.config.exhaustiveness')">
-              <a-input-number
-                v-model:value="params.exhaustiveness"
-                :min="SCREENING_PARAM_RANGES.exhaustiveness.min"
-                :max="SCREENING_PARAM_RANGES.exhaustiveness.max"
-                style="width: 100%"
-              />
-            </a-form-item>
-            <a-form-item :label="t('screening.config.topN')">
-              <a-input-number
-                v-model:value="params.top_n"
-                :min="SCREENING_PARAM_RANGES.top_n.min"
-                :max="SCREENING_PARAM_RANGES.top_n.max"
-                style="width: 100%"
-              />
-            </a-form-item>
-            <a-form-item :label="t('screening.config.seed')">
-              <a-input-number
-                v-model:value="params.seed"
-                :min="SCREENING_PARAM_RANGES.seed.min"
-                :max="SCREENING_PARAM_RANGES.seed.max"
-                style="width: 100%"
-              />
-            </a-form-item>
+            <a-row :gutter="12">
+              <a-col v-for="field in paramFields" :key="field.key" :xs="24" :sm="12">
+                <a-form-item :label="field.label">
+                  <a-input-number
+                    v-model:value="params[field.key]"
+                    :min="SCREENING_PARAM_RANGES[field.key].min"
+                    :max="SCREENING_PARAM_RANGES[field.key].max"
+                    :step="field.step"
+                    style="width: 100%"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
           </a-form>
         </a-card>
       </a-col>
 
-      <a-col :xs="24" :lg="14">
-        <a-card :title="t('screening.config.preview')" data-testid="screen-config-funnel">
-          <p class="screen-config__hint">{{ t('screening.config.previewHint') }}</p>
-          <FunnelChart :stages="funnelStages" :labels="stageLabels" />
-          <a-table
-            :columns="[
-              { title: '', dataIndex: 'label', key: 'label' },
-              { title: t('screening.config.remain'), dataIndex: 'remaining', key: 'remaining', align: 'right' },
-              { title: t('screening.config.eliminated'), dataIndex: 'eliminated', key: 'eliminated', align: 'right' }
-            ]"
-            :data-source="stageRows"
-            :pagination="false"
-            row-key="key"
-            size="small"
-          />
+      <a-col :xs="24" :lg="12">
+        <a-card :title="t('screening.config.rulesTitle')" data-testid="screen-config-rules">
+          <p class="screen-config__hint">{{ t('screening.config.rulesHint') }}</p>
+          <ol class="screen-config__rules">
+            <li>
+              <strong>{{ t('screening.config.ruleInput') }}</strong>
+              <span>{{ t('screening.config.ruleInputHint', { count: ligandCount }) }}</span>
+            </li>
+            <li>
+              <strong>{{ t('screening.config.rulePharmacophore') }}</strong>
+              <span>{{ t('screening.config.rulePharmacophoreHint', { count: params.pharmacophore_min_features }) }}</span>
+            </li>
+            <li>
+              <strong>{{ t('screening.config.ruleDocking') }}</strong>
+              <span>{{ t('screening.config.ruleDockingHint', { count: params.exhaustiveness, poses: params.n_poses }) }}</span>
+            </li>
+            <li>
+              <strong>{{ t('screening.config.ruleCutoff') }}</strong>
+              <span>{{ t('screening.config.ruleCutoffHint', { score: params.docking_score_cutoff }) }}</span>
+            </li>
+            <li>
+              <strong>{{ t('screening.config.ruleKept') }}</strong>
+              <span>{{ t('screening.config.ruleKeptHint', { count: params.top_n }) }}</span>
+            </li>
+          </ol>
+          <p class="screen-config__hint">{{ t('screening.config.resultFunnelHint') }}</p>
         </a-card>
       </a-col>
     </a-row>
@@ -296,17 +410,41 @@ async function handleSubmit(): Promise<void> {
   padding: 24px;
 }
 
-.screen-config__notice {
-  margin-bottom: 0;
-}
-
 .screen-config__file {
   margin-left: 12px;
   font-weight: 600;
 }
 
+.screen-config__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
 .screen-config__hint {
   margin: 8px 0 0;
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
+}
+
+.screen-config__rules {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.screen-config__rules li {
+  line-height: 1.6;
+}
+
+.screen-config__rules strong {
+  display: block;
+}
+
+.screen-config__rules span {
   color: var(--ant-color-text-secondary, var(--theme-text-secondary));
 }
 

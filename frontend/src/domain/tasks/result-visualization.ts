@@ -10,7 +10,7 @@ type SupportedVisualizationFormat = Extract<
 >
 
 type FileSource = 'input' | 'output'
-type VisualizationRole = 'structure' | 'receptor' | 'ligand'
+type VisualizationRole = 'structure' | 'receptor' | 'ligand' | 'pocket'
 
 export interface TaskFileReference {
   id?: string | number

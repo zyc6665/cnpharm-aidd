@@ -62,7 +62,19 @@ export const PREDICT_COLUMN_I18N: Record<string, string> = {
   admet_toxicity: 'colAdmetToxicity',
   admet_tox21: 'colAdmetTox21',
   admet_ecotoxicity: 'colAdmetEcotoxicity',
-  admet_ld50: 'colAdmetLd50'
+  admet_ld50: 'colAdmetLd50',
+  complex_id: 'colComplexId',
+  molecule_id: 'colMoleculeId',
+  duration_sec: 'colDuration',
+  'prediction.predicted_affinity': 'colPredictedAffinity',
+  'prediction.predicted_ligand_to_pocket': 'colLigandToPocket',
+  'prediction.predicted_pocket_to_ligand': 'colPocketToLigand',
+  'prediction.scale': 'colAffinityScale',
+  'preprocessing.pocket_atom_count': 'colPocketAtomCount',
+  'preprocessing.ligand_atom_count': 'colLigandAtomCount',
+  'preprocessing.pocket_bond_count': 'colPocketBondCount',
+  'preprocessing.ligand_bond_count': 'colLigandBondCount',
+  'preprocessing.generated_pocket_atom_count': 'colGeneratedPocketAtomCount'
 }
 
 /** 非数值列：不参与直方图与数值排序。 */

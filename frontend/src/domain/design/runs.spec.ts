@@ -4,8 +4,13 @@ import {
   ALL_DESIGN_TOOL_SLUGS,
   findDesignRunCategory,
   resolveDesignRunPath,
+  resolveTaskResultPath,
 } from './runs'
-import { STRUCTURE_PREDICT_TOOL_SLUG, POCKET_PREDICT_TOOL_SLUG } from '@/types/design'
+import {
+  MOLECULE_GENERATION_TOOL_SLUG,
+  STRUCTURE_PREDICT_TOOL_SLUG,
+  POCKET_PREDICT_TOOL_SLUG,
+} from '@/types/design'
 
 describe('design runs categories', () => {
   it('contains structure and pocket as first two categories', () => {
@@ -23,5 +28,15 @@ describe('design runs categories', () => {
   it('maps a structure task to its category and task-detail path', () => {
     expect(findDesignRunCategory(STRUCTURE_PREDICT_TOOL_SLUG)?.key).toBe('structure')
     expect(resolveDesignRunPath(STRUCTURE_PREDICT_TOOL_SLUG, 't1')).toBe('/tasks/t1')
+  })
+})
+
+describe('resolveTaskResultPath', () => {
+  it('routes every task to the unified result page', () => {
+    expect(resolveTaskResultPath(STRUCTURE_PREDICT_TOOL_SLUG, 't1')).toBe('/tasks/t1/result')
+    expect(resolveTaskResultPath(POCKET_PREDICT_TOOL_SLUG, 't2')).toBe('/tasks/t2/result')
+    expect(resolveTaskResultPath(MOLECULE_GENERATION_TOOL_SLUG, 't3')).toBe('/tasks/t3/result')
+    expect(resolveTaskResultPath('unknown-tool', 't4')).toBe('/tasks/t4/result')
+    expect(resolveTaskResultPath(undefined, 't5')).toBe('/tasks/t5/result')
   })
 })

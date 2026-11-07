@@ -10,13 +10,14 @@ import type { ProjectResultDetail } from './compounds'
 /** P-26 提交表单的力场可选值（与后端工具参数枚举一致）。 */
 export type MdForceField = 'amber99sb-ildn' | 'charmm36'
 
-/** P-26 提交参数（字段名对齐冻结契约，勿改）。 */
+/** P-26 提交参数（字段名对齐 gromacs-md 真实工具契约，勿改）。 */
 export interface MdSubmitParams {
-  force_field: MdForceField
-  duration_ns: number
-  temperature_k: number
-  pressure_bar: number
-  seed?: number
+  nsteps: number
+  dt: number
+  temperature: number
+  box_distance: number
+  water_model: string
+  device: 'auto' | 'cpu' | 'gpu'
 }
 
 /** P-27 `md_trajectory@1` 产物四个 file role（顺序无关）。 */

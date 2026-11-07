@@ -99,3 +99,6 @@ frontend/.tmp-build/
 
 # local screenshot scratch (may contain dev tokens)
 frontend/_shots/
+
+# local build temp
+frontend/.tmp_build_tmp/

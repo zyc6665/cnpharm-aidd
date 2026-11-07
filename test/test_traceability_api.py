@@ -211,11 +211,18 @@ def _manifest(*, input_name: str = "protein", input_type: str = "protein_structu
     }
 
 
-async def _create_tool(db: AsyncSession, owner: User, *, image: str = "registry.internal/x:1") -> Tool:
+async def _create_tool(
+    db: AsyncSession,
+    owner: User,
+    *,
+    image: str = "registry.internal/x:1",
+    slug: str = "boltz-2",
+    name: str = "Boltz-2",
+) -> Tool:
     tool = Tool(
         owner_id=owner.id,
-        name="Boltz-2",
-        slug="boltz-2",
+        name=name,
+        slug=slug,
         status=ToolStatus.PUBLISHED.value,
         is_public=True,
         provider_type=ToolProviderType.PLATFORM.value,
@@ -655,6 +662,30 @@ async def test_result_detail_exposes_frozen_inputs(
     data = response.json()["data"]
     assert data["inputs"][0]["inputRole"] == INPUT_ROLE_RECEPTOR
     assert data["tool_slug"] == "boltz-2"
+
+
+@pytest.mark.asyncio
+async def test_result_detail_exposes_model_family_for_detail_profiles(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    tool = await _create_tool(
+        db_session,
+        users[OWNER],
+        slug="msign-affinity-prediction",
+        name="MSIGN Affinity",
+    )
+    upload = await _upload(
+        db_session, owner=users[OWNER], project=project, filename="egfr.pdb", content=b"ATOM\\n"
+    )
+    task = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+
+    response = await api_client.get(f"/api/v1/results/{task.id}", headers=_headers(VIEWER))
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["tool_slug"] == "msign-affinity-prediction"
+    assert data["model_family"] == "affinity"
 
 
 @pytest.mark.asyncio

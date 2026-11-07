@@ -1,64 +1,85 @@
 // P-23 / P-24 / P-25 虚拟筛选：工具 slug、参数默认值与列名约定。
-// 契约来源：docs/06-UI交互与原型说明.md 与 docs/05-API接口规格说明书.md（冻结）。
+// 契约来源：autodock-vina-docking 1.1.0 的 tool_versions.parameters_schema。
 
 /** 契约规定的提交工具 slug（P-23）。 */
 export const VINA_TOOL_SLUG = 'autodock-vina-docking'
 
-/** 与后端 params 完全一致的漏斗参数（snake_case）。 */
+/** 与后端 params 完全一致的筛选参数（snake_case）。 */
 export interface ScreeningParams {
+  box_size: number
+  exhaustiveness: number
+  n_poses: number
   pharmacophore_min_features: number
   docking_score_cutoff: number
-  exhaustiveness: number
   top_n: number
   seed: number
 }
 
 /** 契约默认值。 */
 export const SCREENING_PARAM_DEFAULTS: ScreeningParams = {
+  box_size: 22,
+  exhaustiveness: 8,
+  n_poses: 9,
   pharmacophore_min_features: 3,
   docking_score_cutoff: -8.0,
-  exhaustiveness: 8,
   top_n: 100,
   seed: 42
 }
 
 /** 取值范围（用于表单控件与校验）。 */
 export const SCREENING_PARAM_RANGES = {
-  pharmacophore_min_features: { min: 1, max: 6 },
-  docking_score_cutoff: { min: -14, max: -4 },
+  box_size: { min: 10, max: 40 },
   exhaustiveness: { min: 1, max: 32 },
-  top_n: { min: 1, max: 1000 },
+  n_poses: { min: 1, max: 20 },
+  pharmacophore_min_features: { min: 0, max: 8 },
+  docking_score_cutoff: { min: -20, max: 0 },
+  top_n: { min: 1, max: 10000 },
   seed: { min: 0, max: 999999 }
 } as const
 
-/** ranked（molecule_table@1）契约列顺序。 */
+/**
+ * ranked（molecule_table@1）契约列顺序。与 Vina 1.1.0 `docking_results.csv`
+ * 一一对应：每行保留层层通过标记、打分与失败原因，最终保留 `passes=true`。
+ */
 export const SCREENING_RANKED_COLUMNS = [
+  'molecule_id',
   'smiles',
-  'inchi_key',
-  'mol_weight',
-  'logp',
-  'qed',
+  'pharmacophore_features',
   'stage_pharmacophore',
   'stage_docking',
-  'stage_rescore',
   'docking_score',
+  'stage_cutoff',
   'rank',
-  'passes'
+  'passes',
+  'mol_weight',
+  'logp',
+  'tpsa',
+  'qed',
+  'rmsd_lb',
+  'rmsd_ub',
+  'num_poses',
+  'error'
 ] as const
 
 /** ranked 列 → i18n 文案键（位于 screening.result.* / screening.detail.*）。 */
 export const SCREENING_RANKED_COLUMN_I18N: Record<string, string> = {
+  molecule_id: 'colMoleculeId',
   smiles: 'colSmiles',
-  inchi_key: 'colInchiKey',
-  mol_weight: 'colMolWeight',
-  logp: 'colLogp',
-  qed: 'colQed',
+  pharmacophore_features: 'colPharmacophoreFeatures',
   stage_pharmacophore: 'stagePharmacophore',
   stage_docking: 'stageDocking',
-  stage_rescore: 'stageRescore',
   docking_score: 'dockingScore',
+  stage_cutoff: 'stageCutoff',
   rank: 'rank',
-  passes: 'passes'
+  passes: 'passes',
+  mol_weight: 'colMolWeight',
+  logp: 'colLogp',
+  tpsa: 'colTpsa',
+  qed: 'colQed',
+  rmsd_lb: 'colRmsdLb',
+  rmsd_ub: 'colRmsdUb',
+  num_poses: 'colNumPoses',
+  error: 'colError'
 }
 
 /** poses 元数据（ligand_structure@1 的 metadata_json）。 */

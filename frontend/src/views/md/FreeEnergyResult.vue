@@ -9,6 +9,12 @@
       </template>
     </app-page-header>
 
+    <TaskContextBar
+      v-if="taskId"
+      :task-id="taskId"
+      active="result"
+      :result-path="route.fullPath"
+    />
 
     <skeleton-detail v-if="loading && !result" />
 
@@ -81,6 +87,7 @@ import { formatFixed } from '@/domain/common/format'
   import type { EChartsOption } from 'echarts'
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import MdEchart from './MdEchart.vue'
   import { chartColors } from '@/utils/chartTheme'

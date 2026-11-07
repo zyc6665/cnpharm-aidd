@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import FunnelChart from './FunnelChart.vue'
 import { countPasses, funnelFromRankedRows } from './funnel'
 import type { FunnelStageKey } from './funnel'
@@ -23,7 +24,18 @@ const loading = ref(true)
 const errorMessage = ref('')
 const rows = ref<CsvPreviewRow[]>([])
 
-const NUMERIC_KEYS = ['mol_weight', 'logp', 'qed', 'docking_score', 'rank']
+const NUMERIC_KEYS = [
+  'pharmacophore_features',
+  'mol_weight',
+  'logp',
+  'tpsa',
+  'qed',
+  'docking_score',
+  'rmsd_lb',
+  'rmsd_ub',
+  'num_poses',
+  'rank'
+]
 
 function columnTitle(key: string): string {
   const suffix = SCREENING_RANKED_COLUMN_I18N[key]
@@ -36,7 +48,11 @@ function isPass(raw: string | undefined): boolean {
 }
 
 function isStageColumn(key: string): boolean {
-  return key === 'stage_pharmacophore' || key === 'stage_docking' || key === 'stage_rescore'
+  return (
+    key === 'stage_pharmacophore' ||
+    key === 'stage_docking' ||
+    key === 'stage_cutoff'
+  )
 }
 
 const tableColumns = computed(() =>
@@ -46,7 +62,7 @@ const tableColumns = computed(() =>
       title: columnTitle(key),
       dataIndex: key,
       key,
-      width: key === 'smiles' ? 220 : 120,
+      width: key === 'smiles' || key === 'error' ? 220 : 120,
       align: numeric ? 'right' : 'left',
       sorter: numeric
         ? (left: CsvPreviewRow, right: CsvPreviewRow): number =>
@@ -67,7 +83,8 @@ const stageLabels = computed<Record<FunnelStageKey, string>>(() => ({
   input: t('screening.result.stageInput'),
   pharmacophore: t('screening.result.stagePharmacophore'),
   docking: t('screening.result.stageDocking'),
-  rescore: t('screening.result.stageRescore')
+  cutoff: t('screening.result.stageCutoff'),
+  kept: t('screening.result.stageKept')
 }))
 
 const stageRows = computed(() =>
@@ -122,9 +139,6 @@ onMounted(() => {
   <main class="screen-result" data-testid="screen-result-page">
     <AppPageHeader :title="t('screening.result.title')" :subtitle="t('screening.result.subtitle')">
       <template #actions>
-        <router-link :to="`/tasks/${taskId}`">
-          <a-button>{{ t('screening.result.backToTask') }}</a-button>
-        </router-link>
         <a-button
           type="primary"
           :disabled="!rows.length"
@@ -135,6 +149,8 @@ onMounted(() => {
         </a-button>
       </template>
     </AppPageHeader>
+
+    <TaskContextBar :task-id="taskId" active="result" :result-path="route.fullPath" />
 
     <a-alert
       v-if="errorMessage"

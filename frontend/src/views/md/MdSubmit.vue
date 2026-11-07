@@ -81,60 +81,12 @@
 
           <a-divider orientation="left">{{ t('md.submit.paramsTitle') }}</a-divider>
 
-          <a-row :gutter="16">
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.forceField')" required>
-                <a-select v-model:value="form.force_field" :options="forceFieldOptions" data-testid="md-force-field-select" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.durationNs')" required>
-                <a-input-number
-                  v-model:value="form.duration_ns"
-                  :min="0.1"
-                  :step="10"
-                  :precision="1"
-                  class="md-submit__number"
-                  data-testid="md-duration-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.temperatureK')" required>
-                <a-input-number
-                  v-model:value="form.temperature_k"
-                  :min="1"
-                  :step="5"
-                  :precision="0"
-                  class="md-submit__number"
-                  data-testid="md-temperature-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.pressureBar')" required>
-                <a-input-number
-                  v-model:value="form.pressure_bar"
-                  :min="0.1"
-                  :step="0.1"
-                  :precision="2"
-                  class="md-submit__number"
-                  data-testid="md-pressure-input"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12" :lg="8">
-              <a-form-item :label="t('md.submit.seed')">
-                <a-input-number
-                  v-model:value="form.seed"
-                  :min="0"
-                  :precision="0"
-                  class="md-submit__number"
-                  data-testid="md-seed-input"
-                />
-              </a-form-item>
-            </a-col>
-          </a-row>
+          <ModelParameterForm
+            v-if="selectedOption?.parameterSchema"
+            v-model="params"
+            :schema="selectedOption.parameterSchema"
+            :disabled="submitting"
+          />
 
           <a-alert
             type="info"
@@ -172,11 +124,18 @@
   import { getTarget, listStructures, listTargets } from '@/api/targets'
   import { findToolBySlug, MD_TOOL_SLUG, resolveToolVersionId, submitMdTask } from '@/api/md'
   import ModelSelect from '@/components/design/ModelSelect.vue'
+  import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
+  import {
+    buildDefaultValues,
+    normalizeParameters,
+    validateParameters,
+    type ParameterValues
+  } from '@/domain/tools/parameterSchema'
   import { estimateMdRuntimeHours } from './analysis'
   import type { ResearchProject } from '@/types/projects'
   import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
-  import type { MdForceField, MdSubmitParams } from '@/types/md'
+  import type { MdSubmitParams } from '@/types/md'
 
   const { t } = useI18n()
   const router = useRouter()
@@ -192,10 +151,11 @@
   const loadingStructures = ref(false)
   const submitting = ref(false)
 
-  // 同类 MD 模型可自由选择；默认 gromacs。
+  // 同类 MD 模型可自由选择；默认 gromacs；参数 schema 随模型切换。
   const {
     options: modelOptions,
     selectedSlug,
+    selectedOption,
     loading: modelLoading,
     load: loadModels
   } = useModelOptions('molecular_dynamics', { defaultSlug: MD_TOOL_SLUG })
@@ -205,22 +165,13 @@
     targetId: string | undefined
     proteinId: string | undefined
     structureId: string | undefined
-    force_field: MdForceField
-    duration_ns: number
-    temperature_k: number
-    pressure_bar: number
-    seed: number | null
   }>({
     projectId: undefined,
     targetId: undefined,
     proteinId: undefined,
-    structureId: undefined,
-    force_field: 'amber99sb-ildn',
-    duration_ns: 100,
-    temperature_k: 300,
-    pressure_bar: 1,
-    seed: null
+    structureId: undefined
   })
+  const params = ref<ParameterValues>({})
 
   const projectOptions = computed(() => projects.value.map((project) => ({ value: project.id, label: project.name })))
   const targetOptions = computed(() => targets.value.map((target) => ({ value: target.id, label: target.name })))
@@ -231,11 +182,6 @@
       label: `#${index + 1}${structure.prepared_file_id ? ` ${t('md.submit.prepared')}` : ''}`
     }))
   )
-  const forceFieldOptions = computed(() => [
-    { value: 'amber99sb-ildn', label: t('md.submit.forceFieldAmber') },
-    { value: 'charmm36', label: t('md.submit.forceFieldCharmm') }
-  ])
-
   const selectedStructure = computed(
     () => structures.value.find((structure) => structure.id === form.structureId) ?? null
   )
@@ -246,10 +192,18 @@
     return structure.prepared_file_id ?? structure.structure_file_id ?? null
   })
 
-  const canSubmit = computed(() => Boolean(form.projectId && complexFileId.value && form.duration_ns > 0))
+  const durationNs = computed(
+    () => (Number(params.value.nsteps ?? 0) * Number(params.value.dt ?? 0)) / 1000
+  )
+
+  const canSubmit = computed(
+    () =>
+      Boolean(form.projectId && complexFileId.value) &&
+      validateParameters(selectedOption.value?.parameterSchema ?? null, params.value).length === 0
+  )
 
   const estimateHours = computed(() =>
-    estimateMdRuntimeHours({ durationNs: Number(form.duration_ns) || 0, gpuCount: 1 })
+    estimateMdRuntimeHours({ durationNs: Number(durationNs.value) || 0, gpuCount: 1 })
   )
   const estimateText = computed(() =>
     Number.isFinite(estimateHours.value) ? `${estimateHours.value}` : '-'
@@ -345,11 +299,7 @@
     form.targetId = undefined
     form.proteinId = undefined
     form.structureId = undefined
-    form.force_field = 'amber99sb-ildn'
-    form.duration_ns = 100
-    form.temperature_k = 300
-    form.pressure_bar = 1
-    form.seed = null
+    params.value = buildDefaultValues(selectedOption.value?.parameterSchema ?? null)
     targets.value = []
     proteins.value = []
     structures.value = []
@@ -372,22 +322,17 @@
         return
       }
       const toolVersionId = await resolveToolVersionId(tool)
-      const params: MdSubmitParams = {
-        force_field: form.force_field,
-        duration_ns: Number(form.duration_ns),
-        temperature_k: Number(form.temperature_k),
-        pressure_bar: Number(form.pressure_bar)
-      }
-      if (form.seed !== null && form.seed !== undefined) {
-        params.seed = Number(form.seed)
-      }
+      const params2 = normalizeParameters(
+        selectedOption.value?.parameterSchema ?? null,
+        params.value
+      ) as unknown as MdSubmitParams
       const taskId = await submitMdTask({
         projectId: form.projectId,
         toolId: tool.id,
         toolVersionId,
-        params,
+        params: params2,
         complexFileId: complexFileId.value,
-        name: `MD ${params.duration_ns}ns`
+        name: `MD ${durationNs.value.toFixed(2)}ns`
       })
       message.success(t('md.submit.submitSuccess'))
       await router.push(`/tasks/${taskId}/md`)
@@ -397,6 +342,14 @@
       submitting.value = false
     }
   }
+
+  watch(
+    selectedOption,
+    option => {
+      params.value = buildDefaultValues(option?.parameterSchema ?? null)
+    },
+    { immediate: true }
+  )
 
   onMounted(() => {
     void loadModels()

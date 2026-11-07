@@ -8,7 +8,8 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { getToolList } from '@/api/tools'
 import { resolveModelFamily } from '@/domain/design/modelFamilies'
-import type { Tool } from '@/types/models'
+import { isToolSchema } from '@/domain/tools/parameterSchema'
+import type { Tool, ToolSchema } from '@/types/models'
 
 export interface ModelOption {
   slug: string
@@ -19,6 +20,8 @@ export interface ModelOption {
   isDefault: boolean
   /** 该工具契约声明的输入字段（用于亲和力等页按模型动态渲染输入）。 */
   inputFields: string[]
+  /** 该工具声明的运行参数 schema（用于按模型动态渲染参数）。 */
+  parameterSchema: ToolSchema | null
 }
 
 export interface UseModelOptionsResult {
@@ -78,6 +81,9 @@ export function useModelOptions(
         inputFields: (tool.contract?.capability?.inputs ?? [])
           .map(input => input.field)
           .filter((field): field is string => Boolean(field)),
+        parameterSchema: isToolSchema(tool.contract?.schema?.input)
+          ? tool.contract?.schema?.input ?? null
+          : null,
       }))
       options.value = next
 

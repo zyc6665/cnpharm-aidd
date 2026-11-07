@@ -1,5 +1,6 @@
 import type { Task } from '@/types/models'
 import { EMPTY_DISPLAY } from '@/domain/common/format'
+import { toDisplayFileName } from './file-display'
 
 export type TaskOutputFile = NonNullable<Task['output_files']>[number]
 
@@ -180,7 +181,7 @@ function firstFileName(files: unknown): string | null {
     for (const key of ['relative_path', 'filename', 'name', 'path']) {
       const value = candidate[key]
       if (typeof value === 'string' && value.trim()) {
-        return value
+        return toDisplayFileName(value)
       }
     }
   }

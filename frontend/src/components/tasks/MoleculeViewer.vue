@@ -26,8 +26,14 @@ import { useI18n } from 'vue-i18n'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
 import { Asset } from 'molstar/lib/mol-util/assets'
+import { Vec3 } from 'molstar/lib/mol-math/linear-algebra'
+import { Sphere3D } from 'molstar/lib/mol-math/geometry'
+import { Color } from 'molstar/lib/mol-util/color'
+import { BoxShape3D } from 'molstar/lib/mol-plugin-state/transforms/shape'
+import { ShapeRepresentation3D } from 'molstar/lib/mol-plugin-state/transforms/representation'
 
 import type { VisualizationScene } from '@/domain/tasks'
+import type { PocketVoxelGrid } from '@/domain/tasks/pocket-voxel'
 import { createNormalizedSdfObjectUrl } from '@/domain/tasks'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
 
@@ -35,9 +41,11 @@ const props = withDefaults(defineProps<{
   scene: VisualizationScene
   variant?: 'compact' | 'full'
   allowNativeFullscreen?: boolean
+  voxelGrid?: PocketVoxelGrid | null
 }>(), {
   variant: 'full',
   allowNativeFullscreen: true,
+  voxelGrid: null,
 })
 
 const { t } = useI18n()
@@ -82,10 +90,12 @@ function syncFullscreenLayout() {
   }
 }
 
-async function loadReceptorStructure(
+async function loadPresetStructure(
   currentViewer: MolstarViewer,
   entry: VisualizationScene['entries'][number],
-  url: string
+  url: string,
+  representationPreset: 'polymer-cartoon' | 'atomic-detail',
+  color?: number,
 ) {
   const data = await currentViewer.plugin.builders.data.download(
     {
@@ -98,8 +108,57 @@ async function loadReceptorStructure(
   const trajectory = await currentViewer.plugin.builders.structure.parseTrajectory(data, entry.format)
 
   await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
-    representationPreset: 'polymer-cartoon'
+    representationPreset,
+    ...(color === undefined
+      ? {}
+      : {
+          representationPresetParams: {
+            theme: { globalName: 'uniform', globalColorParams: { value: Color(color) } },
+          },
+        }),
   })
+}
+
+async function addVoxelGrid(currentViewer: MolstarViewer, grid: PocketVoxelGrid) {
+  const state = currentViewer.plugin.state.data.build()
+  const color = Color(grid.color ?? 0x22d3ee)
+  const radius = grid.radius ?? 0.05
+
+  for (const box of grid.boxes) {
+    const [x, y, z] = box.center
+    const half = box.halfSize
+    const shape = state.toRoot().apply(BoxShape3D, {
+      bottomLeft: Vec3.create(x - half, y - half, z - half),
+      topRight: Vec3.create(x + half, y + half, z + half),
+      radius,
+      color,
+    })
+    shape.apply(ShapeRepresentation3D, {})
+  }
+
+  await state.commit()
+
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let minZ = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  let maxZ = Number.NEGATIVE_INFINITY
+  for (const box of grid.boxes) {
+    const [x, y, z] = box.center
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    minZ = Math.min(minZ, z)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+    maxZ = Math.max(maxZ, z)
+  }
+
+  if (Number.isFinite(minX)) {
+    const center = Vec3.create((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+    const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2 + 8
+    currentViewer.plugin.managers.camera.focusSphere(Sphere3D.create(center, radius), { durationMs: 0 })
+  }
 }
 
 async function ensureViewer() {
@@ -160,13 +219,22 @@ async function renderScene() {
     try {
       for (const { entry, resource } of entryResources) {
         if (entry.role === 'receptor') {
-          await loadReceptorStructure(viewer, entry, resource.url)
+          await loadPresetStructure(viewer, entry, resource.url, 'polymer-cartoon', 0x9ca3af)
+          continue
+        }
+
+        if (entry.role === 'pocket') {
+          await loadPresetStructure(viewer, entry, resource.url, 'atomic-detail', 0xf59e0b)
           continue
         }
 
         await viewer.loadStructureFromUrl(resource.url, entry.format, false, {
           label: entry.label
         })
+      }
+
+      if (props.voxelGrid?.boxes.length) {
+        await addVoxelGrid(viewer, props.voxelGrid)
       }
 
       revokeEntryUrls = entryResources.map(({ resource }) => resource.revoke)
@@ -195,7 +263,7 @@ onMounted(async () => {
 })
 
 watch(
-  () => props.scene.entries,
+  () => [props.scene.entries, props.voxelGrid],
   () => {
     void renderScene()
   },

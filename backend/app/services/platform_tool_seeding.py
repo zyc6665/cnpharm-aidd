@@ -145,6 +145,7 @@ def _apply_manifest_overrides(
     inputs: list[dict] | None = None,
     image_digest: str | None = None,
     cuda: str | None = None,
+    parameters_schema: dict | None = None,
 ) -> dict:
     """在工具 config 上折叠后续迁移的原地改写，返回新 dict（不改入参）。
 
@@ -176,6 +177,9 @@ def _apply_manifest_overrides(
     if isinstance(manifest, dict):
         if inputs is not None:
             manifest.setdefault("artifacts", {})["inputs"] = copy.deepcopy(inputs)
+        if parameters_schema is not None:
+            manifest["parameters_schema"] = copy.deepcopy(parameters_schema)
+            cfg["parameters_schema"] = copy.deepcopy(parameters_schema)
         runtime = manifest.setdefault("runtime", {})
         if cuda is not None:
             runtime["cuda"] = cuda
@@ -279,6 +283,19 @@ def _load_head_models() -> dict[str, dict]:
             module, factory_name, image_digest=image_digest
         ):
             models[model["slug"]] = model
+
+    # Vina 1.1.0：真实筛选漏斗参数 + CSV/SDF 双配体输入 + 工具版本原地升级。
+    # 必须在上面单工具工厂循环之后折叠，否则 models 里还没有 Vina。
+    vina_v11_mod = _load_migration_module("20261106_01_vina_funnel_tool.py")
+    vina = models[vina_v11_mod.SLUG]
+    vina["config"] = _apply_manifest_overrides(
+        vina["config"],
+        inputs=vina_v11_mod.NEW_INPUTS,
+        image_digest=vina_v11_mod.NEW_DIGEST,
+        parameters_schema=vina_v11_mod.NEW_SCHEMA,
+    )
+    vina["version"] = vina_v11_mod.NEW_VERSION
+    vina["changelog"] = vina_v11_mod.NEW_CHANGELOG
 
     return models
 

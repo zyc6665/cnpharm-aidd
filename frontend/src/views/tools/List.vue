@@ -1,21 +1,20 @@
 <template>
   <div class="tools-page">
     <div class="container">
-      <AppPageHeader :title="t('tools.title')" :subtitle="t('tools.subtitle')" />
-
-      <!-- 视图切换标签 -->
-      <div class="view-tabs">
-        <a-radio-group v-model:value="currentView" button-style="solid" size="large" @change="handleViewChange">
-          <a-radio-button value="public">
-            <AppstoreOutlined />
-            {{ t('tools.publicTools') }}
-          </a-radio-button>
-          <a-radio-button v-if="isLoggedIn" value="favorites">
-            <HeartOutlined />
-            {{ t('tools.favorites') }}
-          </a-radio-button>
-        </a-radio-group>
-      </div>
+      <AppPageHeader :title="t('tools.title')" :subtitle="t('tools.subtitle')">
+        <template #actions>
+          <a-radio-group v-model:value="currentView" button-style="solid" @change="handleViewChange">
+            <a-radio-button value="public">
+              <AppstoreOutlined />
+              {{ t('tools.publicTools') }}
+            </a-radio-button>
+            <a-radio-button v-if="isLoggedIn" value="favorites">
+              <HeartOutlined />
+              {{ t('tools.favorites') }}
+            </a-radio-button>
+          </a-radio-group>
+        </template>
+      </AppPageHeader>
 
       <!-- 分类快捷筛选 -->
       <div class="category-chips" data-testid="tools-category-chips">
@@ -361,10 +360,6 @@
     min-height: calc(100vh - @header-height - @footer-height);
   }
 
-  .workflow-entry-card {
-    display: none;
-  }
-
   // 分类快捷筛选
   .category-chips {
     display: flex;
@@ -401,29 +396,6 @@
       color: @text-color-light-tertiary;
       font-size: @font-size-xs;
     }
-  }
-
-  .workflow-entry-copy {
-    flex: 1;
-  }
-
-  .workflow-entry-title {
-    font-size: @font-size-xl;
-    font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-xs;
-  }
-
-  .workflow-entry-desc {
-    color: @text-color-light-secondary;
-    margin: 0;
-  }
-
-  .view-tabs {
-    display: flex;
-    justify-content: center;
-    gap: @spacing-lg;
-    margin-bottom: @spacing-xl;
-    flex-wrap: wrap;
   }
 
   .category-option {
@@ -571,10 +543,15 @@
   }
 
   .tool-name {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    min-height: 44px;
     font-size: @font-size-lg;
     font-weight: @font-weight-semibold;
+    line-height: 1.4;
     margin-bottom: @spacing-sm;
-    .text-ellipsis();
   }
 
   .tool-desc {

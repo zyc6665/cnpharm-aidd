@@ -149,8 +149,17 @@ async def test_outdated_tool_is_updated_not_duplicated(seed_db, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("slug", ["autodock-vina-docking", "gromacs-md", "boltz2-affinity-prediction"])
-async def test_outdated_new_tool_is_updated_not_duplicated(seed_db, monkeypatch, slug):
+@pytest.mark.parametrize(
+    ("slug", "expected_version"),
+    [
+        ("autodock-vina-docking", "1.1.0"),
+        ("gromacs-md", "1.0.0"),
+        ("boltz2-affinity-prediction", "1.0.0"),
+    ],
+)
+async def test_outdated_new_tool_is_updated_not_duplicated(
+    seed_db, monkeypatch, slug, expected_version
+):
     """新增工具（含 gromacs 多工具迁移中的一条）版本落后时也走原地 UPDATE。"""
     db, _factory = seed_db
     monkeypatch.setattr(settings, "AIDD_SYSTEM_USER_ID", None)
@@ -175,7 +184,7 @@ async def test_outdated_new_tool_is_updated_not_duplicated(seed_db, monkeypatch,
     assert await _count(db, Tool) == count_before  # 没有新增行
 
     await db.refresh(version)
-    assert version.version == "1.0.0"
+    assert version.version == expected_version
     assert version.config.get("type") == "k8s_job"
     assert "tool_package_manifest" in version.config
 

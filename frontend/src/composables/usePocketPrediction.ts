@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import { predictPockets } from '@/api/targets'
+import type { StructurePredictInput } from '@/types/targets'
 
 /**
  * 口袋预测提交（供既有 Pockets 页与「上游接力条」同源复用）。
@@ -9,11 +10,21 @@ export function usePocketPrediction() {
   const predicting: Ref<boolean> = ref(false)
   const error: Ref<string> = ref('')
 
-  async function predict(structureId: string, modelSlug?: string): Promise<string | null> {
+  async function predict(
+    structureId: string,
+    modelSlug?: string,
+    params: Record<string, string | number | boolean> = {}
+  ): Promise<string | null> {
     error.value = ''
     predicting.value = true
     try {
-      const payload = modelSlug ? { model_ref: { name: modelSlug } } : {}
+      const payload: StructurePredictInput = {}
+      if (modelSlug) {
+        payload.model_ref = { name: modelSlug }
+      }
+      if (Object.keys(params).length > 0) {
+        payload.params = params
+      }
       const response = await predictPockets(structureId, payload)
       return response.data.task_id
     } catch {

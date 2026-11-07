@@ -58,7 +58,7 @@ export interface SubmitMdTaskInput {
   toolId: string
   toolVersionId?: string
   params: MdSubmitParams
-  /** 已准备好的复合物结构文件 id（来自 structure 的 file 列表）。 */
+  /** 已准备好的蛋白结构文件 id（来自 structure 的 file 列表）。 */
   complexFileId: string
   name?: string
 }
@@ -71,7 +71,7 @@ export async function submitMdTask(input: SubmitMdTaskInput): Promise<string> {
     tool_id: input.toolId,
     tool_version_id: input.toolVersionId,
     params: { ...input.params },
-    standard_input_uploads: { complex: input.complexFileId }
+    standard_input_uploads: { protein_pdb: input.complexFileId }
   })
   return response.data.id
 }

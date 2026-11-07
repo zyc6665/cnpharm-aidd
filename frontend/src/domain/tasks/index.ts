@@ -1,5 +1,6 @@
 export * from './csv-result'
 export * from './detail'
+export * from './file-display'
 export * from './json-result-renderer'
 export * from './log-preview'
 export * from './logs'

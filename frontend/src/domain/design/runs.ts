@@ -97,5 +97,16 @@ export function resolveDesignRunPath(toolSlug: string | undefined, taskId: strin
   return category ? category.resultPath(taskId) : `/tasks/${taskId}`
 }
 
+/**
+ * 任务结果页统一入口。
+ *
+ * 任务详情讲「怎么跑的」，结果页讲「产出了什么」。所有任务都进同一个结果路由，
+ * 由结果页按 tool slug 选择对应视图；未知类型走通用产物兜底，不再把结构/口袋
+ * 任务直接丢回任务详情。
+ */
+export function resolveTaskResultPath(_toolSlug: string | undefined, taskId: string): string {
+  return `/tasks/${taskId}/result`
+}
+
 /** 设计任务页签的「进行中」口径：还没出结果。 */
 export const DESIGN_RUN_ACTIVE_STATUSES: readonly TaskStatus[] = ['pending', 'queued', 'running']

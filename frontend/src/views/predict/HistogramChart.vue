@@ -5,8 +5,8 @@ import { buildHistogram } from './histogram'
 import { chartColors } from '@/utils/chartTheme'
 
 const props = withDefaults(
-  defineProps<{ values: number[]; title?: string; bins?: number }>(),
-  { title: '', bins: 10 }
+  defineProps<{ values: number[]; title?: string; bins?: number; height?: number }>(),
+  { title: '', bins: 10, height: 180 }
 )
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -60,9 +60,12 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.values, props.title, props.bins] as const,
-  () => render(),
-  { deep: true }
+  () => [props.values, props.title, props.bins, props.height] as const,
+  () => {
+    render()
+    resize()
+  },
+  { deep: true, flush: 'post' }
 )
 
 onBeforeUnmount(() => {
@@ -73,12 +76,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="chartRef" class="histogram-chart" data-testid="predict-histogram" />
+  <div ref="chartRef" class="histogram-chart" data-testid="predict-histogram" :style="{ height: `${height}px` }" />
 </template>
 
 <style scoped>
 .histogram-chart {
   width: 100%;
-  height: 180px;
+  min-height: 180px;
 }
 </style>

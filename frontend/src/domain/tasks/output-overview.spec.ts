@@ -38,7 +38,7 @@ test('产物清单带类型、文件数与主文件', () => {
   assert.equal(table.name, 'Affinity table', '没有可读名时用键名 humanize')
   assert.equal(table.type, 'molecule_table@1')
   assert.equal(table.fileCount, 2)
-  assert.equal(table.primaryFile, 'artifacts/affinity_results.csv')
+  assert.equal(table.primaryFile, 'affinity_results.csv')
 
   const report = overview.artifacts[1]!
   assert.equal(report.name, 'Run report', 'metadata.name 优先')

@@ -2,21 +2,18 @@
   <main class="results-page" data-testid="generation-results-page">
     <AppPageHeader :title="t('design.results.title')" :subtitle="t('design.results.subtitle')">
       <template #actions>
-        <a-space>
-          <a-button data-testid="results-back-task" @click="goTaskDetail">
-            {{ t('design.results.viewTask') }}
-          </a-button>
-          <a-button
-            type="primary"
-            :disabled="!canSave"
-            data-testid="results-save-set"
-            @click="openSaveModal"
-          >
-            {{ t('design.results.saveToSet') }}
-          </a-button>
-        </a-space>
+        <a-button
+          type="primary"
+          :disabled="!canSave"
+          data-testid="results-save-set"
+          @click="openSaveModal"
+        >
+          {{ t('design.results.saveToSet') }}
+        </a-button>
       </template>
     </AppPageHeader>
+
+    <TaskContextBar :task-id="taskId" active="result" :result-path="route.fullPath" />
 
 
     <a-alert
@@ -172,10 +169,11 @@
 <script setup lang="ts">
 import { formatNumber } from '@/domain/common/format'
   import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-  import { useRoute, useRouter } from 'vue-router'
+  import { useRoute } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import {
     findMoleculeTableArtifact,
@@ -194,7 +192,6 @@ import { formatNumber } from '@/domain/common/format'
   import type { TaskStatus } from '@/types/models'
 
   const route = useRoute()
-  const router = useRouter()
   const { t } = useI18n()
 
   const taskId = computed(() => String(route.params.id ?? ''))
@@ -546,10 +543,6 @@ import { formatNumber } from '@/domain/common/format'
     } finally {
       saving.value = false
     }
-  }
-
-  function goTaskDetail(): void {
-    void router.push({ name: 'TaskDetail', params: { id: taskId.value } })
   }
 
   onMounted(() => {

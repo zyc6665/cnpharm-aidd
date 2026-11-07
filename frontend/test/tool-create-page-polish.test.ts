@@ -10,23 +10,25 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('工具创建编辑页应复用统一标题并保留返回操作', () => {
+test('模型编辑页应提供独立工作区标题与返回操作', () => {
   const source = readSource('src/views/tools/Create.vue')
 
-  assert.equal(source.includes('AppPageHeader'), true)
-  assert.equal(source.includes('<template #actions>'), true)
+  assert.equal(source.includes('model-editor__topbar'), true)
+  assert.equal(source.includes('model-editor__title'), true)
+  assert.equal(source.includes('model-editor__back'), true)
   assert.equal(source.includes('@click="goBack"'), true)
   assert.equal(source.includes('class="page-header"'), false)
-  assert.equal(source.includes('.page-header'), false)
 })
 
-test('工具创建编辑页表单应提供移动端栅格兜底', () => {
+test('模型编辑页应提供响应式三栏布局兜底', () => {
   const source = readSource('src/views/tools/Create.vue')
 
-  assert.equal(source.includes('class="tool-form"'), true)
-  assert.equal(source.includes(':deep(.tool-form .ant-col-12)'), true)
-  assert.equal(source.includes(':deep(.tool-form .ant-col-8)'), true)
-  assert.equal(source.includes(':deep(.tool-form .ant-col-16)'), true)
+  assert.equal(source.includes('model-editor__layout'), true)
+  assert.equal(source.includes('model-editor__steps'), true)
+  assert.equal(source.includes('model-editor__summary'), true)
+  assert.equal(source.includes('@media (max-width: 1280px)'), true)
+  assert.equal(source.includes('@media (max-width: @screen-md)'), true)
+  assert.equal(source.includes('grid-template-columns: 1fr'), true)
 })
 
 test('工具执行配置应提供可复用的结构化键值和列表编辑器', () => {
@@ -124,7 +126,7 @@ test('工具创建表单领域模块应承接执行器配置解析和组装', ()
   }
 })
 
-test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射为兼容项', () => {
+test('模型编辑页应突出 Tool Package v2 主路径并下线旧语义映射', () => {
   const source = readSource('src/views/tools/Create.vue')
   const domain = readSource('src/domain/tools/agent-capability.ts')
   const createFormDomain = readSource('src/domain/tools/tool-create-form.ts')
@@ -132,9 +134,9 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   const versionConfigDomain = readSource('src/domain/tools/tool-version-config.ts')
 
   for (const marker of [
-    'tool-package-primary-path',
+    'model-editor__layout',
     'Tool Package v2',
-    '平台标准 Artifact 输入/输出槽'
+    '平台标准 Artifact 契约'
   ]) {
     assert.equal(source.includes(marker), true, `missing unified contract marker ${marker}`)
   }

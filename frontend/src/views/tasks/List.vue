@@ -11,17 +11,6 @@
         :message="workflowScopeText"
       />
 
-      <div class="tasks-scope">
-        <a-radio-group v-model:value="scope" button-style="solid" @change="handleScopeChange">
-          <a-radio-button value="all">{{ t('tasks.scope.all') }}</a-radio-button>
-          <a-radio-button value="design" data-testid="tasks-scope-design">{{ t('tasks.scope.design') }}</a-radio-button>
-        </a-radio-group>
-      </div>
-
-      <!-- 设计任务：复用「设计任务」紧凑表格视图（唯一入口在任务中心） -->
-      <DesignRuns v-if="scope === 'design'" embedded />
-
-      <template v-else>
       <!-- 三标签页切换 -->
       <div class="view-tabs">
         <a-tabs v-model:activeKey="currentTab" @change="handleTabChange">
@@ -100,6 +89,18 @@
         >
           <a-select-option v-for="tool in toolOptions" :key="tool.id" :value="tool.id">
             {{ tool.name }}
+          </a-select-option>
+        </a-select>
+        <a-select
+          v-model:value="taskType"
+          class="task-type-select"
+          data-testid="tasks-type-filter"
+          size="large"
+          style="width: 200px"
+          @change="handleTaskTypeChange"
+        >
+          <a-select-option v-for="item in taskTypeOptions" :key="item.value" :value="item.value">
+            {{ item.label }}
           </a-select-option>
         </a-select>
         <a-range-picker
@@ -210,6 +211,15 @@
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
+              <a-button
+                v-if="taskResultPath(record)"
+                type="link"
+                size="small"
+                data-testid="tasks-open-result"
+                @click="goToResult(record)"
+              >
+                {{ t('tasks.taskWorkspace.viewResult') }}
+              </a-button>
               <a-button type="link" size="small" @click="goToDetail(record.id)">
                 {{ t('tasks.viewDetail') }}
               </a-button>
@@ -278,7 +288,6 @@
           @change="handlePageChange"
         />
       </div>
-      </template>
     </div>
   </div>
 </template>
@@ -293,7 +302,6 @@
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
-  import DesignRuns from '@/views/design/Runs.vue'
   import {
     UnorderedListOutlined,
     SyncOutlined,
@@ -329,6 +337,11 @@
     type TaskActor,
     type TaskListTab
   } from '@/domain/tasks'
+  import {
+    ALL_DESIGN_TOOL_SLUGS,
+    DESIGN_RUN_CATEGORIES,
+    resolveTaskResultPath,
+  } from '@/domain/design/runs'
   import type { Task, TaskStatus } from '@/types/models'
   import type { ProjectRole, ResearchProject } from '@/types/projects'
 
@@ -344,7 +357,8 @@
   // 状态
   const routeTab = computed<TabKey>(() => taskListTabFromQueryParam(route.query.view))
   const currentTab = ref<TabKey>(routeTab.value)
-  const scope = ref<'all' | 'design'>(route.query.scope === 'design' ? 'design' : 'all')
+  const routeTaskType = computed(() => normalizeTaskType(route.query.type, route.query.scope))
+  const taskType = ref<string>(routeTaskType.value)
   const searchKeyword = ref('')
   const selectedTool = ref<string | undefined>()
   const dateRange = ref<[Dayjs, Dayjs] | null>(null)
@@ -397,6 +411,21 @@
 
   const toolOptions = computed(() => toolsStore.tools || [])
 
+  const taskTypeOptions = computed(() => [
+    { value: 'all', label: t('tasks.taskType.all') },
+    { value: 'design', label: t('tasks.taskType.design') },
+    ...DESIGN_RUN_CATEGORIES.map(category => ({
+      value: category.key,
+      label: t(`design.runs.category.${category.key}`),
+    })),
+  ])
+
+  const taskTypeSlugs = computed<readonly string[] | undefined>(() => {
+    if (taskType.value === 'all') return undefined
+    if (taskType.value === 'design') return [...ALL_DESIGN_TOOL_SLUGS]
+    return DESIGN_RUN_CATEGORIES.find(category => category.key === taskType.value)?.slugs
+  })
+
   const emptyText = computed(() => t(getTaskListEmptyTextKey(currentTab.value)))
 
   const taskColumns = computed(() => [
@@ -406,7 +435,7 @@
     { title: t('tasks.columns.status'), key: 'status', width: 100 },
     { title: t('tasks.columns.progress'), key: 'progress', width: 150 },
     { title: t('tasks.columns.createdAt'), key: 'created_at', width: 170 },
-    { title: t('tasks.columns.actions'), key: 'actions', width: 220 },
+    { title: t('tasks.columns.actions'), key: 'actions', width: 300 },
   ])
 
   const canCancel = (task: Task) => canCancelTask({ ...task }, taskActor.value)
@@ -452,6 +481,7 @@
     pageSize: pageSize.value,
     projectId: projectId.value,
     toolId: selectedTool.value,
+    toolSlugs: taskTypeSlugs.value,
     keyword: searchKeyword.value,
     createdFrom: dateRange.value?.[0].startOf('day').toISOString(),
     createdTo: dateRange.value?.[1].endOf('day').toISOString(),
@@ -527,22 +557,16 @@
     void fetchTasksAndCountsSafely()
   }
 
-  const handleScopeChange = () => {
+  const handleTaskTypeChange = (value: string) => {
     const query = { ...route.query }
-    if (scope.value === 'design') {
-      query.scope = 'design'
+    delete query.scope
+    if (value && value !== 'all') {
+      query.type = value
     } else {
-      delete query.scope
+      delete query.type
     }
     void router.replace({ query })
   }
-
-  watch(
-    () => route.query.scope,
-    value => {
-      scope.value = value === 'design' ? 'design' : 'all'
-    }
-  )
 
   const handleDateChange = () => {
     currentPage.value = 1
@@ -612,6 +636,16 @@
     router.push(`/tasks/${id}`)
   }
 
+  const taskResultPath = (task: Task): string | null =>
+    resolveTaskResultPath(task.tool_slug ?? task.tool?.slug, task.id)
+
+  const goToResult = (task: Task) => {
+    const path = taskResultPath(task)
+    if (path) {
+      router.push(path)
+    }
+  }
+
   const goToTools = () => {
     router.push('/tools')
   }
@@ -644,15 +678,26 @@
     }
   })
 
-  watch([routeTab, projectId, workflowRunId, workflowDefinitionId, workflowNodeId], ([tab]) => {
-    currentTab.value = tab
-    currentPage.value = 1
-    void fetchTasksAndCountsSafely()
-    void fetchProjectContextSafely()
-  })
+  watch(
+    [routeTab, routeTaskType, projectId, workflowRunId, workflowDefinitionId, workflowNodeId],
+    ([tab]) => {
+      currentTab.value = tab
+      taskType.value = routeTaskType.value
+      currentPage.value = 1
+      void fetchTasksAndCountsSafely()
+      void fetchProjectContextSafely()
+    }
+  )
 
   function stringQueryParam(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() ? value : undefined
+  }
+
+  function normalizeTaskType(type: unknown, scope: unknown): string {
+    const rawType = stringQueryParam(type)
+    if (rawType === 'all' || rawType === 'design') return rawType
+    if (rawType && DESIGN_RUN_CATEGORIES.some(category => category.key === rawType)) return rawType
+    return scope === 'design' ? 'design' : 'all'
   }
 
   // 生命周期

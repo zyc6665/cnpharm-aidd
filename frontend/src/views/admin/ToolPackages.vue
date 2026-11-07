@@ -77,9 +77,8 @@
     <a-modal
       v-model:open="createModalOpen"
       title="登记模型交付包"
-      :confirm-loading="saving"
-      width="760px"
-      @ok="handleCreatePackage"
+      width="880px"
+      :mask-closable="false"
       @cancel="resetCreateModal"
     >
       <a-alert
@@ -92,147 +91,274 @@
       <a-form layout="vertical">
         <a-form-item label="注册方式">
           <a-radio-group v-model:value="registrationEditor" button-style="solid">
-            <a-radio-button value="guided">向导生成</a-radio-button>
+            <a-radio-button value="guided">逐项向导</a-radio-button>
             <a-radio-button value="json">粘贴 JSON</a-radio-button>
           </a-radio-group>
+          <span class="registration-mode-hint">
+            推荐按步骤填写；已有完整 manifest 时可直接粘贴 JSON。
+          </span>
         </a-form-item>
 
         <template v-if="registrationEditor === 'guided'">
-          <a-alert
-            class="guided-hint"
-            type="info"
-            show-icon
-            message="填写模型基本信息和运行资源，平台会生成 v2 manifest"
-            description="镜像 digest、权重清单和 fallback 包仍需填写真实值，避免发布不可复现的运行环境。"
+          <a-steps
+            class="registration-steps"
+            size="small"
+            :current="guidedStep"
+            :items="registrationSteps"
           />
-          <a-row :gutter="16">
-            <a-col :span="14">
-              <a-form-item label="工具名称" required>
-                <a-input v-model:value="guidedDraft.name" placeholder="例如：Pocket Prediction" />
+          <div class="registration-step-body">
+            <section v-if="guidedStep === 0" class="registration-step">
+              <div class="registration-step-heading">
+                <h3>基本信息</h3>
+                <p>先定义模型是谁、给谁用。名称和 slug 会出现在工具列表与任务详情里。</p>
+              </div>
+              <a-row :gutter="16">
+                <a-col :span="14">
+                  <a-form-item label="工具名称" required>
+                    <a-input v-model:value="guidedDraft.name" placeholder="例如：Pocket Prediction" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="10">
+                  <a-form-item label="Slug" required>
+                    <a-input v-model:value="guidedDraft.slug" placeholder="pocket-prediction" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="版本" required>
+                    <a-input v-model:value="guidedDraft.version" placeholder="1.0.0" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="加速器">
+                    <a-select v-model:value="guidedDraft.accelerator">
+                      <a-select-option value="cpu">CPU</a-select-option>
+                      <a-select-option value="nvidia_cuda">NVIDIA CUDA</a-select-option>
+                      <a-select-option value="haiguang_dcu">海光 DCU</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-form-item label="简介">
+                <a-textarea v-model:value="guidedDraft.description" :rows="3" placeholder="工具用途和适用场景" />
               </a-form-item>
-            </a-col>
-            <a-col :span="10">
-              <a-form-item label="Slug" required>
-                <a-input v-model:value="guidedDraft.slug" placeholder="pocket-prediction" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="版本" required>
-                <a-input v-model:value="guidedDraft.version" placeholder="1.0.0" />
-              </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="加速器">
-                <a-select v-model:value="guidedDraft.accelerator">
-                  <a-select-option value="cpu">CPU</a-select-option>
-                  <a-select-option value="nvidia_cuda">NVIDIA CUDA</a-select-option>
-                  <a-select-option value="haiguang_dcu">海光 DCU</a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
-          <a-form-item label="简介">
-            <a-textarea v-model:value="guidedDraft.description" :rows="2" placeholder="工具用途和适用场景" />
-          </a-form-item>
-          <a-form-item label="输入 Artifact" required>
-            <div v-for="(item, index) in guidedDraft.inputs" :key="'input-' + index" class="artifact-row">
-              <a-input v-model:value="item.name" placeholder="内部名称，如 receptor" style="width: 180px" />
-              <a-select v-model:value="item.type" style="width: 230px">
-                <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
-                  {{ standardArtifactTypeLabel(type) }}
-                </a-select-option>
-              </a-select>
-              <a-checkbox v-model:checked="item.required">必填</a-checkbox>
-              <a-button type="text" danger @click="guidedDraft.inputs.splice(index, 1)">删除</a-button>
-            </div>
-            <a-button type="dashed" block @click="guidedDraft.inputs.push(createGuidedInput())">+ 添加输入</a-button>
-          </a-form-item>
+              <a-alert
+                type="info"
+                show-icon
+                message="下一步：声明输入 / 输出契约"
+                description="输入和输出必须使用平台标准 Artifact 类型，发布前会校验槽位与文件角色。"
+              />
+            </section>
 
-          <a-form-item label="输出 Artifact" required>
-            <div v-for="(item, index) in guidedDraft.outputs" :key="'output-' + index" class="artifact-row">
-              <a-input v-model:value="item.name" placeholder="内部名称，如 ligands" style="width: 180px" />
-              <a-select v-model:value="item.type" style="width: 230px">
-                <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
-                  {{ standardArtifactTypeLabel(type) }}
-                </a-select-option>
-              </a-select>
-              <a-select v-model:value="item.cardinality" style="width: 100px">
-                <a-select-option value="one">单值</a-select-option>
-                <a-select-option value="many">多值</a-select-option>
-              </a-select>
-              <a-checkbox v-model:checked="item.required">必填</a-checkbox>
-              <a-button type="text" danger @click="guidedDraft.outputs.splice(index, 1)">删除</a-button>
-            </div>
-            <a-button type="dashed" block @click="guidedDraft.outputs.push(createGuidedOutput())">+ 添加输出</a-button>
-          </a-form-item>
-          <a-form-item label="科学参数">
-            <ToolParameterSchemaEditor
-              v-model:model-value="guidedDraft.parametersSchema"
-              :allow-file-fields="false"
-              @validity-change="setPackageParameterSchemaValidity"
-            />
-          </a-form-item>
-          <a-row :gutter="16">
-            <a-col :span="14">
-              <a-form-item label="容器镜像" required>
-                <a-input v-model:value="guidedDraft.image" placeholder="registry.example.com/model:1.0.0" />
+            <section v-else-if="guidedStep === 1" class="registration-step">
+              <div class="registration-step-heading">
+                <h3>输入 / 输出契约</h3>
+                <p>按平台标准 Artifact 声明数据入口和产物。槽位名是接口名，建议使用小写英文和下划线。</p>
+              </div>
+              <a-form-item label="输入 Artifact" required>
+                <div v-for="(item, index) in guidedDraft.inputs" :key="'input-' + index" class="artifact-row">
+                  <a-input v-model:value="item.name" placeholder="内部名称，如 receptor" style="width: 180px" />
+                  <a-select v-model:value="item.type" style="width: 230px">
+                    <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
+                      {{ standardArtifactTypeLabel(type) }}
+                    </a-select-option>
+                  </a-select>
+                  <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+                  <a-button type="text" danger @click="guidedDraft.inputs.splice(index, 1)">删除</a-button>
+                </div>
+                <a-button type="dashed" block @click="guidedDraft.inputs.push(createGuidedInput())">+ 添加输入</a-button>
               </a-form-item>
-            </a-col>
-            <a-col :span="10">
-              <a-form-item label="Python">
-                <a-input v-model:value="guidedDraft.python" placeholder="3.11" />
+
+              <a-form-item label="输出 Artifact" required>
+                <div v-for="(item, index) in guidedDraft.outputs" :key="'output-' + index" class="artifact-row">
+                  <a-input v-model:value="item.name" placeholder="内部名称，如 ligands" style="width: 180px" />
+                  <a-select v-model:value="item.type" style="width: 230px">
+                    <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type" :title="type">
+                      {{ standardArtifactTypeLabel(type) }}
+                    </a-select-option>
+                  </a-select>
+                  <a-select v-model:value="item.cardinality" style="width: 100px">
+                    <a-select-option value="one">单值</a-select-option>
+                    <a-select-option value="many">多值</a-select-option>
+                  </a-select>
+                  <a-checkbox v-model:checked="item.required">必填</a-checkbox>
+                  <a-button type="text" danger @click="guidedDraft.outputs.splice(index, 1)">删除</a-button>
+                </div>
+                <a-button type="dashed" block @click="guidedDraft.outputs.push(createGuidedOutput())">+ 添加输出</a-button>
               </a-form-item>
-            </a-col>
-          </a-row>
-          <a-form-item label="镜像 digest" required>
-            <a-input v-model:value="guidedDraft.imageDigest" placeholder="sha256 加 64 位十六进制摘要" />
-          </a-form-item>
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="CPU 核数">
-                <a-input-number v-model:value="guidedDraft.cpu" :min="0.1" :step="0.5" style="width: 100%" />
+            </section>
+
+            <section v-else-if="guidedStep === 2" class="registration-step">
+              <div class="registration-step-heading">
+                <h3>运行参数</h3>
+                <p>这里声明调用方可以调整的科学参数。没有可调参数时可以留空。</p>
+              </div>
+              <a-alert
+                class="step-alert"
+                type="info"
+                show-icon
+                message="参数会以表单展示给用户"
+                description="字段名、类型、默认值和范围会写入 parameters_schema；复杂参数可切换到高级 JSON。"
+              />
+              <ToolParameterSchemaEditor
+                v-model:model-value="guidedDraft.parametersSchema"
+                :allow-file-fields="false"
+                @validity-change="setPackageParameterSchemaValidity"
+              />
+            </section>
+
+            <section v-else-if="guidedStep === 3" class="registration-step">
+              <div class="registration-step-heading">
+                <h3>镜像与运行</h3>
+                <p>平台按 k8s_job 统一调度。镜像必须使用不可变 digest，资源画像用于排队与计费。</p>
+              </div>
+              <a-row :gutter="16">
+                <a-col :span="14">
+                  <a-form-item label="容器镜像" required>
+                    <a-input v-model:value="guidedDraft.image" placeholder="registry.example.com/model:1.0.0" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="10">
+                  <a-form-item label="Python">
+                    <a-input v-model:value="guidedDraft.python" placeholder="3.11" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-form-item label="镜像 digest" required>
+                <a-input v-model:value="guidedDraft.imageDigest" placeholder="sha256: 加 64 位十六进制摘要" />
               </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="内存（MB）">
-                <a-input-number v-model:value="guidedDraft.memoryMb" :min="128" :step="128" style="width: 100%" />
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="CPU 核数">
+                    <a-input-number v-model:value="guidedDraft.cpu" :min="0.1" :step="0.5" style="width: 100%" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="内存（MB）">
+                    <a-input-number v-model:value="guidedDraft.memoryMb" :min="128" :step="128" style="width: 100%" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-form-item label="Entry point">
+                <a-input v-model:value="guidedDraft.entrypoint" placeholder="python -m adapter" />
               </a-form-item>
-            </a-col>
-          </a-row>
-          <a-form-item label="Entry point">
-            <a-input v-model:value="guidedDraft.entrypoint" placeholder="python -m adapter" />
-          </a-form-item>
-          <a-collapse ghost>
-            <a-collapse-panel key="runtime" header="高级运行时字段（发布前必填）">
-              <a-form-item label="Fallback 包 URI" required>
-                <a-input v-model:value="guidedDraft.fallbackUri" placeholder="s3://bucket/runtime.venv.tar.gz" />
+              <a-collapse ghost>
+                <a-collapse-panel key="runtime" header="高级运行时字段（发布前必填）">
+                  <a-form-item label="Fallback 包 URI" required>
+                    <a-input v-model:value="guidedDraft.fallbackUri" placeholder="s3://bucket/runtime.venv.tar.gz" />
+                  </a-form-item>
+                  <a-form-item label="Fallback SHA256" required>
+                    <a-input v-model:value="guidedDraft.fallbackSha256" />
+                  </a-form-item>
+                  <a-form-item label="权重清单 URI" required>
+                    <a-input v-model:value="guidedDraft.weightsUri" placeholder="s3://bucket/weights/manifest.json" />
+                  </a-form-item>
+                  <a-form-item label="权重清单 SHA256" required>
+                    <a-input v-model:value="guidedDraft.weightsSha256" />
+                  </a-form-item>
+                </a-collapse-panel>
+              </a-collapse>
+            </section>
+
+            <section v-else class="registration-step">
+              <div class="registration-step-heading">
+                <h3>确认并登记</h3>
+                <p>核对下面信息后登记模型交付包。登记只创建交付包，不会自动发布或创建可运行工具。</p>
+              </div>
+              <div class="registration-summary-grid">
+                <div class="registration-summary-card">
+                  <h4>模型信息</h4>
+                  <dl>
+                    <dt>名称</dt><dd>{{ guidedDraft.name || '-' }}</dd>
+                    <dt>Slug</dt><dd>{{ guidedDraft.slug || '-' }}</dd>
+                    <dt>版本</dt><dd>{{ guidedDraft.version || '-' }}</dd>
+                    <dt>加速器</dt><dd>{{ guidedDraft.accelerator }}</dd>
+                  </dl>
+                </div>
+                <div class="registration-summary-card">
+                  <h4>运行环境</h4>
+                  <dl>
+                    <dt>镜像</dt><dd class="break-all">{{ guidedDraft.image || '-' }}</dd>
+                    <dt>Digest</dt><dd>{{ guidedDigestShort }}</dd>
+                    <dt>资源</dt><dd>{{ guidedDraft.cpu }} vCPU · {{ guidedDraft.memoryMb }} MB</dd>
+                  </dl>
+                </div>
+                <div class="registration-summary-card registration-summary-card--wide">
+                  <h4>Artifact 契约</h4>
+                  <div class="registration-summary-row">
+                    <span class="registration-summary-label">输入</span>
+                    <div class="registration-summary-list">
+                      <span v-for="name in guidedInputNames" :key="'summary-input-' + name" class="registration-summary-pill">{{ name }}</span>
+                      <span v-if="!guidedInputNames.length" class="registration-summary-empty">尚未填写</span>
+                    </div>
+                  </div>
+                  <div class="registration-summary-row">
+                    <span class="registration-summary-label">输出</span>
+                    <div class="registration-summary-list">
+                      <span v-for="name in guidedOutputNames" :key="'summary-output-' + name" class="registration-summary-pill">{{ name }}</span>
+                      <span v-if="!guidedOutputNames.length" class="registration-summary-empty">尚未填写</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="registration-summary-card registration-summary-card--wide">
+                  <h4>运行参数</h4>
+                  <p>已配置 {{ guidedParameterCount }} 个科学参数。</p>
+                </div>
+              </div>
+              <a-alert
+                v-if="guidedReadinessWarnings.length"
+                class="step-alert"
+                type="warning"
+                show-icon
+                message="还有信息未填写"
+                :description="guidedReadinessWarnings.join('；')"
+              />
+              <a-form-item label="签名（可选，发布前必需）">
+                <a-input v-model:value="signatureText" placeholder="cosign:sha256:..." />
               </a-form-item>
-              <a-form-item label="Fallback SHA256" required>
-                <a-input v-model:value="guidedDraft.fallbackSha256" />
-              </a-form-item>
-              <a-form-item label="权重清单 URI" required>
-                <a-input v-model:value="guidedDraft.weightsUri" placeholder="s3://bucket/weights/manifest.json" />
-              </a-form-item>
-              <a-form-item label="权重清单 SHA256" required>
-                <a-input v-model:value="guidedDraft.weightsSha256" />
-              </a-form-item>
-            </a-collapse-panel>
-          </a-collapse>
+            </section>
+          </div>
         </template>
 
-        <a-form-item v-else label="Tool Package manifest JSON">
-          <a-textarea
-            v-model:value="manifestText"
-            :rows="16"
-            placeholder='{"api_version":"aidd.sciminer/tool-package","kind":"ToolPackage","metadata":{"slug":"model-standard","name":"Model Standard","version":"1.0.0"}}'
-          />
-        </a-form-item>
-        <a-form-item label="签名（可选，发布前必需）">
-          <a-input v-model:value="signatureText" placeholder="cosign:sha256:..." />
-        </a-form-item>
+        <template v-else>
+          <a-form-item label="Tool Package manifest JSON">
+            <a-textarea
+              v-model:value="manifestText"
+              :rows="16"
+              placeholder='{"api_version":"aidd.sciminer/tool-package","kind":"ToolPackage","metadata":{"slug":"model-standard","name":"Model Standard","version":"1.0.0"}}'
+            />
+          </a-form-item>
+          <a-form-item label="签名（可选，发布前必需）">
+            <a-input v-model:value="signatureText" placeholder="cosign:sha256:..." />
+          </a-form-item>
+        </template>
       </a-form>
+
+      <template #footer>
+        <div class="registration-footer">
+          <span v-if="registrationEditor === 'guided'" class="registration-footer-progress">
+            第 {{ guidedStep + 1 }} / {{ registrationSteps.length }} 步 · {{ currentRegistrationStepTitle }}
+          </span>
+          <span v-else class="registration-footer-progress">JSON 模式</span>
+          <div class="registration-footer-actions">
+            <a-button @click="resetCreateModal">取消</a-button>
+            <a-button v-if="registrationEditor === 'guided' && guidedStep > 0" @click="previousGuidedStep">
+              上一步
+            </a-button>
+            <a-button
+              v-if="registrationEditor === 'guided' && guidedStep < registrationSteps.length - 1"
+              type="primary"
+              @click="nextGuidedStep"
+            >
+              下一步：{{ nextRegistrationStepTitle }}
+            </a-button>
+            <a-button v-else type="primary" :loading="saving" @click="handleCreatePackage">
+              登记模型交付包
+            </a-button>
+          </div>
+        </div>
+      </template>
     </a-modal>
 
     <a-modal
@@ -615,8 +741,42 @@
   }, null, 2))
   const registrationEditor = ref<'guided' | 'json'>('guided')
   const guidedDraft = ref(createToolPackageGuidedDraft())
+  const guidedStep = ref(0)
   const packageParameterSchemaValid = ref(true)
   const standardArtifactTypes = WORKFLOW_ARTIFACT_SEMANTIC_TYPES.filter(type => type.includes('@'))
+  const registrationSteps = [
+    { title: '基本信息', description: '名称 / Slug / 版本' },
+    { title: '输入输出契约', description: '标准 Artifact 槽位' },
+    { title: '运行参数', description: 'parameters_schema' },
+    { title: '镜像与运行', description: 'digest / 资源画像' },
+    { title: '确认提交', description: '核对并登记' }
+  ]
+  const guidedInputNames = computed(() =>
+    guidedDraft.value.inputs.map(item => item.name.trim()).filter(Boolean)
+  )
+  const guidedOutputNames = computed(() =>
+    guidedDraft.value.outputs.map(item => item.name.trim()).filter(Boolean)
+  )
+  const guidedDigestShort = computed(() => {
+    const digest = guidedDraft.value.imageDigest.trim()
+    if (!digest) return '-'
+    return digest.replace(/^sha256:/, '').slice(0, 12) + '…'
+  })
+  const guidedParameterCount = computed(() => {
+    const schema = guidedDraft.value.parametersSchema as { properties?: Record<string, unknown> }
+    return Object.keys(schema.properties ?? {}).length
+  })
+  const currentRegistrationStepTitle = computed(() => registrationSteps[guidedStep.value]?.title ?? '')
+  const nextRegistrationStepTitle = computed(() => registrationSteps[guidedStep.value + 1]?.title ?? '')
+  const guidedReadinessWarnings = computed(() => {
+    const warnings: string[] = []
+    if (!guidedDraft.value.name.trim()) warnings.push('未填写工具名称')
+    if (!guidedDraft.value.slug.trim()) warnings.push('未填写 Slug')
+    if (!guidedDraft.value.image.trim()) warnings.push('未填写容器镜像')
+    if (!guidedDraft.value.fallbackUri.trim()) warnings.push('未填写 Fallback 包 URI')
+    if (!guidedDraft.value.weightsUri.trim()) warnings.push('未填写权重清单 URI')
+    return warnings
+  })
 
   const columns = [
     { title: 'Tool Package', key: 'package' },
@@ -711,12 +871,103 @@
     manifestText.value = ''
     signatureText.value = ''
     registrationEditor.value = 'guided'
+    guidedStep.value = 0
     guidedDraft.value = createToolPackageGuidedDraft()
     packageParameterSchemaValid.value = true
   }
 
   function setPackageParameterSchemaValidity(valid: boolean) {
     packageParameterSchemaValid.value = valid
+  }
+
+  function validateGuidedStep(step: number): boolean {
+    const draft = guidedDraft.value
+    if (step === 0) {
+      if (!draft.name.trim()) {
+        message.error('请填写工具名称')
+        return false
+      }
+      if (!draft.slug.trim()) {
+        message.error('请填写 Slug')
+        return false
+      }
+      if (!draft.version.trim()) {
+        message.error('请填写版本号')
+        return false
+      }
+      return true
+    }
+
+    if (step === 1) {
+      if (draft.inputs.some(item => !item.name.trim())) {
+        message.error('请填写或删除空的输入槽位')
+        return false
+      }
+      if (draft.outputs.some(item => !item.name.trim())) {
+        message.error('请填写或删除空的输出槽位')
+        return false
+      }
+      const inputs = draft.inputs.map(item => ({ ...item, name: item.name.trim() })).filter(item => item.name)
+      const outputs = draft.outputs.map(item => ({ ...item, name: item.name.trim() })).filter(item => item.name)
+      if (!inputs.length || !outputs.length) {
+        message.error('请至少填写一个输入和一个输出')
+        return false
+      }
+      if (new Set(inputs.map(item => item.name)).size !== inputs.length) {
+        message.error('输入槽位名称不能重复')
+        return false
+      }
+      if (new Set(outputs.map(item => item.name)).size !== outputs.length) {
+        message.error('输出槽位名称不能重复')
+        return false
+      }
+      return true
+    }
+
+    if (step === 2) {
+      const schemaErrors = validateParameterSchema(draft.parametersSchema, {
+        allowLegacyUiTypes: false
+      })
+      if (!packageParameterSchemaValid.value || schemaErrors.length > 0) {
+        message.error(schemaErrors[0] || '请先修正科学参数 Schema')
+        return false
+      }
+      return true
+    }
+
+    if (step === 3) {
+      if (!draft.image.trim()) {
+        message.error('请填写容器镜像')
+        return false
+      }
+      if (!draft.imageDigest.trim()) {
+        message.error('请填写镜像 digest')
+        return false
+      }
+      if (!/^sha256:[a-fA-F0-9]{64}$/.test(draft.imageDigest.trim())) {
+        message.error('镜像 digest 格式应为 sha256: 加 64 位十六进制摘要')
+        return false
+      }
+      return true
+    }
+
+    return true
+  }
+
+  function firstInvalidGuidedStep(): number {
+    for (let step = 0; step < registrationSteps.length - 1; step += 1) {
+      if (!validateGuidedStep(step)) return step
+    }
+    return -1
+  }
+
+  function nextGuidedStep() {
+    if (!validateGuidedStep(guidedStep.value)) return
+    guidedStep.value = Math.min(registrationSteps.length - 1, guidedStep.value + 1)
+  }
+
+  function previousGuidedStep() {
+    guidedStep.value = Math.max(0, guidedStep.value - 1)
   }
 
   function standardArtifactTypeLabel(type: string): string {
@@ -727,6 +978,11 @@
   async function handleCreatePackage() {
     let manifest: Record<string, unknown>
     if (registrationEditor.value === 'guided') {
+      const invalidStep = firstInvalidGuidedStep()
+      if (invalidStep >= 0) {
+        guidedStep.value = invalidStep
+        return
+      }
       const schemaErrors = validateParameterSchema(guidedDraft.value.parametersSchema, {
         allowLegacyUiTypes: false,
       })
@@ -1084,6 +1340,154 @@
   .legacy-migration-entry a {
     color: @accent-color;
     font-weight: @font-weight-medium;
+  }
+
+  .registration-mode-hint {
+    display: block;
+    margin-top: 6px;
+    color: @text-tertiary;
+    font-size: @font-size-sm;
+  }
+
+  .registration-steps {
+    margin: 6px 0 @spacing-md;
+    padding: @spacing-md;
+    border: 1px solid @border-color;
+    border-radius: @border-radius-md;
+    background: @bg-surface;
+  }
+
+  .registration-step-body {
+    min-height: 340px;
+    max-height: 56vh;
+    padding-right: 4px;
+    overflow-y: auto;
+  }
+
+  .registration-step-heading {
+    margin-bottom: @spacing-md;
+
+    h3 {
+      margin: 0 0 4px;
+      color: @text-primary;
+      font-size: @font-size-lg;
+      font-weight: @font-weight-semibold;
+    }
+
+    p {
+      margin: 0;
+      color: @text-secondary;
+      line-height: @line-height-base;
+    }
+  }
+
+  .step-alert {
+    margin-bottom: @spacing-md;
+  }
+
+  .registration-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: @spacing-md;
+    margin-bottom: @spacing-md;
+  }
+
+  .registration-summary-card {
+    padding: @spacing-md;
+    border: 1px solid @border-color;
+    border-radius: @border-radius-md;
+    background: @bg-surface;
+
+    h4 {
+      margin: 0 0 @spacing-sm;
+      color: @text-primary;
+      font-size: @font-size-md;
+      font-weight: @font-weight-semibold;
+    }
+
+    dl {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 6px 8px;
+      margin: 0;
+    }
+
+    dt {
+      color: @text-tertiary;
+      font-size: @font-size-sm;
+    }
+
+    dd {
+      margin: 0;
+      color: @text-primary;
+      font-size: @font-size-sm;
+      word-break: break-word;
+    }
+
+    p {
+      margin: 0;
+      color: @text-secondary;
+      font-size: @font-size-sm;
+    }
+  }
+
+  .registration-summary-card--wide {
+    grid-column: 1 / -1;
+  }
+
+  .registration-summary-row {
+    display: flex;
+    gap: @spacing-sm;
+    align-items: flex-start;
+    margin-top: @spacing-sm;
+
+    &:first-of-type {
+      margin-top: 0;
+    }
+  }
+
+  .registration-summary-label {
+    flex: 0 0 32px;
+    color: @text-tertiary;
+    font-size: @font-size-sm;
+  }
+
+  .registration-summary-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .registration-summary-pill {
+    padding: 0 8px;
+    border: 1px solid @border-color;
+    border-radius: 999px;
+    color: @text-primary;
+    font-family: @font-family-mono;
+    font-size: @font-size-sm;
+    line-height: 22px;
+  }
+
+  .registration-summary-empty {
+    color: @text-tertiary;
+    font-size: @font-size-sm;
+  }
+
+  .registration-footer {
+    display: flex;
+    gap: @spacing-md;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .registration-footer-progress {
+    color: @text-tertiary;
+    font-size: @font-size-sm;
+  }
+
+  .registration-footer-actions {
+    display: flex;
+    gap: @spacing-sm;
   }
 
   .artifact-row {

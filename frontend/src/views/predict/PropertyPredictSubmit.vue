@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -8,7 +8,14 @@ import { uploadFile } from '@/api/files'
 import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
 import { submitToolTask } from '@/api/predict'
 import ModelSelect from '@/components/design/ModelSelect.vue'
+import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
+import {
+  buildDefaultValues,
+  normalizeParameters,
+  validateParameters,
+  type ParameterValues
+} from '@/domain/tools/parameterSchema'
 import {
   ADMET_TOOL_SLUG,
   PREDICT_DEFAULT_TASK_GROUPS,
@@ -40,11 +47,13 @@ const smilesFile = ref<File | null>(null)
 const smilesFileName = ref('')
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
+const admetParams = ref<ParameterValues>({})
 
 // 同类 ADMET/性质预测模型可自由选择；默认 molp-pc。
 const {
   options: modelOptions,
   selectedSlug,
+  selectedOption: admetSelected,
   loading: modelLoading,
   load: loadModels
 } = useModelOptions('admet_prediction', { defaultSlug: ADMET_TOOL_SLUG })
@@ -65,19 +74,40 @@ const ligandSdfFile = ref<File | null>(null)
 const ligandSdfName = ref('')
 const ligandSmilesFile = ref<File | null>(null)
 const ligandSmilesName = ref('')
+const affinityParams = ref<ParameterValues>({})
 
+const admetSchema = computed(() => admetSelected.value?.parameterSchema ?? null)
+const affinitySchema = computed(() => affinitySelected.value?.parameterSchema ?? null)
 const affinityInputFields = computed(() => affinitySelected.value?.inputFields ?? [])
 const affinityCanSubmit = computed(() => {
   if (submitting.value) return false
   const fields = affinityInputFields.value
   if (fields.includes('protein_pdb') && !proteinPdbFile.value) return false
   const needsLigand = fields.includes('ligand_sdf') || fields.includes('ligand_smiles')
-  if (!needsLigand) return true
-  return (
-    (fields.includes('ligand_sdf') && Boolean(ligandSdfFile.value)) ||
-    (fields.includes('ligand_smiles') && Boolean(ligandSmilesFile.value))
-  )
+  if (needsLigand) {
+    const hasLigand =
+      (fields.includes('ligand_sdf') && Boolean(ligandSdfFile.value)) ||
+      (fields.includes('ligand_smiles') && Boolean(ligandSmilesFile.value))
+    if (!hasLigand) return false
+  }
+  return validateParameters(affinitySchema.value, affinityParams.value).length === 0
 })
+
+watch(
+  admetSchema,
+  schema => {
+    admetParams.value = buildDefaultValues(schema)
+  },
+  { immediate: true }
+)
+
+watch(
+  affinitySchema,
+  schema => {
+    affinityParams.value = buildDefaultValues(schema)
+  },
+  { immediate: true }
+)
 const selectedGroups = ref<PredictTaskGroup[]>(
   props.initialGroups?.length ? [...props.initialGroups] : [...PREDICT_DEFAULT_TASK_GROUPS]
 )
@@ -100,6 +130,9 @@ const canSubmit = computed(() => {
     return affinityCanSubmit.value
   }
   if (submitting.value || !selectedGroups.value.length) {
+    return false
+  }
+  if (validateParameters(admetSchema.value, admetParams.value).length > 0) {
     return false
   }
   return source.value === 'upload' ? Boolean(smilesFile.value) : Boolean(candidateSetId.value)
@@ -151,7 +184,7 @@ async function handleAffinitySubmit(): Promise<void> {
       toolSlug: affinitySlug.value,
       projectId: projectId.value || undefined,
       name: `亲和力预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: {},
+      params: normalizeParameters(affinitySchema.value, affinityParams.value),
       standardInputUploads
     })
     message.success(t('predict.submit.success'))
@@ -220,7 +253,7 @@ async function handleSubmit(): Promise<void> {
       toolSlug: selectedSlug.value,
       projectId: projectId.value || undefined,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: { device: 'cpu' },
+      params: normalizeParameters(admetSchema.value, admetParams.value),
       standardInputUploads: { smiles_csv: fileId }
     })
     message.success(t('predict.submit.success'))
@@ -256,9 +289,21 @@ onMounted(() => {
 
     <a-card v-if="predictType === 'admet'" class="predict-submit__card" :title="t('design.modelSelect.label')">
       <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      <ModelParameterForm
+        v-if="admetSchema"
+        v-model="admetParams"
+        :schema="admetSchema"
+        :disabled="submitting"
+      />
     </a-card>
     <a-card v-else class="predict-submit__card" :title="t('design.modelSelect.label')">
       <ModelSelect v-model="affinitySlug" :options="affinityOptions" :loading="affinityLoading" />
+      <ModelParameterForm
+        v-if="affinitySchema"
+        v-model="affinityParams"
+        :schema="affinitySchema"
+        :disabled="submitting"
+      />
     </a-card>
 
     <a-card v-if="predictType === 'admet'" class="predict-submit__card" :title="t('predict.submit.source')">

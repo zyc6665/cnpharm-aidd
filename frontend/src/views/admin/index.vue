@@ -52,6 +52,7 @@ import {
   CloudServerOutlined,
   DatabaseOutlined,
   FileSearchOutlined,
+  ReadOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue'
 
@@ -68,6 +69,7 @@ const adminTabs = [
   { key: 'tools', icon: ToolOutlined, labelKey: 'admin.tools' },
   { key: 'tool-packages', icon: InboxOutlined, labelKey: 'admin.toolPackages' },
   { key: 'tool-categories', icon: AppstoreOutlined, labelKey: 'admin.toolCategories' },
+  { key: 'model-guide', icon: ReadOutlined, labelKey: 'admin.modelGuide' },
   { key: 'tasks', icon: CloudServerOutlined, labelKey: 'admin.tasks' },
   { key: 'compute', icon: DatabaseOutlined, labelKey: 'admin.compute.title' },
   { key: 'audit', icon: FileSearchOutlined, labelKey: 'admin.audit.title' },
@@ -80,7 +82,7 @@ const adminGroups = [
   {
     key: 'tools',
     labelKey: 'admin.group.tools',
-    items: ['tools', 'tool-packages', 'tool-categories'],
+    items: ['tools', 'tool-packages', 'tool-categories', 'model-guide'],
   },
   { key: 'tasks', labelKey: 'admin.group.tasks', items: ['tasks', 'compute'] },
   { key: 'system', labelKey: 'admin.group.system', items: ['audit', 'system'] },
@@ -110,7 +112,8 @@ function navigate(key: string) {
 @import '@/assets/styles/variables.less';
 
 .admin-page {
-  max-width: 1600px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   padding: @spacing-lg;
 }
@@ -211,6 +214,8 @@ function navigate(key: string) {
   flex: 1;
   min-width: 0;
   min-height: 60vh;
+  padding-inline: @spacing-sm;
+  overflow-x: hidden;
 
   // 统一后台各页表格/卡片观感（只作用于管理后台内容区）
   :deep(.ant-table) {

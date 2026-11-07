@@ -134,7 +134,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/design/runs',
-    redirect: { path: '/tasks', query: { scope: 'design' } }
+    redirect: { path: '/tasks', query: { type: 'design' } }
+  },
+  {
+    path: '/tasks/:id/result',
+    name: 'TaskResult',
+    component: () => import('@/views/tasks/Result.vue'),
+    meta: { title: 'tasks.resultPage.title', requiresAuth: true }
   },
   {
     path: '/tasks/:id/results',
@@ -336,6 +342,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminToolCategories',
         component: () => import('@/views/admin/ToolCategories.vue'),
         meta: { title: 'admin.toolCategories' }
+      },
+      {
+        path: 'model-guide',
+        name: 'AdminModelGuide',
+        component: () => import('@/views/admin/ModelGuide.vue'),
+        meta: { title: 'admin.modelGuide' }
       },
       {
         path: 'tasks',

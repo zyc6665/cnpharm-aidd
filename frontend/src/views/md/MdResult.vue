@@ -6,6 +6,14 @@
       </template>
     </app-page-header>
 
+    <TaskContextBar
+      v-if="taskId"
+      :task-id="taskId"
+      active="result"
+      :task="task"
+      :result-path="route.fullPath"
+      :fetch-task="false"
+    />
 
     <skeleton-detail v-if="loading && !result" />
 
@@ -129,6 +137,7 @@
   import type { EChartsOption } from 'echarts'
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
   import StructureArtifactPreview from '@/components/artifacts/StructureArtifactPreview.vue'
