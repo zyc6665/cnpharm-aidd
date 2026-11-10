@@ -89,6 +89,8 @@ backend/.ssh/
 
 # E2E 临时输入/日志、4090 k3s 的本地 kubeconfig
 .tmp_e2e/
+# E2E 跑完留下的数据库快照
+backend/.tmp_aidd_e2e_*.dump
 backend/.kube/
 
 # Celery 本地运行产物
