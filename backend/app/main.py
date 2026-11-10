@@ -34,6 +34,7 @@ from app.services.artifact_gc import artifact_gc_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.services.queue_timeout import queue_timeout_sweep_loop
 from app.services.quota_maintenance import quota_settlement_loop
+from app.services.runtime_log_sync import runtime_log_sync_loop
 from app.services.platform_tool_seeding import seed_platform_tools_on_startup
 from app.storage.lifecycle import ensure_lifecycle_on_startup
 from app.worker.celery_app import configure_managed_execution_runtime
@@ -102,6 +103,11 @@ async def lifespan(app: FastAPI):
     # 绕过状态机的改库；开关关闭时 `quota_settlement_loop` 为 None。
     if quota_settlement_loop is not None:
         quota_settlement_loop.start()
+    # 运行期日志与进度（docs/26 H-2、H-3）：容器日志只在终态归档的话，几小时的
+    # MD 任务在页面上只有「运行中」三个字。这里按间隔增量拉日志、解析
+    # `__DRP_PROGRESS__` 写回 task.progress，SSE 的 log/progress 帧随之生效。
+    if runtime_log_sync_loop is not None:
+        runtime_log_sync_loop.start()
     # 对象存储生命周期规则（docs/04 §5.8、docs/15 §3.2）：默认关闭。改桶配置属于
     # 运维动作（它会真的删 30 天前的暂存对象），应由部署脚本显式调用
     # `python -m app.cli.storage_lifecycle --apply` 并留痕，而不是每次重启都动一次生产存储。
@@ -109,6 +115,8 @@ async def lifespan(app: FastAPI):
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    if runtime_log_sync_loop is not None:
+        await runtime_log_sync_loop.stop()
     if quota_settlement_loop is not None:
         await quota_settlement_loop.stop()
     if queue_timeout_sweep_loop is not None:

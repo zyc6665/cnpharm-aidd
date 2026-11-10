@@ -568,6 +568,17 @@ class Settings(BaseSettings):
     TASK_LOG_HARVEST_ENABLED: bool = True
     # 单任务最多归档多少字节；超出部分截断并标注，避免刷屏模型撑爆日志表。
     TASK_LOG_MAX_BYTES: int = 2_000_000
+    # 运行期日志与进度同步（docs/26 H-2、H-3）：执行侧往 stdout 打
+    # `__DRP_PROGRESS__ {"pct": 45, "message": "..."}`，平台按间隔增量拉日志、
+    # 解析进度写回 task.progress。关掉它长任务在页面上就只剩「运行中」三个字。
+    TASK_RUNTIME_LOG_SYNC_ENABLED: bool = True
+    # 间隔取 10s 是折中：K8s `sinceTime` 拉取本身很轻，但每轮都要为每个运行中
+    # 任务发一次 API 请求；再密对进度条的肉眼观感没有帮助（SSE 也只有 1s 粒度）。
+    TASK_RUNTIME_LOG_SYNC_INTERVAL_SECONDS: float = 10.0
+    # 单任务单轮最多处理多少字符，只保留尾部——进度标记总在最新几行。
+    TASK_RUNTIME_LOG_SYNC_MAX_CHARS: int = 200_000
+    # 单轮最多同步多少个运行中任务，避免某次长尾把一轮拖成分钟级。
+    TASK_RUNTIME_LOG_SYNC_MAX_TASKS: int = 50
     # 卡位调度（docs/09 §5.6、docs/13 §4.1）：卡位由 slots.yaml 静态声明，
     # 状态由 drp-node-agent 维护并上报，平台只消费与展示。
     # 内联 YAML 优先于文件路径；两者都为空时按「无卡位」启动，回退到本机 GPU 探测。

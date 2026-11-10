@@ -23,6 +23,7 @@ Pod 一删，``read_namespaced_pod_log`` 就永久 404。而平台此前**没有
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import func, select
@@ -37,8 +38,39 @@ from app.models.tasks import TaskLog
 
 logger = logging.getLogger(__name__)
 
+#: 适配器按 ``timestamps=true`` 拉日志时，每行前缀是 RFC3339 时间戳。
+#: 入库前要剥掉——``task_logs.timestamp`` 才是权威时间，留着会让页面上
+#: 时间显示两遍（一次来自列，一次来自正文）。
+TIMESTAMPED_LOG_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s")
+
+
+def strip_log_timestamps(content: str) -> str:
+    """去掉每行行首的容器时间戳（保留原有换行，不重新拼行）。"""
+    lines: list[str] = []
+    for line in content.splitlines(keepends=True):
+        match = TIMESTAMPED_LOG_LINE.match(line)
+        lines.append(line[match.end() :] if match else line)
+    return "".join(lines)
+
+
+def last_log_timestamp(content: str) -> str | None:
+    """取最后一行的时间戳，作为下一次增量拉取的游标。"""
+    for line in reversed(content.splitlines()):
+        if not line.strip():
+            continue
+        match = TIMESTAMPED_LOG_LINE.match(line)
+        return match.group(1) if match else None
+    return None
+
 #: task_logs.log_data["source"] 的取值，用于区分「平台状态行」与「容器输出」。
 RUNTIME_LOG_SOURCE = "runtime"
+
+#: task_logs.log_data["stream"] 的取值。``live`` 是运行中的增量同步
+#: （``app.services.runtime_log_sync``），``final`` 是终态的一次性归档。
+#: 分开记录是必要的：``already_harvested`` 只认 ``final``，否则运行期同步过
+#: 一轮之后，终态归档会以为自己已经做过而漏掉任务结尾的日志。
+RUNTIME_LOG_STREAM_LIVE = "live"
+RUNTIME_LOG_STREAM_FINAL = "final"
 
 #: 没有执行记录时假定的适配器类型。K8s Job 是唯一会随 TTL 消失的承载方式。
 DEFAULT_ADAPTER_TYPE = "k8s_job"
@@ -82,16 +114,55 @@ def split_log_content(content: str) -> list[str]:
 
 
 async def already_harvested(db: AsyncSession, *, task_id: str) -> bool:
-    """该任务是否已经归档过容器日志。"""
+    """该任务是否已经做过终态归档。"""
     statement = (
         select(func.count())
         .select_from(TaskLog)
         .where(
             TaskLog.task_id == task_id,
             TaskLog.log_data["source"].as_string() == RUNTIME_LOG_SOURCE,
+            TaskLog.log_data["stream"].as_string() == RUNTIME_LOG_STREAM_FINAL,
         )
     )
     return bool((await db.execute(statement)).scalar())
+
+
+async def resolve_adapter_type(db: AsyncSession, *, task: Any) -> str:
+    """取当前 attempt 的执行适配器类型，取不到就按 K8s Job 处理。"""
+    return await _resolve_adapter_type(db, task=task)
+
+
+def external_execution_id_from_extra(task: Any) -> str | None:
+    """从 ``task.extra_data`` 里读外部执行句柄。
+
+    键名沿用 ``task_external_execution_id`` 的 ``external_id``/``remote_run_id``，
+    另外兼容早期写在 ``externalExecutionId`` 的历史数据——三个键指的是同一件事，
+    多一个名字就多一处读不到。
+    """
+    extra = getattr(task, "extra_data", None)
+    if not isinstance(extra, dict):
+        return None
+    for key in ("external_id", "remote_run_id", "externalExecutionId", "external_execution_id"):
+        value = extra.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def runtime_log_cursor(task: Any) -> str | None:
+    """读运行期同步存下的日志游标（``task.extra_data["runtimeLog"]["cursor"]``）。
+
+    与 ``runtime_log_sync.RUNTIME_LOG_META_KEY`` 同源；这里不 import 那边的常量，
+    是为了让 ``runtime_logs`` 保持零依赖——它被 ``runtime_log_sync`` 反向引用。
+    """
+    extra = getattr(task, "extra_data", None)
+    if not isinstance(extra, dict):
+        return None
+    meta = extra.get("runtimeLog")
+    if not isinstance(meta, dict):
+        return None
+    cursor = meta.get("cursor")
+    return cursor if isinstance(cursor, str) and cursor else None
 
 
 async def _resolve_adapter_type(db: AsyncSession, *, task: Any) -> str:
@@ -117,11 +188,16 @@ async def _collect_content(
     adapter_type: str,
     execution_id: str,
     max_bytes: int,
+    cursor: str | None = None,
 ) -> tuple[str, bool]:
-    """按游标把日志拉完，返回（内容, 是否被截断）。"""
+    """按游标把日志拉完，返回（内容, 是否被截断）。
+
+    ``cursor`` 是**上一个游标**：运行期同步（``runtime_log_sync``）已经写进
+    ``task_logs`` 的部分不要再拉一遍，否则终态归档会把同一段日志第二次写进日志表，
+    用户在页面上看到每行都重复。传 ``None`` 表示从头拉（例如运行期同步没跑过）。
+    """
     pieces: list[str] = []
     total = 0
-    cursor: str | None = None
     while True:
         chunk = await service.logs(adapter_type, execution_id, cursor)
         content = getattr(chunk, "content", "") or ""
@@ -156,7 +232,7 @@ async def harvest_task_runtime_logs(
     if not task_id:
         return 0
 
-    execution_id = task_external_execution_id(task)
+    execution_id = task_external_execution_id(task) or external_execution_id_from_extra(task)
     if not execution_id:
         # k8s/ssh 这类托管执行器把句柄写在 ExecutionRecord 上，任务元数据里没有。
         # 只查 extra_data 会一直取到 None，归档于是静默不生效（曾真实发生）。
@@ -181,7 +257,15 @@ async def harvest_task_runtime_logs(
             adapter_type=adapter_type,
             execution_id=execution_id,
             max_bytes=max(limit, 1),
+            # 接上运行期同步的游标：那一部分已经写进日志表，再拉一遍会让用户
+            # 看到每行都重复（真实缺陷，曾因为没有 live/final 之分而出现）。
+            cursor=runtime_log_cursor(task),
         )
+        if not content.strip():
+            return 0
+
+        # 与运行期同步保持同一种正文形态：时间戳由 task_logs.timestamp 承担。
+        content = strip_log_timestamps(content)
         if not content.strip():
             return 0
 
@@ -196,6 +280,7 @@ async def harvest_task_runtime_logs(
                     message=chunk,
                     log_data={
                         "source": RUNTIME_LOG_SOURCE,
+                        "stream": RUNTIME_LOG_STREAM_FINAL,
                         "sequence": index,
                         "adapter_type": adapter_type,
                         "external_id": execution_id,
@@ -221,7 +306,14 @@ async def harvest_task_runtime_logs(
 __all__ = [
     "MAX_MESSAGE_CHARS",
     "RUNTIME_LOG_SOURCE",
+    "RUNTIME_LOG_STREAM_FINAL",
+    "RUNTIME_LOG_STREAM_LIVE",
     "already_harvested",
+    "external_execution_id_from_extra",
     "harvest_task_runtime_logs",
+    "last_log_timestamp",
+    "resolve_adapter_type",
+    "runtime_log_cursor",
     "split_log_content",
+    "strip_log_timestamps",
 ]
