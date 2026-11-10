@@ -508,7 +508,7 @@ class Settings(BaseSettings):
     # 共享一个进程级池，第二个并发任务会拿到绑在别人循环上的连接，报
     # `Future attached to a different loop` / `another operation is in progress`。
     # 因此 Worker 进程必须用 `null`（任务本身是分钟级，每条任务一条连接的代价可忽略），
-    # API 进程保持 `pooled`。见 docs/17「Celery Worker 部署前置条件」。
+    # API 进程保持 `pooled`。见 docs/internal/17「Celery Worker 部署前置条件」。
     DB_POOL_MODE: Literal["pooled", "null"] = "pooled"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     CELERY_TASK_SOFT_TIME_LIMIT: int = 3600  # 1小时软超时

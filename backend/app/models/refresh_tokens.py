@@ -1,7 +1,7 @@
 # backend/app/models/refresh_tokens.py
 """Refresh Token 持久化模型（jti 存储 / 轮换 / 复用检测）。
 
-设计要点（docs/22 P2 认证授权）：
+设计要点（docs/archive/22 P2 认证授权）：
 * refresh token 仍是无状态 JWT，但签发的每个 ``jti`` 都会落库一行；
 * 轮换时旧 jti 标记 ``revoked_at`` 并写 ``replaced_by``，新 jti 另起一行；
 * 已吊销的 jti 再次出现即视为「复用入侵」，吊销该用户全部 refresh；
