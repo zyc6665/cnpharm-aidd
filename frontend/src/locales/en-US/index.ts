@@ -455,6 +455,14 @@ export default {
         ligandToAdmet: {
           name: 'Ligand Structure to Basic ADMET',
           description: 'Start from an uploaded ligand structure and chain ligand preparation, SMILES conversion, RDKit properties, and MolP-PC Basic ADMET.'
+        },
+        targetPreparation: {
+          name: 'Target Structure Preparation',
+          description: 'Upload a target structure, fill missing chains, add hydrogens and minimise energy to produce a docking-ready structure.'
+        },
+        mdFreeEnergy: {
+          name: 'Molecular Dynamics and Binding Free Energy',
+          description: 'Run short GROMACS MD and gmx_MMPBSA binding free energy on the prepared structure, with results on one page.'
         }
       }
     },
@@ -890,6 +898,30 @@ export default {
       resultAdmet: {
         title: 'Basic ADMET Result',
         description: 'Review MolP-PC prediction tables, model version, and scientific attachments.'
+      },
+      proteinPreparation: {
+        title: 'Target Structure Preparation',
+        description: 'Fill missing side chains and loops, add hydrogens, remove water, and minimise energy to produce a docking-ready structure.'
+      },
+      mdSimulation: {
+        title: 'Molecular Dynamics Simulation',
+        description: 'Solvate, minimise, equilibrate (NVT/NPT) and run short production MD, producing trajectories and analysis curves.'
+      },
+      freeEnergy: {
+        title: 'Binding Free Energy',
+        description: 'Evaluate binding free energy with gmx_MMPBSA (MM/GBSA), including per-frame decomposition.'
+      },
+      resultStructure: {
+        title: 'Target Structure Result',
+        description: 'Review the prepared target structure, chain composition, and downloadable structure files.'
+      },
+      resultMd: {
+        title: 'Dynamics Result',
+        description: 'Review RMSD, RMSF, radius of gyration, and trajectory files.'
+      },
+      resultFreeEnergy: {
+        title: 'Free Energy Result',
+        description: 'Review per-frame binding free energy, component decomposition, and convergence.'
       }
     },
     columns: {

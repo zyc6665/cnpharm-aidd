@@ -1,7 +1,7 @@
 import type { WorkflowArtifactSemanticType, WorkflowStepKey } from './artifact-types'
 import type { ArtifactInputSlot, ArtifactOutputSlot } from './contract-bindings'
 
-export type WorkflowCanvasPresetKind = 'free' | 'aidd' | 'docking' | 'pocket' | 'screening'
+export type WorkflowCanvasPresetKind = 'free' | 'aidd' | 'docking' | 'pocket' | 'screening' | 'dynamics'
 export type WorkflowCanvasNodeType = 'input' | 'tool' | 'artifact' | 'result' | 'condition' | 'map' | 'loop'
 
 export interface WorkflowConditionExpression {

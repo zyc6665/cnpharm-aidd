@@ -453,6 +453,14 @@ export default {
         ligandToAdmet: {
           name: '配体结构到基础 ADMET',
           description: '从上传的配体结构开始，串联配体处理、SMILES 转换、RDKit 属性和 MolP-PC 基础 ADMET。'
+        },
+        targetPreparation: {
+          name: '靶点结构准备',
+          description: '上传靶点结构后先做补链、加氢与能量最小化，产出可对接的制备结构。'
+        },
+        mdFreeEnergy: {
+          name: '分子动力学与结合自由能',
+          description: '制备结构后并行跑 GROMACS 短程 MD 与 gmx_MMPBSA 结合自由能评估，结果一页可看。'
         }
       }
     },
@@ -888,6 +896,30 @@ export default {
       resultAdmet: {
         title: '基础 ADMET 结果',
         description: '查看 MolP-PC 输出的预测表格、模型版本和科学说明附件。'
+      },
+      proteinPreparation: {
+        title: '靶点结构准备',
+        description: '补全缺失侧链与环、加氢、去水并做能量最小化，产出可对接的制备结构。'
+      },
+      mdSimulation: {
+        title: '分子动力学模拟',
+        description: '对制备结构做溶剂化、能量最小化、NVT/NPT 平衡与短程生产 MD，产出轨迹与分析曲线。'
+      },
+      freeEnergy: {
+        title: '结合自由能评估',
+        description: '用 gmx_MMPBSA（MM/GBSA）评估复合物结合自由能，给出逐帧分解。'
+      },
+      resultStructure: {
+        title: '靶点结构结果',
+        description: '查看制备后的靶点结构、链组成与结构文件下载。'
+      },
+      resultMd: {
+        title: '动力学结果',
+        description: '查看 RMSD、RMSF、回转半径与轨迹文件。'
+      },
+      resultFreeEnergy: {
+        title: '自由能结果',
+        description: '查看结合自由能逐帧数值、组分分解与收敛情况。'
       }
     },
     columns: {
