@@ -77,6 +77,7 @@
       </template>
     </template>
   </div>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -104,6 +105,7 @@ import { formatFixed } from '@/domain/common/format'
   import type { EnergyComponentMean, FreeEnergyComponentKey } from './analysis'
   import type { ArtifactVersionFile } from '@/types/artifacts'
   import type { FreeEnergyRow, MdResultDetail } from '@/types/md'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   interface PapaParseResult {
     data: Array<Record<string, string>>

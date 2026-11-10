@@ -128,6 +128,7 @@
       </a-row>
     </template>
   </div>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -151,6 +152,7 @@
   import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
   import type { MdAnalysisRow, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole, RmsfRow } from '@/types/md'
   import type { Task } from '@/types/models'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   interface PapaParseResult {
     data: Array<Record<string, string>>

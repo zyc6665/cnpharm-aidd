@@ -133,6 +133,7 @@
       {{ t('candidates.errors.load') }}
     </p>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -152,6 +153,7 @@
   } from '@/domain/compounds'
   import type { Candidate } from '@/types/compounds'
   import { formatNullable, humanizeKey, formatDateTimeOrDash } from '@/domain/common/format'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()

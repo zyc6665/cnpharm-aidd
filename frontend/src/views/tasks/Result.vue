@@ -64,6 +64,7 @@
       </template>
     </div>
   </div>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -87,6 +88,7 @@
   import ScreenResult from '@/views/screening/ScreenResult.vue'
   import MdResult from '@/views/md/MdResult.vue'
   import FreeEnergyResult from '@/views/md/FreeEnergyResult.vue'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const router = useRouter()

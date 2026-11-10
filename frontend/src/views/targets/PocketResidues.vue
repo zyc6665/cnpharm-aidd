@@ -75,6 +75,7 @@
       </a-table>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -88,6 +89,7 @@
   import { getPocket, listPocketResidues } from '@/api/targets'
   import { formatOptionalText, formatResidueContribution } from '@/domain/targets'
   import type { PocketResidue } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()

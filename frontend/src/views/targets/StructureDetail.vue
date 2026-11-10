@@ -143,6 +143,7 @@
       </div>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -169,6 +170,7 @@
     ProteinStructureDetail,
     StructureFileLink
   } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()

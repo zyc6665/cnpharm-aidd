@@ -345,6 +345,7 @@
       {{ t('results.errors.loadResult') }}
     </p>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -368,6 +369,7 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     TraceabilityOutput,
     TraceabilityPackage
   } from '@/types/compounds'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()

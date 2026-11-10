@@ -65,6 +65,10 @@ export default {
     seconds: '秒',
     sort: '排序',
     memberUsername: '成员用户名',
+    // 结果类页面的统一免责说明（V3.0 各需求用例表的业务规则原文口径）
+    disclaimer: {
+      resultNotice: '预测与计算结果仅作为研发辅助参考，不作为实验验证结论。'
+    },
     // 列表四态通用文案（加载失败 / 空状态）
     listStates: {
       errorTitle: '加载失败',

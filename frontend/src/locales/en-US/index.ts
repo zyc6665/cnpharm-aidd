@@ -65,6 +65,9 @@ export default {
     seconds: 'seconds',
     sort: 'Sort',
     memberUsername: 'Member username',
+    disclaimer: {
+      resultNotice: 'Predictions and computed results are for research reference only and must not be treated as experimental conclusions.'
+    },
     // Shared list four-state copy (load error / empty)
     listStates: {
       errorTitle: 'Failed to load',

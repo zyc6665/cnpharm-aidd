@@ -13,6 +13,7 @@ import type { ProjectResultDetail, ResultOutputArtifact } from '@/types/compound
 import type { Task } from '@/types/models'
 import type { PoseInteraction, PoseMetadata, PosesMetadata } from '@/types/screening'
 import type { VisualizationScene, VisualizationSceneEntry } from '@/domain/tasks'
+import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -286,6 +287,7 @@ onMounted(() => {
       </a-card>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <style scoped lang="less">

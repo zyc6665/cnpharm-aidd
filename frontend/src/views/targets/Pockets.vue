@@ -99,6 +99,7 @@
       </a-table>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -119,6 +120,7 @@
     resolveTargetErrorMessage
   } from '@/domain/targets'
   import type { PocketSummary } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const router = useRouter()

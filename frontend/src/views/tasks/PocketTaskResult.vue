@@ -57,6 +57,7 @@
     <TaskOutputSummary v-if="hasOutput" :task="task" />
     <AppEmptyState v-else :title="t('tasks.resultPage.noOutput')" />
   </div>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -74,6 +75,7 @@
     getTaskResultMetrics,
   } from '@/domain/tasks/result'
   import type { Task } from '@/types/models'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const props = defineProps<{ task: Task; taskId: string }>()
   const { t } = useI18n()

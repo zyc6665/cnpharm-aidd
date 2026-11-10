@@ -164,6 +164,7 @@
       </a-form>
     </a-modal>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -190,6 +191,7 @@ import { formatNumber } from '@/domain/common/format'
   import type { CandidateCreateInput } from '@/types/compounds'
   import type { DesignGenerationResult, DesignTableColumn, DesignTableRow } from '@/types/design'
   import type { TaskStatus } from '@/types/models'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()
