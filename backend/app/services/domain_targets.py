@@ -329,6 +329,19 @@ async def structure_file_records(
     return record
 
 
+async def structure_input_file_record(
+    db: AsyncSession, *, structure: ProteinStructure, user: User
+) -> FileModel:
+    """下游计算（口袋预测/对接）的输入结构：有准备版本就优先用它。
+
+    任务规格 TGT-04-1 要求口袋预测以「结构准备后的可对接结构」为输入。过去这里
+    固定取 ``structure``（原始结构），准备产物等于白算；结构准备回写
+    ``prepared_urn`` 之后按角色取值才闭环（docs/26 H-16）。
+    """
+    role = "prepared" if _structure_urn(structure, "prepared") else "structure"
+    return await structure_file_records(db, structure=structure, user=user, role=role)
+
+
 # ---------------------------------------------------------------------------
 # Pocket selection & creation
 # ---------------------------------------------------------------------------
@@ -558,7 +571,7 @@ async def submit_pocket_prediction(
 ) -> Task:
     target = await structure_target(db, structure)
     await require_target_write_access(db, target=target, user=user)
-    source = await structure_file_records(db, structure=structure, user=user)
+    source = await structure_input_file_record(db, structure=structure, user=user)
     tool = await resolve_tool(
         db,
         slugs=POCKET_PREDICT_TOOL_SLUGS,

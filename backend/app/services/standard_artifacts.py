@@ -47,6 +47,11 @@ class StandardArtifactPersistenceResult:
     artifact_ids_by_ref: dict[str, str] = field(default_factory=dict)
     artifact_version_ids_by_ref: dict[str, str] = field(default_factory=dict)
     file_ids_by_artifact_ref: dict[str, list[str]] = field(default_factory=dict)
+    # 领域回写（docs/26 H-16）要在同一事务里把结果投影到 protein_structures /
+    # pockets，它需要「哪个角色对应哪个文件」以及产物自带的 metadata，因此这里
+    # 一并带出，避免下游再解析一遍 result.v2 或反查 ArtifactVersionFile。
+    file_ids_by_artifact_role: dict[str, dict[str, str]] = field(default_factory=dict)
+    parsed_artifacts_by_ref: dict[str, ParsedStandardArtifact] = field(default_factory=dict)
 
 
 FileRecordResolver = Callable[
@@ -144,8 +149,10 @@ async def create_artifact_versions_from_parsed_result(
     refs: dict[str, str] = {}
     artifact_ids_by_ref: dict[str, str] = {}
     file_ids_by_ref: dict[str, list[str]] = {}
+    file_ids_by_role: dict[str, dict[str, str]] = {}
+    parsed_by_ref: dict[str, ParsedStandardArtifact] = {}
     for artifact in parsed_result.artifacts:
-        ref_key, artifact_id, version_id, file_ids = await _persist_artifact(
+        ref_key, artifact_id, version_id, file_ids, role_file_ids = await _persist_artifact(
             db,
             task=task,
             project_id=project_id,
@@ -156,6 +163,8 @@ async def create_artifact_versions_from_parsed_result(
         artifact_ids_by_ref[ref_key] = artifact_id
         refs[ref_key] = version_id
         file_ids_by_ref[ref_key] = file_ids
+        file_ids_by_role[ref_key] = role_file_ids
+        parsed_by_ref[ref_key] = artifact
 
     for relation in parsed_result.relations:
         try:
@@ -194,6 +203,8 @@ async def create_artifact_versions_from_parsed_result(
         artifact_ids_by_ref=artifact_ids_by_ref,
         artifact_version_ids_by_ref=refs,
         file_ids_by_artifact_ref=file_ids_by_ref,
+        file_ids_by_artifact_role=file_ids_by_role,
+        parsed_artifacts_by_ref=parsed_by_ref,
     )
 
 
@@ -205,7 +216,7 @@ async def _persist_artifact(
     user_id: str,
     artifact: ParsedStandardArtifact,
     file_record_resolver: FileRecordResolver | None,
-) -> tuple[str, str, str, list[str]]:
+) -> tuple[str, str, str, list[str], dict[str, str]]:
     try:
         standard_ref = parse_standard_ref(artifact.type)
     except StandardArtifactRegistryError as exc:
@@ -309,6 +320,7 @@ async def _persist_artifact(
         artifact_record.id,
         version.id,
         [file.id for file in file_records],
+        {role: file_record.id for role, file_record in resolved_files},
     )
 
 

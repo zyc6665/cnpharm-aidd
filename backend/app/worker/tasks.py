@@ -31,6 +31,7 @@ from app.tasks.resource_lease import release_task_resource_reservation
 from app.tasks.resource_wait import resource_wait_metadata
 from app.tasks.state_machine import TaskStateMachine
 from app.services.runtime_logs import harvest_task_runtime_logs
+from app.services.domain_results import write_back_domain_results
 
 logger = get_task_logger(__name__)
 _CAPABILITY_SIGNAL_REFRESH_INTERVAL_SECONDS = 30.0
@@ -694,6 +695,17 @@ async def _execute_tool_task_impl_inner(
             # 归档容器日志：Job 的 TTL 一到 Pod 就没了，日志必须先落库。
             # 尽力而为，失败只记 warning，不影响任务成功写入。
             await harvest_task_runtime_logs(db, task=task)
+
+            # 领域回写：把标准产物投影到 protein_structures / pockets（docs/26 H-16）。
+            # 与任务状态同一事务提交——域数据与「任务成功」必须一起可见；
+            # 回写自身用 SAVEPOINT 隔离，失败只留标记，不影响任务成功。
+            await write_back_domain_results(
+                db,
+                task=task,
+                persistence_result=standard_persistence,
+                tool=tool,
+                tool_version=tool_version,
+            )
 
             # 更新任务状态
             TaskStateMachine.complete(
