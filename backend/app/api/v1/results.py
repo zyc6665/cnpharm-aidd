@@ -45,6 +45,7 @@ from app.models.tools import Tool
 from app.models.users import User
 from app.services.artifact_outputs import artifact_outputs_for_task
 from app.services.audit_exports import record_export
+from app.services.candidate_results import candidate_result_conditions
 from app.services.domain_compounds import require_candidate_read_access
 from app.services.param_diff import (
     MAX_TASKS,
@@ -634,7 +635,9 @@ async def list_candidate_results(
 
     query = select(Task).where(
         Task.status.in_(RESULT_STATUSES),
-        Task.extra_data["domain"]["candidate_id"].as_string() == candidate_id,
+        candidate_result_conditions(
+            candidate_id=str(candidate.id), producing_task_id=candidate.task_id
+        ),
     )
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))

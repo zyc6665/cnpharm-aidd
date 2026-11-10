@@ -216,6 +216,37 @@ test('CandidateSetDetail.vue 支持成员增删与导出', () => {
   assert.ok(source.includes('snapshot_score'), 'CandidateSetDetail.vue 需要展示 snapshot_score')
 })
 
+test('CandidateDetail.vue shows the results related to the candidate', () => {
+  // docs/26 H-14: the page used to link a single task id, so users could not
+  // tell how many runs involved the candidate or whether they succeeded.
+  const viewSource = readSource('src/views/compounds/CandidateDetail.vue')
+  assert.ok(
+    viewSource.includes('listCandidateResults'),
+    'CandidateDetail.vue must call listCandidateResults'
+  )
+  assert.ok(
+    viewSource.includes('data-testid="candidate-result-table"'),
+    'CandidateDetail.vue needs a related-result table'
+  )
+  assert.ok(
+    viewSource.includes('data-testid="candidate-no-results"'),
+    'CandidateDetail.vue needs an empty state for candidates without results'
+  )
+
+  const apiSource = readSource('src/api/results.ts')
+  assert.ok(
+    apiSource.includes('/candidates/${candidateId}/results'),
+    'api/results.ts must request /candidates/{id}/results'
+  )
+
+  for (const localePath of ['src/locales/zh-CN/index.ts', 'src/locales/en-US/index.ts']) {
+    const localeSource = readSource(localePath)
+    for (const key of ['relatedResults:', 'noRelatedResults:', 'resultColumns:']) {
+      assert.ok(localeSource.includes(key), `${localePath} is missing ${key}`)
+    }
+  }
+})
+
 test('七个页面源码不含 any 类型逃逸', () => {
   for (const viewFile of VIEW_FILES) {
     const source = readSource(viewFile)

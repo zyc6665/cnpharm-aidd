@@ -45,6 +45,12 @@ class TaskCreate(BaseModel):
         description="标准 Artifact 输入槽的直接上传文件绑定，按 input name 索引",
     )
     priority: str = Field(default="normal", description="优先级")
+    candidate_id: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=36,
+        description="来源候选物ID：声明该任务为哪个候选物而跑，提交后可在该候选物的结果里查到",
+    )
 
 
 class ToolVersionSmokeCreate(TaskInputSchema):

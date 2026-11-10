@@ -127,6 +127,41 @@
           {{ t('candidates.detail.noRelatedTask') }}
         </p>
       </section>
+
+      <!--
+        候选物相关结果：后端按「产出它的任务」+「为它提交的任务」取并集。
+        只放一个 task_id 链接时，用户看不出跑过几次、结果成没成功。
+      -->
+      <section class="candidate-section">
+        <h3 class="section-title">{{ t('candidates.detail.relatedResults') }}</h3>
+        <a-table
+          v-if="resultRows.length"
+          :scroll="{ x: 'max-content' }"
+          :columns="resultColumns"
+          :data-source="resultRows"
+          :pagination="false"
+          row-key="task_id"
+          size="small"
+          data-testid="candidate-result-table"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'name'">
+              <router-link :to="resultRoute(record.task_id)" class="related-link">
+                {{ record.name || record.task_id }}
+              </router-link>
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <a-tag>{{ t(`tasks.status.${record.status}`) }}</a-tag>
+            </template>
+            <template v-else-if="column.key === 'finished_at'">
+              {{ formatDateTimeOrDash(record.finished_at) }}
+            </template>
+          </template>
+        </a-table>
+        <p v-else class="section-empty" data-testid="candidate-no-results">
+          {{ t('candidates.detail.noRelatedResults') }}
+        </p>
+      </section>
     </template>
 
     <p v-else class="section-empty" data-testid="candidate-not-found">
@@ -145,13 +180,14 @@
   import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import { getCandidate } from '@/api/compounds'
+  import { listCandidateResults } from '@/api/results'
   import {
     PROPERTY_COLUMNS,
     candidateLocationLabel,
     formatPropertyValue,
     readPropertyValue
   } from '@/domain/compounds'
-  import type { Candidate } from '@/types/compounds'
+  import type { Candidate, ProjectResultSummary } from '@/types/compounds'
   import { formatNullable, humanizeKey, formatDateTimeOrDash } from '@/domain/common/format'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
@@ -177,6 +213,34 @@
   const loading = ref(false)
   const loadError = ref(false)
   const candidate = ref<Candidate | null>(null)
+
+  /**
+   * 相关结果单独加载：结果列表失败不该让整页变成错误态——候选物本身、结构、
+   * 性质都还是可用的，只是暂时看不到它在哪些任务里出现过。
+   */
+  const resultRows = ref<ProjectResultSummary[]>([])
+
+  const resultColumns = computed(() => [
+    { title: t('candidates.resultColumns.name'), dataIndex: 'name', key: 'name' },
+    { title: t('candidates.resultColumns.tool'), dataIndex: 'tool_name', key: 'tool' },
+    { title: t('candidates.resultColumns.status'), dataIndex: 'status', key: 'status', width: 110 },
+    {
+      title: t('candidates.resultColumns.finishedAt'),
+      dataIndex: 'finished_at',
+      key: 'finished_at',
+      width: 180
+    }
+  ])
+
+  async function loadResults(): Promise<void> {
+    if (!candidateId.value) return
+    try {
+      const response = await listCandidateResults(candidateId.value, { page: 1, page_size: 50 })
+      resultRows.value = response.data.items ?? []
+    } catch {
+      resultRows.value = []
+    }
+  }
 
   /**
    * 候选物附加属性：键名随生成工具不同而不同，因此不做白名单、不隐藏未识别键，
@@ -249,6 +313,7 @@
 
   onMounted(() => {
     void loadCandidate()
+    void loadResults()
   })
 </script>
 

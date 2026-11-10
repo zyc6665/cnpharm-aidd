@@ -27,6 +27,23 @@ export const getResult = (taskId: string): Promise<ApiResponse<ProjectResultDeta
   return get<ProjectResultDetail>(`/results/${taskId}`, undefined, OPTIONS)
 }
 
+/**
+ * 某个候选物相关的计算结果。
+ *
+ * 后端按两个方向取并集：**产出该候选物的任务**（`Candidate.task_id`）与**为它提交的
+ * 任务**（提交时声明 `candidate_id`）。前者一定存在，所以这个列表不再是永远空的。
+ */
+export const listCandidateResults = (
+  candidateId: string,
+  params?: { page?: number; page_size?: number }
+): Promise<ApiResponse<PaginatedResponse<ProjectResultSummary>>> => {
+  return get<PaginatedResponse<ProjectResultSummary>, { page?: number; page_size?: number }>(
+    `/candidates/${candidateId}/results`,
+    params,
+    OPTIONS
+  )
+}
+
 export const getTraceability = (taskId: string): Promise<ApiResponse<TraceabilityPackage>> => {
   return get<TraceabilityPackage>(`/results/${taskId}/traceability`, undefined, OPTIONS)
 }

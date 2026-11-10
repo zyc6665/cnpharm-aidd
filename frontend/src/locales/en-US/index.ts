@@ -1538,7 +1538,16 @@ export default {
       attrsHint: 'Extra fields written during design; raw keys differ per tool',
       relatedTask: 'Related task',
       relatedResult: 'View result detail',
-      noRelatedTask: 'No related task'
+      noRelatedTask: 'No related task',
+      relatedResults: 'Related results',
+      noRelatedResults:
+        'No task has used this candidate yet — pick it when submitting a task from a design page'
+    },
+    resultColumns: {
+      name: 'Task',
+      tool: 'Tool',
+      status: 'Status',
+      finishedAt: 'Finished at'
     },
     errors: {
       load: 'Failed to load the candidate'

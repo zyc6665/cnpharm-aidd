@@ -22,6 +22,7 @@ from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
+from app.services.candidate_results import attach_candidate_domain
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.project_quotas import check_submission_allowed
 from app.services.rbac import require_project_action
@@ -740,6 +741,16 @@ async def create_and_schedule_tool_task(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
+    # 候选物身份进任务领域上下文（V3.0 §4.8 / docs/26 H-14）：``/candidates/{id}/results``
+    # 读的就是 ``domain.candidate_id`` 这个键，而过去全仓没有写入方，于是那个接口
+    # 永远返回空列表。放在这里而不是 HTTP 层，是因为这是全平台唯一的建任务入口。
+    extra_data = await attach_candidate_domain(
+        db,
+        extra_data=extra_data,
+        candidate_id=task_data.candidate_id,
+        project_id=(extra_data or {}).get("project_id"),
+        user=current_user,
+    )
     command = TaskCommand.from_prepared_run(
         user_id=str(current_user.id),
         tool_id=str(task_data.tool_id),

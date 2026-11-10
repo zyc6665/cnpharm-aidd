@@ -1534,7 +1534,15 @@ export default {
       attrsHint: '设计过程写入的附加字段，原始键名随工具不同而不同',
       relatedTask: '关联任务',
       relatedResult: '查看结果详情',
-      noRelatedTask: '未关联任务'
+      noRelatedTask: '未关联任务',
+      relatedResults: '相关计算结果',
+      noRelatedResults: '还没有用过这个候选物的任务——从设计页提交任务时选中它即可'
+    },
+    resultColumns: {
+      name: '任务',
+      tool: '工具',
+      status: '状态',
+      finishedAt: '完成时间'
     },
     errors: {
       load: '候选物详情加载失败'
