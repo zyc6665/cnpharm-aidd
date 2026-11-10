@@ -104,3 +104,6 @@ frontend/_shots/
 
 # local build temp
 frontend/.tmp_build_tmp/
+
+# 甲方文档抽取产物与一次性文档生成/校验脚本（含甲方原文摘录，不入库）
+_extract/
