@@ -175,6 +175,10 @@ class RESOURCE_TYPE(_StringEnum):
     SESSION = "session"
     SYSTEM = "system"
     DECISION_RECORD = "decision_record"
+    #: 领域对象也要能被审计定位：导出候选集、导出结构包都不是「文件」，
+    #: 记成 ``file`` 会让审计员按资源维度排查时找不到那次导出。
+    CANDIDATE_SET = "candidate_set"
+    STRUCTURE = "structure"
 
 
 #: 供 schema 类型注解使用的 Literal 别名（值集合来自上面的枚举）。

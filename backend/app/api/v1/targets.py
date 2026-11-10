@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,6 +28,7 @@ from app.feature_flags import require_feature_flag
 from app.files.content import read_file_bytes
 from app.files.remote_access_tokens import create_browser_file_access_token
 from app.files.writer import store_file_bytes
+from app.logging.audit import ResourceType
 from app.models.files import File as FileModel, FileSourceType
 from app.models.targets import PROTEIN_SOURCE_IMPORT, Protein, ProteinStructure, Target
 from app.models.users import User
@@ -48,6 +49,7 @@ from app.schemas.targets import (
     TargetUpdate,
 )
 from app.services import data_versions, domain_targets
+from app.services.audit_exports import record_export
 from app.services.project_access import load_project_membership, require_project_role
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -586,6 +588,7 @@ async def get_structure_pdb(
 @router.post("/structures/{structure_id}:export", response_model=dict)
 async def export_structure(
     structure_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -605,6 +608,16 @@ async def export_structure(
     ]
     if not files:
         raise NotFoundException("该结构尚无可用文件")
+    record_export(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.STRUCTURE,
+        resource_id=str(structure.id),
+        resource_name=structure.source_type,
+        kind="structure_bundle",
+        file_roles=[entry["role"] for entry in files],
+        sha256=structure.sha256,
+    )
     return success_response(
         data={
             "structure_id": structure.id,

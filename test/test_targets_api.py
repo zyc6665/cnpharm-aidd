@@ -27,6 +27,7 @@ from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.files.writer import store_file_bytes  # noqa: E402
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
@@ -474,6 +475,41 @@ async def test_structure_pdb_endpoint_returns_download_entries(
     )
     assert exported.status_code == 200
     assert exported.json()["data"]["files"][0]["role"] == "structure"
+
+
+@pytest.mark.asyncio
+async def test_structure_export_writes_audit_event(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+    monkeypatch,
+):
+    """导出结构包必须留痕（V3.0 §6.2 / docs/26 H-9）。"""
+    target = await _create_target(api_client, project.id)
+    protein = await _create_protein(api_client, target["id"])
+    structure = await _create_structure(
+        api_client, db_session, protein["id"], project.id, users[OWNER].id
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(
+        f"/api/v1/structures/{structure['id']}:export", headers=_headers(VIEWER)
+    )
+    assert response.status_code == 200
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.STRUCTURE
+    assert event.resource_id == structure["id"]
+    assert event.extra["kind"] == "structure_bundle"
+    assert event.extra["file_roles"] == ["structure"]
 
 
 @pytest.mark.asyncio

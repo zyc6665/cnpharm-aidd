@@ -496,6 +496,48 @@ class AuditLogger:
         )
         self.log(event)
 
+    def log_export_operation(
+        self,
+        user_id: str,
+        resource_type: ResourceType,
+        resource_id: str,
+        resource_name: Optional[str] = None,
+        result: AuditResult = AuditResult.SUCCESS,
+        client_ip: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        **extra
+    ) -> None:
+        """记录「把数据带出平台」的导出动作。
+
+        V3.0 §6.2 要求「数据传输加密、导出下载留痕」，而下载与导出不是一回事：
+        下载是取某个文件，导出是**按条件生成一份新内容**（追溯包 JSON、PDF 报告、
+        候选集 CSV、结构包清单）。后者若只在下载那一刻留痕，导出「生成了什么、
+        按什么范围生成」就无从追查——所以这里单独记一条，``resource_type`` 指向
+        被导出的领域对象而不是新生成的文件。
+
+        Args:
+            user_id: 执行导出的用户ID
+            resource_type: 被导出的资源类型（任务/候选集/结构…）
+            resource_id: 被导出的资源ID
+            resource_name: 资源名称快照（用户改名后仍可读）
+            result: 导出结果
+            client_ip: 客户端IP
+            user_agent: User-Agent
+            **extra: 额外字段（行数、格式、生成的文件ID等）
+        """
+        event = AuditEvent(
+            action=AuditAction.EXPORT,
+            result=result,
+            user_id=user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            resource_name=resource_name,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            extra=extra,
+        )
+        self.log(event)
+
 
 class AuditLogReader:
     """审计日志读取器

@@ -42,6 +42,7 @@ from app.services.refresh_token_store import (
 )
 from app.common.responses import success_response
 from app.common.exceptions import BusinessException, UnauthorizedException
+from app.common.request_meta import client_meta
 from app.common.time import utcnow
 from app.logging.audit import AuditResult, get_audit_logger
 
@@ -61,13 +62,7 @@ class RefreshTokenRequest(BaseModel):
 
 def _client_meta(request: Request | None) -> tuple[str | None, str | None]:
     """从请求里取 (client_ip, user_agent)，审计事件用。"""
-    if request is None:
-        return None, None
-    client = getattr(request, "client", None)
-    ip = getattr(client, "host", None) if client else None
-    headers = getattr(request, "headers", None)
-    user_agent = headers.get("user-agent") if headers is not None else None
-    return ip, user_agent
+    return client_meta(request)
 
 
 def _login_failed() -> BusinessException:

@@ -31,7 +31,13 @@ from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.files.writer import store_file_bytes  # noqa: E402
-from app.logging.audit import AuditAction, AuditEvent, AuditResult, ResourceType  # noqa: E402
+from app.logging.audit import (  # noqa: E402
+    AuditAction,
+    AuditEvent,
+    AuditResult,
+    ResourceType,
+    get_audit_logger,
+)
 from app.main import app  # noqa: E402
 from app.models.artifacts import Artifact, ArtifactVersion  # noqa: E402
 from app.models.compounds import Candidate  # noqa: E402
@@ -643,6 +649,53 @@ async def test_export_writes_downloadable_json(
     assert data["filename"].endswith(".json")
     assert len(data["sha256"]) == 64
     assert data["download_url"].startswith("/api/v1/files/")
+
+
+@pytest.mark.asyncio
+async def test_export_writes_audit_event(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    monkeypatch,
+):
+    """导出必须留痕（V3.0 §6.2「导出下载留痕」/ docs/26 H-9）。
+
+    ``AuditAction.EXPORT`` 建模时就在枚举里，但一直没有调用方；这条用例锁住
+    「导出追溯包 → 恰好多一条 EXPORT 事件，且资源指向被导出的任务」。
+    """
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session, owner=users[OWNER], project=project, filename="egfr.pdb", content=b"ATOM\n"
+    )
+    task = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(f"/api/v1/results/{task.id}:export", headers=_headers(OWNER))
+    assert response.status_code == 200
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.TASK
+    assert event.resource_id == task.id
+    assert event.user_id == str(users[OWNER].id)
+    assert event.extra["kind"] == "traceability_package"
+    assert event.extra["format"] == "json"
+    assert event.extra["sha256"] == response.json()["data"]["sha256"]
+    # 审计来源信息必须带出来，否则「谁、从哪里导出」这件事仍然查不到。
+    assert event.client_ip
+
+    row = event_to_row(event)
+    assert row["action"] == "EXPORT"
+    assert row["resource_type"] == "TASK"
 
 
 @pytest.mark.asyncio
