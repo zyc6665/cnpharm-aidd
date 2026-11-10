@@ -13,7 +13,7 @@
 
 - **与产品线的关系**：单向、低频。产品线的通用修复可以 cherry-pick 进来；交付线的领域代码**不回灌**产品线。
 - **为什么独立成仓**：交付线要删掉约 8900 行产品线专属代码（Agent 对话、远端工具自注册、公网数据库查询），还要改 38 个测试文件；放在产品线里做减法会持续和产品线演进冲突，而交付期只有 3 个月。
-- **溯源**：分叉点标签 `cnpharm-base-ce9a521`，详细策略见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md)。
+- **溯源**：分叉点标签 `cnpharm-base-ce9a521`，详细策略见 [docs/internal/17-交付仓库与分支策略.md](docs/internal/17-交付仓库与分支策略.md)。
 
 ## 2. 三分钟上手
 
@@ -60,7 +60,7 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 | Beat | `celery -A app.worker.celery_app beat` | 定时任务：`reclaim-stale-*`、`cleanup-expired-files`、`reconcile-execution-records`、`heartbeat-worker-capability` |
 
 自检：`GET /api/v1/system/health` 的 `celery` 项应为 `healthy`，任务详情的
-`dispatch.worker_available` 应为 `true`。详见 `docs/17-交付仓库与分支策略.md` §5.38。
+`dispatch.worker_available` 应为 `true`。详见 `docs/internal/17-交付仓库与分支策略.md` §5.38。
 
 ## 3. 目录结构
 
@@ -101,7 +101,7 @@ example/            模型资产样例（tool-package v2）
 
 工作流：`feature/xxx` → PR → CI 全绿 → approve（团队成形后强制 1 人）→ squash 合入 `main` → 删分支。
 
-> **当前阶段说明**：团队还没拉起来，`main` 的保护规则把 `required_approving_review_count` 设为 `0`——否则唯一开发者无法合入自己的 PR，交付线会直接被锁死。**成员到位后立刻改为 1**，命令见 [docs/17](docs/17-交付仓库与分支策略.md) 第 7 节。管理员约束（`enforce_admins`）始终保持开启：保护规则要约束包括自己在内的所有人。
+> **当前阶段说明**：团队还没拉起来，`main` 的保护规则把 `required_approving_review_count` 设为 `0`——否则唯一开发者无法合入自己的 PR，交付线会直接被锁死。**成员到位后立刻改为 1**，命令见 [docs/internal/17](docs/internal/17-交付仓库与分支策略.md) 第 7 节。管理员约束（`enforce_admins`）始终保持开启：保护规则要约束包括自己在内的所有人。
 
 **每条提交必须带 `Refs:`**，指向需求或决策编号，例如：
 
@@ -125,12 +125,12 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 | **必须新建** | Boltz-2 等 9 个**真**模型资产（页面与链路已由 6 个 mock 包跑通，替换时只换镜像 tag 与 `metadata.version`）、drp-node-agent 本体、LDAP、`>24h` 超长任务审批标签 |
 | **必须删除** | 已于步骤 3、步骤 4 完成：`agents/aidd` Agent 面、`external_databases`、`remote_tools`、`remote_capacity`、`image_registry`、`model_services`（详见下方「已完成的减法」） |
 
-**已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3、步骤 4）：
+**已完成的减法**（[docs/internal/17](docs/internal/17-交付仓库与分支策略.md) 第 5 节步骤 3、步骤 4）：
 
 - 步骤 3（拆包）：`agents/aidd` 的能力注册表与内建工具迁到 `backend/app/tools/`；Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
 - 步骤 4（离线合规）：`external_databases`（公网 PubChem/RCSB/ChEMBL/PDBbind 抓取）、`remote_tools` + `remote_capacity` + `remote_api` 执行器、`image_registry` 死代码、`model_services`（LLM 服务配置）、前端 LLM 预设与产品线品牌外链全部删除；`builtin-fetch-*` / `builtin-query-*` 五个在线工具退场，画布预设 `PubChem 到基础 ADMET` 改为离线可执行的 `配体结构到基础 ADMET`。迁移 `20261025_02_drop_model_services.py`、`20261025_03_remove_external_database_tools.py`。`.github/offline-allowlist.txt` 现为空。
 
-**已完成的加法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 5~步骤 14）：
+**已完成的加法**（[docs/internal/17](docs/internal/17-交付仓库与分支策略.md) 第 5 节步骤 5~步骤 14）：
 
 - 步骤 5（靶点域）：新增 `targets` / `proteins` / `protein_structures` / `pockets` / `pocket_residues` 五张表与迁移 `backend/alembic/versions/20261026_01_domain_targets_and_pockets.py`；同一结构只允许一个 `selected` 口袋，由分区唯一索引 `uq_pockets_selected_structure` 在数据库层保证。API 覆盖 docs/05 §5 的 15 个端点（项目靶点集合、靶点增删改查、蛋白序列导入与版本、结构导入/预测/准备/导出、口袋登记/预测/选定/残基），领域逻辑集中在 `backend/app/services/domain_targets.py`，任务提交统一走 `create_and_schedule_tool_task`（与单项任务、工作流节点同一执行单元）。
 
@@ -152,7 +152,7 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 - 步骤 14（排队超时巡检）：队列一旦停止消费，任务会永远挂在 `QUEUED`——页面显示「排队中」而实际永远不会开始，用户看不到失败也就不会重试，运维看队列深度还正常，比直接失败更难排查。`backend/app/services/queue_timeout.py` 以 `extra_data["queued_at"]`（不是 `created_at`）为锚点每 5 分钟扫一批，超 `TASK_QUEUE_TIMEOUT_SECONDS`（默认 6 小时）置 `TIMEOUT` 并释放资源预约、推 SSE。同一步还暴露并修掉一处 CI 永久挂死：`while True` + 只靠 `cancel()` 退出且循环体无挂起点的后台循环，会让事件循环被占满、测试内超时也投递不进去，只能靠 CI 层 `timeout-minutes` 兜底。
 
-首轮改造的 14 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
+首轮改造的 14 步提交切分见 [docs/internal/17-交付仓库与分支策略.md](docs/internal/17-交付仓库与分支策略.md) 第 5 节。
 
 ## 6. 关键文档入口
 

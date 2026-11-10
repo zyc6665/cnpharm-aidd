@@ -26,7 +26,7 @@ S3/MinIO 的原生 Multipart Upload（那个要把所有片挂在同一个 ``upl
 3. 断点续传语义更简单：每片是否已收到就是对象是否存在，不需要回查 upload_id。
 
 原生 Multipart 直传（浏览器直传对象存储、平台只做签名）仍是后续优化项，
-已经写进 ``docs/17-交付仓库与分支策略.md`` §5.7 的未落地清单。
+已经写进 ``docs/internal/17-交付仓库与分支策略.md`` §5.7 的未落地清单。
 """
 
 from __future__ import annotations

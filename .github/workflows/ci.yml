@@ -232,7 +232,7 @@ jobs:
     name: 依赖漏洞审计（报告）
     runs-on: ubuntu-latest
     # 先以“报告”形态接入：requirements.txt 现有 langgraph/pydantic 解析冲突
-    # （pip-audit -r 无法整体安装，详见 docs/22），且 python-jose 存在上游暂无
+    # （pip-audit -r 无法整体安装，详见 docs/archive/22），且 python-jose 存在上游暂无
     # 修复版本的告警。待依赖清单收敛/锁定后，把本作业改为阻断式门禁。
     continue-on-error: true
     steps:
