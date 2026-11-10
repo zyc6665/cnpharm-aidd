@@ -146,10 +146,10 @@
   import { getTaskDetail } from '@/api/tasks'
   import { openTaskEventStream } from '@/api/task-events'
   import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
-  import { buildAnalysisRows, downsampleSeries, findOutputByStandardType } from './analysis'
+  import { buildAnalysisRows, buildRmsfRows, downsampleSeries, findOutputByStandardType } from './analysis'
   import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
   import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
-  import type { MdAnalysisRow, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole } from '@/types/md'
+  import type { MdAnalysisRow, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole, RmsfRow } from '@/types/md'
   import type { Task } from '@/types/models'
 
   interface PapaParseResult {
@@ -164,6 +164,7 @@
   const task = ref<Task | null>(null)
   const artifact = ref<TypedArtifact | null>(null)
   const analysisRows = ref<MdAnalysisRow[]>([])
+  const rmsfRows = ref<RmsfRow[]>([])
   const metadata = ref<MdTrajectoryMetadata>({})
 
   const loading = ref(false)
@@ -179,6 +180,7 @@
   }
 
   const analysisFile = computed(() => roleFile('analysis_csv'))
+  const rmsfFile = computed(() => roleFile('rmsf_csv'))
   const metadataFile = computed(() => roleFile('metadata_json'))
   const topologyFile = computed(() => roleFile('topology_pdb'))
   const trajectoryFile = computed(() => roleFile('trajectory_dcd'))
@@ -235,7 +237,36 @@
   }
 
   const rmsdOption = computed(() => buildChartOption('rmsd_nm', 'RMSD (nm)'))
-  const rmsfOption = computed(() => buildChartOption('rmsf_nm', 'RMSF (nm)'))
+  /**
+   * RMSF 是「时间平均后的逐残基涨落」，横轴是残基序号而不是时间。
+   * 真镜像通过 `rmsf_csv` 提供逐残基表；旧产物（mock 包）只有 analysis_csv
+   * 里的 `rmsf_nm` 列，此时退回按时间轴画，避免老任务页面直接空白。
+   */
+  const rmsfOption = computed<EChartsOption | null>(() => {
+    if (rmsfRows.value.length > 0) {
+      const sampled = downsampleSeries(rmsfRows.value, 600)
+      return {
+        grid: { left: 48, right: 16, top: 24, bottom: 40 },
+        tooltip: { trigger: 'axis' },
+        xAxis: {
+          type: 'value',
+          name: t('md.result.chartResidueAxis'),
+          nameLocation: 'middle',
+          nameGap: 24
+        },
+        yAxis: { type: 'value', name: 'RMSF (nm)' },
+        series: [
+          {
+            type: 'line',
+            smooth: true,
+            showSymbol: false,
+            data: sampled.map((row) => [row.residue_seq, row.rmsf_nm])
+          }
+        ]
+      }
+    }
+    return buildChartOption('rmsf_nm', 'RMSF (nm)')
+  })
   const rgOption = computed(() => buildChartOption('rg_nm', 'Rg (nm)'))
   const temperatureOption = computed(() => buildChartOption('temperature_k', 'T (K)'))
 
@@ -246,6 +277,14 @@
         analysisRows.value = buildAnalysisRows(parseCsv(text) as Array<Record<string, unknown>>)
       } catch {
         analysisRows.value = []
+      }
+    }
+    if (rmsfFile.value) {
+      try {
+        const text = await fetchProtectedFileText(rmsfFile.value.download_url)
+        rmsfRows.value = buildRmsfRows(parseCsv(text) as Array<Record<string, unknown>>)
+      } catch {
+        rmsfRows.value = []
       }
     }
     if (metadataFile.value) {

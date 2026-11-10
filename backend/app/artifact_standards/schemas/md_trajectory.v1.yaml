@@ -17,6 +17,11 @@ file_roles:
     allowed_formats: [csv]
     content_types: [text/csv]
     recommended_name: analysis.csv
+  - role: rmsf_csv
+    required: false
+    allowed_formats: [csv]
+    content_types: [text/csv]
+    recommended_name: rmsf.csv
   - role: metadata_json
     required: true
     allowed_formats: [json]

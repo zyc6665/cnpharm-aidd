@@ -8,8 +8,12 @@ Input
 
 Output (result.v2)
   md_trajectory@1 : topology_pdb (starting structure), trajectory_dcd, analysis_csv,
-                    metadata_json
+                    rmsf_csv (per-residue RMSF), metadata_json
   run_report@1    : report_json
+
+analysis.csv 是逐帧时间序列（time_ps / temperature_k / potential_kj_mol /
+rmsd_nm / rg_nm）；RMSF 是时间平均后的逐残基涨落，单独放在 rmsf.csv
+（residue_seq / residue_name / rmsf_nm），不混进时间序列。
 
 The pipeline follows the standard GROMACS recipe: pdb2gmx -> editconf -> solvate ->
 genion -> energy minimisation -> NVT -> NPT -> production.  GPU is used when the
@@ -234,12 +238,81 @@ def write_analysis_csv(work: Path, out_csv: Path) -> None:
     except SystemExit:
         pass
 
+    # 回转半径是逐帧量（gyrate 的 xvg 第 2 列就是 Rg，单位 nm），
+    # 与 analysis.csv 的时间序列天然对齐。
+    gyration: dict[float, float] = {}
+    try:
+        run(
+            [GMX, "gyrate", "-s", "md.tpr", "-f", "md.xtc", "-o", "gyrate.xvg"],
+            work,
+            stdin_text="Backbone\n",
+        )
+        for row in parse_xvg(work / "gyrate.xvg"):
+            gyration[round(row[0], 3)] = row[1]
+    except SystemExit:
+        pass
+
     with out_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(columns + ["rmsd_nm"])
+        writer.writerow(columns + ["rmsd_nm", "rg_nm"])
         for row in energy_rows:
+            key = round(row[0], 3)
             writer.writerow([f"{value:.4f}" if isinstance(value, float) else value for value in row]
-                            + [rmsd.get(round(row[0], 3), "")])
+                            + [rmsd.get(key, ""), gyration.get(key, "")])
+
+
+def backbone_residues(pdb: Path) -> list[tuple[str, str, str]]:
+    """按 CA 出现顺序返回 (chain, residue_seq, residue_name)。
+
+    ``gmx rmsf -res`` 的横轴是「选中组里的第几个残基」，要和 PDB 里的残基
+    顺序对齐才能给出残基名；用 CA 原子做锚点，避免把氢原子或 altloc 算进去。
+    """
+    residues: list[tuple[str, str, str]] = []
+    if not pdb.is_file():
+        return residues
+    for line in pdb.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.startswith("ATOM") or line[12:16].strip() != "CA":
+            continue
+        key = (line[21:22].strip() or "A", line[22:26].strip(), line[17:20].strip())
+        if key not in residues:
+            residues.append(key)
+    return residues
+
+
+def write_rmsf_csv(work: Path, out_csv: Path, topology: Path) -> bool:
+    """写逐残基 RMSF 表。RMSF 是「时间平均后的每残基涨落」，
+
+    不是逐帧量，所以它不能塞进 analysis.csv 的时间序列里——这一列过去一直
+    是空的，页面上「RMSF」图恒为空白（``docs/26`` H-3）。这里单独出一张表：
+    ``residue_seq, residue_name, rmsf_nm``。
+    """
+    try:
+        run(
+            [GMX, "rmsf", "-s", "md.tpr", "-f", "md.xtc", "-o", "rmsf.xvg", "-res"],
+            work,
+            stdin_text="Backbone\n",
+        )
+    except SystemExit:
+        return False
+    rows = parse_xvg(work / "rmsf.xvg")
+    if not rows:
+        return False
+    residues = backbone_residues(topology)
+    with out_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["residue_seq", "residue_name", "rmsf_nm"])
+        for index, row in enumerate(rows, start=1):
+            try:
+                position = int(round(float(row[0])))
+            except (TypeError, ValueError):
+                position = index
+            if 1 <= position <= len(residues):
+                chain, residue_seq, residue_name = residues[position - 1]
+            else:
+                chain, residue_seq, residue_name = "", str(position), ""
+            del chain  # 链信息不在表里：残基序号已经能唯一定位（单链 MD）
+            writer.writerow([residue_seq, residue_name, f"{row[1]:.4f}"])
+    return True
 
 
 def run_pipeline(
@@ -356,6 +429,7 @@ def main() -> int:
     shutil.copyfile(work / "topology.pdb", out / "topology.pdb")
     shutil.copyfile(work / "trajectory.dcd", out / "trajectory.dcd")
     write_analysis_csv(work, out / "analysis.csv")
+    rmsf_written = write_rmsf_csv(work, out / "rmsf.csv", work / "topology.pdb")
 
     metadata = {
         "source_task_id": args.task_id,
@@ -390,6 +464,7 @@ def main() -> int:
                     "trajectory_dcd": file_ref(output_dir, "artifacts/trajectory.dcd"),
                     "analysis_csv": file_ref(output_dir, "artifacts/analysis.csv"),
                     "metadata_json": file_ref(output_dir, "artifacts/metadata.json"),
+                    **({"rmsf_csv": file_ref(output_dir, "artifacts/rmsf.csv")} if rmsf_written else {}),
                 },
                 "metadata": {"source_task_id": args.task_id},
             },

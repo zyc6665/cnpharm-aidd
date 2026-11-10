@@ -2343,7 +2343,8 @@ export default {
         rg: 'Radius of gyration (Rg)',
         temperature: 'Temperature'
       },
-      chartXAxis: 'Time (ps)'
+      chartXAxis: 'Time (ps)',
+      chartResidueAxis: 'Residue index'
     },
     freeEnergy: {
       title: 'Free Energy Result',
@@ -2352,7 +2353,7 @@ export default {
       standardError: 'standard error',
       stdDev: 'Std. deviation',
       frameCount: 'Valid frames',
-      unit: 'kJ/mol',
+      unit: 'kcal/mol',
       decompositionTitle: 'Energy decomposition (component means)',
       convergenceTitle: 'Per-frame ΔG convergence',
       vdw: 'van der Waals',
@@ -2361,7 +2362,7 @@ export default {
       nonpolarSolvation: 'Nonpolar solvation',
       sasa: 'SASA',
       axisFrame: 'Frame',
-      axisY: 'ΔG (kJ/mol)',
+      axisY: 'ΔG (kcal/mol)',
       exportCsv: 'Export CSV',
       noData: 'No free energy data available',
       sourceNote: 'When the source has no standard-error column, the standard error is computed as the sample standard deviation of per-frame ΔG divided by √n.'

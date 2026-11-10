@@ -2332,7 +2332,8 @@ export default {
         rg: '回转半径 Rg',
         temperature: '温度'
       },
-      chartXAxis: '时间 (ps)'
+      chartXAxis: '时间 (ps)',
+      chartResidueAxis: '残基序号'
     },
     freeEnergy: {
       title: '自由能结果',
@@ -2341,7 +2342,7 @@ export default {
       standardError: '标准误',
       stdDev: '标准差',
       frameCount: '有效帧数',
-      unit: 'kJ/mol',
+      unit: 'kcal/mol',
       decompositionTitle: '能量分解（各组分均值）',
       convergenceTitle: '逐帧 ΔG 收敛曲线',
       vdw: '范德华 (vdW)',
@@ -2350,7 +2351,7 @@ export default {
       nonpolarSolvation: '非极性溶剂化',
       sasa: 'SASA',
       axisFrame: '帧',
-      axisY: 'ΔG (kJ/mol)',
+      axisY: 'ΔG (kcal/mol)',
       exportCsv: '导出 CSV',
       noData: '暂无可用的自由能数据',
       sourceNote: '若数据源未提供标准误列，标准误按逐帧 ΔG 的样本标准差除以 √n 真实计算。'

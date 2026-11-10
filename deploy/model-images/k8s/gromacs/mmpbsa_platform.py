@@ -96,6 +96,91 @@ def make_index(work: Path, receptor_residues: int, total_residues: int) -> tuple
         raise SystemExit("cannot locate receptor/ligand index groups in index.ndx: " + str(names)) from exc
 
 
+#: 逐帧自由能表的列名。与前端 ``frontend/src/views/md/analysis.ts`` 的
+#: ``FreeEnergyRow``、以及 mock 包 ``example/mock-models/gmx-mmpbsa-free-energy``
+#: 的冻结契约逐字一致——任一侧改名，页面的分解图与收敛曲线就会静默变空。
+FREE_ENERGY_COLUMNS = [
+    "frame",
+    "delta_g_total",
+    "delta_g_vdw",
+    "delta_g_electrostatic",
+    "delta_g_polar_solvation",
+    "delta_g_nonpolar_solvation",
+    "delta_g_sasa",
+]
+
+#: gmx_MMPBSA 表头 -> 平台列名。值是「归一化后表头里包含的片段」，
+#: 因为 GB 与 PB 模型的列名不同（EGB/EPB、ESURF/ENPOLAR/EDISPER），
+#: 而 Δ 前缀在不同版本里时有时无。
+_COMPONENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "delta_g_total": ("total",),
+    "delta_g_vdw": ("vdwaals", "vdw"),
+    "delta_g_electrostatic": ("eel", "electrostatic"),
+    "delta_g_polar_solvation": ("egb", "epb", "polar"),
+    "delta_g_nonpolar_solvation": ("esurf", "enpolar", "edisper", "nonpolar"),
+    "delta_g_sasa": ("sasa",),
+}
+
+
+def _normalize_header(cell: str) -> str:
+    """表头归一化：去掉 Δ/δ、空白与下划线并转小写，便于按片段匹配。"""
+    return re.sub(r"[\s_Δδ]+", "", cell).lower()
+
+
+def component_columns(header: list[str]) -> dict[str, int]:
+    """把 gmx_MMPBSA 的表头映射成「平台列名 -> 列下标」。"""
+    normalized = [_normalize_header(cell) for cell in header]
+    mapping: dict[str, int] = {}
+    for column, aliases in _COMPONENT_ALIASES.items():
+        for alias in aliases:
+            index = next((i for i, name in enumerate(normalized) if alias in name), None)
+            if index is not None:
+                mapping[column] = index
+                break
+    return mapping
+
+
+def build_frame_rows(header: list[str], data: list[list[str]]) -> list[dict[str, Any]]:
+    """把 Delta Energy Terms 区块转成逐帧行；没有 TOTAL 列时返回空列表。
+
+    缺某个组分（例如 PB 模型没有 EGB）时该列留空字符串，而不是补 0——
+    0 会在图上被当成真实数值画出零线，空值会被前端跳过。
+    """
+    mapping = component_columns(header)
+    if "delta_g_total" not in mapping:
+        return []
+    frame_index = next(
+        (i for i, cell in enumerate(header) if _normalize_header(cell) in ("frame", "frames")),
+        None,
+    )
+
+    def value(row: list[str], column: str) -> str:
+        index = mapping.get(column)
+        if index is None or index >= len(row):
+            return ""
+        try:
+            return f"{float(row[index]):.4f}"
+        except (TypeError, ValueError):
+            return ""
+
+    rows: list[dict[str, Any]] = []
+    for position, row in enumerate(data, start=1):
+        if not row or not row[0].strip():
+            continue
+        if not value(row, "delta_g_total"):
+            continue
+        frame = position
+        if frame_index is not None and frame_index < len(row):
+            try:
+                frame = int(float(row[frame_index]))
+            except (TypeError, ValueError):
+                frame = position
+        rows.append(
+            {"frame": frame, **{column: value(row, column) for column in FREE_ENERGY_COLUMNS[1:]}}
+        )
+    return rows
+
+
 def parse_mmpbsa_csv(csv_path: Path) -> dict[str, Any]:
     rows = list(csv.reader(csv_path.open(encoding="utf-8", errors="ignore")))
     if not rows:
@@ -131,7 +216,8 @@ def parse_mmpbsa_csv(csv_path: Path) -> dict[str, Any]:
             mean = sum(values) / len(values)
             variance = sum((v - mean) ** 2 for v in values) / max(1, len(values) - 1)
             return {"delta_g_bind_kcal_mol": mean, "delta_g_std": variance ** 0.5,
-                    "frames": len(values), "terms": header, "values": data}
+                    "frames": len(values), "terms": header, "values": data,
+                    "frame_rows": build_frame_rows(header, data)}
     return {"terms": header, "values": data}
 
 
@@ -240,13 +326,35 @@ def main() -> int:
     out = output_dir / "artifacts"
     table_path = out / "binding_energy.csv"
     delta = summary.get("delta_g_bind_kcal_mol")
+    frames = summary.get("frame_rows") or []
+    if not frames and isinstance(delta, (int, float)):
+        # 逐帧数据没解析出来时退化成一行均值：页面上至少有一个点，
+        # 而不是「任务成功但什么图都没有」。
+        frames = [
+            {
+                "frame": 1,
+                "delta_g_total": f"{delta:.4f}",
+                "delta_g_vdw": "",
+                "delta_g_electrostatic": "",
+                "delta_g_polar_solvation": "",
+                "delta_g_nonpolar_solvation": "",
+                "delta_g_sasa": "",
+            }
+        ]
     with table_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["molecule_id", "delta_g_bind_kcal_mol", "delta_g_std_kcal_mol", "frames"])
-        writer.writerow(["complex_001", f"{delta:.3f}" if isinstance(delta, (int, float)) else "",
-                         f"{summary.get('delta_g_std', ''):.3f}" if isinstance(summary.get("delta_g_std"), (int, float)) else "",
-                         summary.get("frames", "")])
-    write_json(out / "metadata.json", {"molecule_id_field": "molecule_id", "source_task_id": args.task_id})
+        writer.writerow(FREE_ENERGY_COLUMNS)
+        for row in frames:
+            writer.writerow([row.get(column, "") for column in FREE_ENERGY_COLUMNS])
+    table_metadata = {
+        "molecule_id_field": "frame",
+        "source_task_id": args.task_id,
+        "frame_count": len(frames),
+        "energy_unit": "kcal/mol",
+        "method": "MM/GBSA",
+        "columns": FREE_ENERGY_COLUMNS,
+    }
+    write_json(out / "metadata.json", table_metadata)
     report = {
         "source_task_id": args.task_id,
         "tool": "gmx_MMPBSA",
@@ -265,7 +373,7 @@ def main() -> int:
                 "type": "molecule_table@1",
                 "files": {"table_file": file_ref(output_dir, "artifacts/binding_energy.csv"),
                           "metadata_json": file_ref(output_dir, "artifacts/metadata.json")},
-                "metadata": {"molecule_id_field": "molecule_id", "source_task_id": args.task_id},
+                "metadata": table_metadata,
             },
             "report": {
                 "type": "run_report@1",
@@ -273,7 +381,12 @@ def main() -> int:
                 "metadata": {"source_task_id": args.task_id},
             },
         },
-        "metrics": {"delta_g_bind_kcal_mol": delta, "frames": summary.get("frames")},
+        "metrics": {
+            "delta_g_bind_kcal_mol": delta,
+            "delta_g_std_kcal_mol": summary.get("delta_g_std"),
+            "frames": summary.get("frames"),
+            "energy_unit": "kcal/mol",
+        },
     }
     write_json(output_dir / "result.json", result_payload)
     progress(100, "done")
