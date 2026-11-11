@@ -284,6 +284,18 @@ def _load_head_models() -> dict[str, dict]:
         ):
             models[model["slug"]] = model
 
+    # GROMACS / gmx_MMPBSA 镜像 1.0.1（`docs/26` H-1 / H-3）：自由能改逐帧 7 列、
+    # MD 补 Rg 与逐残基 RMSF。digest 钉在 config 里，所以种数据也必须跟着换，
+    # 否则启动期同步会把迁移刚改好的新 digest 覆盖回旧的。
+    gromacs_image_mod = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    for slug, (_old_digest, new_digest) in gromacs_image_mod.NEW_DIGESTS.items():
+        model = models[slug]
+        model["config"] = _apply_manifest_overrides(
+            model["config"], image_digest=new_digest
+        )
+        model["version"] = gromacs_image_mod.NEW_VERSION
+        model["changelog"] = gromacs_image_mod.NEW_CHANGELOG
+
     # Vina 1.1.0：真实筛选漏斗参数 + CSV/SDF 双配体输入 + 工具版本原地升级。
     # 必须在上面单工具工厂循环之后折叠，否则 models 里还没有 Vina。
     vina_v11_mod = _load_migration_module("20261106_01_vina_funnel_tool.py")
