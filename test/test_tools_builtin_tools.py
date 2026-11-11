@@ -270,6 +270,20 @@ def test_placeholder_scientific_capabilities_are_not_executable() -> None:
     assert not (placeholder_slugs & set(AIDD_TOOL_CAPABILITIES))
 
 
+def test_headerless_smiles_table_is_tolerated(tmp_path: Path) -> None:
+    """Pocket2Mol 产出的 ``SMILES.txt`` 没有表头，平台自己的工具不该拒绝它。"""
+    table = tmp_path / "SMILES.txt"
+    table.write_text("CCO\nNC(N)=O\n", encoding="utf-8")
+
+    assert builtin_tools._read_smiles_from_csv(table) == ["CCO", "NC(N)=O"]
+    # 行尾带分子名时只取第一列（.smi 的常见写法）。
+    normalized = builtin_tools._normalize_smiles_list("CCO ligand-1\nNC(N)=O\n")
+    assert normalized.splitlines() == ["smiles", "CCO", "NC(N)=O"]
+    # 已有表头的 CSV 必须原样返回，不能被二次加表头。
+    csv_text = "molecule_id,SMILES\nx,CCO\n"
+    assert builtin_tools._normalize_smiles_list(csv_text) == csv_text
+
+
 def test_rdkit_properties_builtin_emits_property_table_and_standard_result(
     tmp_path: Path,
     monkeypatch,

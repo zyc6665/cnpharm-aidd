@@ -1190,6 +1190,30 @@ def _run_rdkit_properties_tool(
     )
 
 
+_SMILES_HEADER_TOKENS = frozenset({"smiles", "smile", "smi", "canonical_smiles"})
+
+
+def _normalize_smiles_list(text: str) -> str:
+    """把「无表头的纯 SMILES 文本」补成带表头的 CSV。
+
+    Pocket2Mol 这类模型产出的分子表是 ``SMILES.txt``（一行一个 SMILES，没有表头），
+    而 ``molecule_table@1`` 标准允许 ``txt``/``smi``，所以平台自己的产物喂给平台的
+    其它工具时不该被判成格式错误。判定条件刻意保守：首行既没有逗号也没有制表符，
+    且本身不是 ``smiles`` 这类列名，才认为是无表头列表。
+    """
+    first_line = text.splitlines()[0].strip() if text.strip() else ""
+    if not first_line:
+        return text
+    if "," in first_line or "\t" in first_line:
+        return text
+    if first_line.lower() in _SMILES_HEADER_TOKENS:
+        return text
+    smiles = [line.split()[0] for line in text.splitlines() if line.strip()]
+    if not smiles:
+        return text
+    return "smiles\n" + "\n".join(smiles) + "\n"
+
+
 def _rdkit_properties_csv_content(
     csv_path: Path,
     *,
@@ -1197,7 +1221,7 @@ def _rdkit_properties_csv_content(
     molecule_id_field: str,
     backend: Any,
 ) -> tuple[bytes, dict[str, Any]]:
-    text = csv_path.read_text(encoding="utf-8")
+    text = _normalize_smiles_list(csv_path.read_text(encoding="utf-8"))
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
         raise ValidationException("RDKit properties 输入 CSV 缺少表头")
@@ -1288,7 +1312,7 @@ def _lipinski_violations(values: dict[str, float | int]) -> int:
 
 def _read_smiles_from_csv(csv_path: Path) -> list[str]:
     """从 SMILES CSV 文件中提取 SMILES 列表。"""
-    text = csv_path.read_text(encoding="utf-8")
+    text = _normalize_smiles_list(csv_path.read_text(encoding="utf-8"))
     reader = csv.DictReader(io.StringIO(text))
     smiles_values: list[str] = []
     for row in reader:

@@ -695,6 +695,8 @@ async def submitted_tasks(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespa
             tool_id=task_data.tool_id,
             params=task_data.params,
             file_ids=task_data.file_ids,
+            standard_input_uploads=task_data.standard_input_uploads,
+            input_bindings=task_data.input_bindings,
             name=task_data.name,
             extra_data=extra_data,
             created_at=utcnow(),
@@ -811,7 +813,10 @@ async def test_pocket_prediction_uses_registered_lvpocket_tool(
     assert len(submitted_tasks) == 1
     submitted = submitted_tasks[0]
     assert submitted.params["top_k"] == 5
-    assert submitted.file_ids == [structure["structure_file_id"]]
+    # 口袋预测的输入不是「挂几个文件」，而是按工具形态二选一：
+    # 这里注册的是没有 tool_package_manifest 的工具，所以走标准输入上传槽。
+    assert submitted.file_ids == []
+    assert submitted.standard_input_uploads == {"protein": structure["structure_file_id"]}
     assert submitted.extra_data["domain"]["kind"] == "pocket_prediction"
 
 

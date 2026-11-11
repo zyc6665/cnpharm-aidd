@@ -30,6 +30,7 @@ from app.common.exceptions import ConflictException, NotFoundException, Validati
 from app.common.task_status import task_status_to_api
 from app.common.time import isoformat_utc
 from app.files.file_records import is_file_usable, user_can_access_file
+from app.models.artifacts import ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target
 from app.models.tasks import Task, TaskStatus
@@ -38,6 +39,7 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.schemas.targets import PocketCreate, StructurePredict, StructurePrepareRequest
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.service import create_and_schedule_tool_task
 
 WRITE_ROLES = ("owner", "editor")
@@ -554,7 +556,10 @@ async def submit_structure_preparation(
             tool_id=str(tool.id),
             tool_version_id=str(tool.current_version_id) if tool.current_version_id else None,
             params=dict(data.params),
-            file_ids=[str(source.id)],
+            # 内置工具的输入不是「随便挂几个文件」：执行器按标准输入槽名取文件
+            # （``builtin_inputs[protein_structure@1]``）。只给 ``file_ids`` 的话，
+            # 任务能提交、能排队，但跑到执行器里必然报「缺少 protein_structure@1 输入」。
+            standard_input_uploads={"protein": str(source.id)},
             priority=data.priority,
         ),
         extra_data={
@@ -564,6 +569,33 @@ async def submit_structure_preparation(
             }
         },
     )
+
+async def structure_task_input(
+    db: AsyncSession, *, tool: Tool, file_id: str
+) -> dict[str, Any]:
+    """按工具形态给出任务的输入取值。
+
+    两种工具对「输入」的要求不一样：
+    - tool-package v2 工具（LVpocket / GROMACS）在 k8s 上执行时，输入必须是已经落盘
+      的标准 ``ArtifactVersion``，给裸文件 id 会在执行前就报「Kubernetes 输入需要
+      已落盘的标准 ArtifactVersion」；
+    - 内置工具（结构准备）由执行器按标准输入槽名取文件，需要 ``standard_input_uploads``。
+
+    所以先按 v2 口径找该文件的产物版本，找不到再退回标准输入上传。
+    """
+    config = getattr(getattr(tool, "current_version", None), "config", None) or {}
+    if tool_accepts_standard_input_bindings(config):
+        version_id = (
+            await db.execute(
+                select(ArtifactVersionFile.artifact_version_id)
+                .where(ArtifactVersionFile.file_id == file_id)
+                .order_by(ArtifactVersionFile.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if version_id:
+            return {"input_bindings": {"protein": str(version_id)}}
+    return {"standard_input_uploads": {"protein": file_id}}
 
 
 async def submit_pocket_prediction(
@@ -583,6 +615,7 @@ async def submit_pocket_prediction(
             params["top_k"] = int(params["top_k"])
         except (TypeError, ValueError) as exc:
             raise ValidationException("top_k 必须是整数") from exc
+    task_input = await structure_task_input(db, tool=tool, file_id=str(source.id))
     return await create_and_schedule_tool_task(
         db=db,
         current_user=user,
@@ -592,7 +625,7 @@ async def submit_pocket_prediction(
             tool_id=str(tool.id),
             tool_version_id=str(tool.current_version_id) if tool.current_version_id else None,
             params=params,
-            file_ids=[str(source.id)],
+            **task_input,
             priority=data.priority,
         ),
         extra_data={

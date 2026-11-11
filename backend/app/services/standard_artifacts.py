@@ -34,6 +34,7 @@ from app.services.artifact_writer import (
     upsert_artifact,
     upsert_version,
 )
+from app.services.molecule_table_normalization import normalize_molecule_table_files
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -267,6 +268,16 @@ async def _persist_artifact(
             file_record_resolver=file_record_resolver,
         )
         resolved_files.append((role, file_record))
+    # legacy 镜像（如 Pocket2Mol）会把无表头的 SMILES.txt 直接当分子表上报，
+    # 下游的 RDKit / MSIGN / Vina 都按「CSV + smiles 列」读，第二个环节必然断。
+    # 规范化放在落库这一处，产物写入后就是下游看到的唯一形态（docs/26）。
+    resolved_files = await normalize_molecule_table_files(
+        db,
+        task=task,
+        project_id=project_id,
+        artifact=artifact,
+        resolved_files=resolved_files,
+    )
     file_records = list(dict.fromkeys(file_record for _, file_record in resolved_files))
     db.add_all(file_records)
     await db.flush()

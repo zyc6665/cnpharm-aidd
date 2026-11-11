@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,6 +54,7 @@ from app.services.standard_artifacts import (  # noqa: E402
 
 STRUCTURE_TYPE = "protein_structure@1"
 POCKET_TYPE = "binding_pocket@1"
+REPORT_TYPE = "run_report@1"
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +152,17 @@ def _pdb(*residues: tuple[int, str, str, int]) -> bytes:
         _atom_line(serial=index + 1, res_name=name, chain=chain, res_seq=seq)
         for index, (chain, seq, name, _) in enumerate(residues)
     ]
+    return ("\n".join(lines) + "\nEND\n").encode("utf-8")
+
+
+def _pdb_with_coordinates(points: list[tuple[float, float, float]]) -> bytes:
+    """生成带真实 x/y/z 的 ATOM 行（x=31-38、y=39-46、z=47-54）。"""
+    lines = []
+    for index, (x, y, z) in enumerate(points):
+        chars = list(_atom_line(serial=index + 1, res_name="MET", chain="A", res_seq=index + 1))
+        for start, value in zip((30, 38, 46), (x, y, z)):
+            chars[start : start + 8] = f"{value:>8.3f}"
+        lines.append("".join(chars))
     return ("\n".join(lines) + "\nEND\n").encode("utf-8")
 
 
@@ -262,6 +275,85 @@ async def test_structure_prediction_writes_predicted_structure(
     assert float(structure.plddt_mean) == 87.34
     assert structure.task_id == "task-1"
     assert task.extra_data[DOMAIN_WRITEBACK_KEY]["status"] == "written"
+
+
+@pytest.mark.asyncio
+async def test_structure_prediction_reads_plddt_from_run_report(
+    db_session: AsyncSession, project: Project, owner: User, protein: Protein
+):
+    """Boltz-2 的置信度在 report.json 里，不在结构产物上——必须答得出来。
+
+    真实任务是这个形状：``protein_structure@1`` 的 ``metrics`` 是空字典，
+    ``report.json`` 顶层才有 ``confidence.complex_plddt``。只读结构产物 `metrics`
+    的话，页面上「pLDDT 均值」对每个真实任务都是空。
+    """
+    pdb = await _store(
+        db_session, project=project, owner=owner, filename="structure.pdb", content=b"ATOM\n"
+    )
+    report = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="report.json",
+        content=json.dumps(
+            {"status": "succeeded", "confidence": {"complex_plddt": 0.8304, "ptm": 0.87}}
+        ).encode("utf-8"),
+    )
+    persistence = _persistence(
+        [
+            {
+                "ref": "predicted_structure",
+                "type": STRUCTURE_TYPE,
+                "roles": {"structure_file": pdb.id},
+                "metrics": {},
+                "sha256": "a" * 64,
+            },
+            {
+                "ref": "report",
+                "type": REPORT_TYPE,
+                "roles": {"report_json": report.id},
+            },
+        ]
+    )
+    task = _task({"kind": "structure_prediction", "protein_id": protein.id})
+
+    marker = await write_back_domain_results(
+        db_session, task=task, persistence_result=persistence
+    )
+    await db_session.commit()
+
+    assert marker is not None and marker["status"] == "written"
+    structures = ((await db_session.execute(select(ProteinStructure))).scalars().all())
+    assert len(structures) == 1
+    assert float(structures[0].plddt_mean) == 83.04
+
+
+@pytest.mark.asyncio
+async def test_structure_prediction_without_confidence_leaves_plddt_empty(
+    db_session: AsyncSession, project: Project, owner: User, protein: Protein
+):
+    """报告里也没有置信度时留空，不能编一个 0 出来（0 会被当成「极低可信」）。"""
+    pdb = await _store(
+        db_session, project=project, owner=owner, filename="structure.pdb", content=b"ATOM\n"
+    )
+    persistence = _persistence(
+        [
+            {
+                "ref": "predicted_structure",
+                "type": STRUCTURE_TYPE,
+                "roles": {"structure_file": pdb.id},
+                "metrics": {},
+            }
+        ]
+    )
+    task = _task({"kind": "structure_prediction", "protein_id": protein.id})
+
+    await write_back_domain_results(db_session, task=task, persistence_result=persistence)
+    await db_session.commit()
+
+    structures = ((await db_session.execute(select(ProteinStructure))).scalars().all())
+    assert len(structures) == 1
+    assert structures[0].plddt_mean is None
 
 
 @pytest.mark.asyncio
@@ -443,6 +535,103 @@ async def test_pocket_prediction_creates_pocket_with_residues(
         ("A", 745, "LYS"),
     }
     assert all(item.is_key for item in residues)
+
+
+@pytest.mark.asyncio
+async def test_pocket_geometry_falls_back_to_residue_pdb(
+    db_session: AsyncSession, project: Project, owner: User, protein: Protein
+):
+    """metadata 只给文件引用时，几何从口袋残基 PDB 的原子坐标反算。
+
+    LVpocket 的 ``prediction.json`` 里 ``pockets[]`` 只有 ``pdb`` / ``mol2`` 路径，
+    没有 ``center`` / ``bbox``。若只读 metadata，真实任务的口袋在页面上中心、包围盒、
+    体积三列全是空——数据其实在文件里，只是没人去算。
+    """
+    structure = ProteinStructure(
+        protein_id=protein.id, source_type="PREDICTED", structure_urn="file:unused"
+    )
+    db_session.add(structure)
+    await db_session.commit()
+    await db_session.refresh(structure)
+
+    residue_pdb = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="pocket0.pdb",
+        content=_pdb_with_coordinates([(0.0, 0.0, 0.0), (10.0, 20.0, 30.0)]),
+    )
+    persistence = _persistence(
+        [
+            {
+                "ref": "pocket",
+                "type": POCKET_TYPE,
+                "roles": {"residue_pocket_pdb": residue_pdb.id},
+                "metadata": {"residue_ids": ["A:1", "A:2"]},
+            }
+        ]
+    )
+
+    marker = await write_back_domain_results(
+        db_session,
+        task=_task({"kind": "pocket_prediction", "structure_id": structure.id}),
+        persistence_result=persistence,
+    )
+    await db_session.commit()
+
+    assert marker["status"] == "written"
+    pocket = (await db_session.execute(select(Pocket))).scalars().one()
+    assert float(pocket.center_x) == 5.0
+    assert float(pocket.center_z) == 15.0
+    assert float(pocket.box_size_y) == 20.0
+    assert float(pocket.volume) == 6000.0
+    # 模型没有给打分，就不能编一个出来
+    assert pocket.score is None
+
+
+@pytest.mark.asyncio
+async def test_pocket_geometry_prefers_artifact_metadata(
+    db_session: AsyncSession, project: Project, owner: User, protein: Protein
+):
+    """metadata 里有几何时以 metadata 为准，不被 PDB 反算覆盖。"""
+    structure = ProteinStructure(
+        protein_id=protein.id, source_type="PREDICTED", structure_urn="file:unused"
+    )
+    db_session.add(structure)
+    await db_session.commit()
+    await db_session.refresh(structure)
+
+    residue_pdb = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="pocket0.pdb",
+        content=_pdb_with_coordinates([(0.0, 0.0, 0.0), (10.0, 20.0, 30.0)]),
+    )
+    persistence = _persistence(
+        [
+            {
+                "ref": "pocket",
+                "type": POCKET_TYPE,
+                "roles": {"residue_pocket_pdb": residue_pdb.id},
+                "metadata": {
+                    "center": [1.0, 2.0, 3.0],
+                    "bbox": {"min": [0, 0, 0], "max": [5, 5, 5]},
+                },
+            }
+        ]
+    )
+
+    await write_back_domain_results(
+        db_session,
+        task=_task({"kind": "pocket_prediction", "structure_id": structure.id}),
+        persistence_result=persistence,
+    )
+    await db_session.commit()
+
+    pocket = (await db_session.execute(select(Pocket))).scalars().one()
+    assert float(pocket.center_x) == 1.0
+    assert float(pocket.volume) == 125.0
 
 
 @pytest.mark.asyncio

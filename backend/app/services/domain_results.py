@@ -22,7 +22,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 from typing import Any, Iterable
 
 from sqlalchemy import delete, func, select
@@ -48,11 +50,15 @@ DOMAIN_WRITEBACK_KEY = "domain_writeback"
 
 STRUCTURE_STANDARD_TYPE = "protein_structure@1"
 POCKET_STANDARD_TYPE = "binding_pocket@1"
+REPORT_STANDARD_TYPE = "run_report@1"
 
 #: 结构产物的文件角色：boltz2 用 ``structure_file``，结构准备用 ``prepared_pdb``。
 STRUCTURE_FILE_ROLES = ("structure_file", "prepared_pdb")
 PDBQT_FILE_ROLE = "receptor_pdbqt"
 POCKET_RESIDUE_FILE_ROLE = "residue_pocket_pdb"
+
+#: 报告产物的文件角色：不同模型给的名字不一样，按可信度排序取第一个存在的。
+REPORT_FILE_ROLES = ("report_json", "report_file", "metadata_json")
 
 STATUS_WRITTEN = "written"
 STATUS_SKIPPED = "skipped"
@@ -168,7 +174,9 @@ async def _write_structure_prediction(
     structure.source_type = STRUCTURE_SOURCE_PREDICTED
     structure.structure_urn = file_urn(file_id)
     structure.sha256 = file_record.sha256 or _artifact_sha256(artifact)
-    structure.plddt_mean = _plddt_mean(artifact.metrics)
+    structure.plddt_mean = _plddt_mean(artifact.metrics) or _plddt_mean(artifact.metadata)
+    if structure.plddt_mean is None:
+        structure.plddt_mean = await _plddt_from_report(db, persistence_result)
     structure.model_name = _text(model_ref.get("name")) or _tool_name(tool)
     structure.model_version = _text(model_ref.get("version")) or _tool_version_name(tool_version)
     structure.tool_name = _tool_name(tool)
@@ -268,7 +276,7 @@ async def _write_pocket_prediction(
     residue_total = 0
     for ref, artifact in pockets:
         residues = await _pocket_residues(db, persistence_result, ref)
-        geometry = _pocket_geometry(artifact)
+        geometry = await _pocket_geometry_with_fallback(db, persistence_result, ref, artifact)
         residue_ids = _sequence(artifact.metadata.get("residue_ids"))
         pocket = Pocket(
             structure_id=structure_id,
@@ -437,6 +445,65 @@ def _plddt_mean(metrics: dict[str, Any]) -> float | None:
     return None
 
 
+#: 报告 JSON 里可能承载 pLDDT 的键，按可信度排序。
+PLDDT_KEYS = ("complex_plddt", "plddt_mean", "mean_plddt", "plddt", "confidence_score")
+
+
+def _find_plddt(payload: Any, depth: int = 0) -> float | None:
+    """在报告 JSON 里递归找 pLDDT：不同模型把它放在顶层、``confidence`` 或 ``metrics`` 下。"""
+    if depth > 4:
+        return None
+    if isinstance(payload, dict):
+        found = _plddt_mean(payload)
+        if found is not None:
+            return found
+        for value in payload.values():
+            if isinstance(value, (dict, list)):
+                found = _find_plddt(value, depth + 1)
+                if found is not None:
+                    return found
+    elif isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, (dict, list)):
+                found = _find_plddt(item, depth + 1)
+                if found is not None:
+                    return found
+    return None
+
+
+async def _plddt_from_report(
+    db: AsyncSession, persistence_result: StandardArtifactPersistenceResult
+) -> float | None:
+    """从 ``run_report@1`` 产物的文件里读 pLDDT。
+
+    为什么不在结构产物上取：Boltz-2 把置信度写进独立的 ``report.json``（顶层
+    ``confidence.complex_plddt``），结构产物本身只有 PDB 与一个不含置信度的
+    ``metadata.json``。只读结构产物的话 ``plddt_mean`` 永远是空——页面上「pLDDT 均
+    值」这一栏对真实任务等于没有这个指标。
+    """
+    for ref, _artifact in _artifacts_of_type(persistence_result, REPORT_STANDARD_TYPE):
+        for role in REPORT_FILE_ROLES:
+            file_id = _role_file_id(persistence_result, ref, role)
+            if file_id is None:
+                continue
+            record = await db.get(FileModel, file_id)
+            if record is None:
+                continue
+            try:
+                raw = await read_file_bytes(record)
+            except Exception:  # 报告缺文件不该让整个回写失败
+                logger.warning("读取报告产物失败：file_id=%s", file_id, exc_info=True)
+                continue
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="replace"))
+            except ValueError:
+                continue
+            found = _find_plddt(payload)
+            if found is not None:
+                return found
+    return None
+
+
 def _pocket_geometry(artifact: ParsedStandardArtifact) -> dict[str, Any]:
     """从产物 metadata 取口袋几何；缺 bbox 时中心与体积留空，不编造。
 
@@ -461,6 +528,78 @@ def _pocket_geometry(artifact: ParsedStandardArtifact) -> dict[str, Any]:
         "center": center or [None, None, None],
         "box_size": box_size,
         "volume": volume,
+    }
+
+
+def _pdb_geometry(content: bytes) -> dict[str, Any] | None:
+    """从口袋 PDB 的原子坐标反算几何。
+
+    为什么需要它：规范 ``binding_pocket@1`` 的 metadata 才带 ``center`` / ``bbox``，
+    而 LVpocket 的 ``prediction.json`` 只写了 ``pockets[].pdb`` / ``.mol2``——几何在
+    文件里，不在元数据里。坐标是模型真实产出的原子，中心取坐标均值、包围盒取各轴
+    极值，与 ``app/tasks/legacy_standardization.py`` 对旧版输出的反算口径一致（旧版
+    缺 center/bbox 时同样从口袋 PDB 反算，而不是放弃入库）。
+    """
+    coordinates: list[list[float]] = []
+    for line in content.decode("ascii", errors="ignore").splitlines():
+        if line[0:6].strip() not in {"ATOM", "HETATM"}:
+            continue
+        try:
+            coordinates.append(
+                [float(line[start:end]) for start, end in ((30, 38), (38, 46), (46, 54))]
+            )
+        except ValueError:
+            continue
+    if not coordinates:
+        return None
+
+    minimum = [min(point[axis] for point in coordinates) for axis in range(3)]
+    maximum = [max(point[axis] for point in coordinates) for axis in range(3)]
+    center = [
+        sum(point[axis] for point in coordinates) / len(coordinates) for axis in range(3)
+    ]
+    if not all(math.isfinite(value) for value in (*minimum, *maximum, *center)):
+        return None
+    box_size = [round(abs(hi - lo), 3) for lo, hi in zip(minimum, maximum)]
+    return {
+        "center": [round(value, 3) for value in center],
+        "box_size": box_size,
+        "volume": round(box_size[0] * box_size[1] * box_size[2], 3),
+    }
+
+
+async def _pocket_geometry_with_fallback(
+    db: AsyncSession,
+    persistence_result: StandardArtifactPersistenceResult,
+    ref: str,
+    artifact: ParsedStandardArtifact,
+) -> dict[str, Any]:
+    """先读 metadata，缺几何再从口袋残基 PDB 反算，两处都缺才留 NULL。"""
+    geometry = _pocket_geometry(artifact)
+    if geometry["center"][0] is not None and geometry["volume"] is not None:
+        return geometry
+
+    file_id = _role_file_id(persistence_result, ref, POCKET_RESIDUE_FILE_ROLE)
+    if file_id is None:
+        return geometry
+    record = await db.get(FileModel, file_id)
+    if record is None:
+        return geometry
+    try:
+        raw = await read_file_bytes(record)
+    except Exception:  # 反算失败不该让整个回写失败
+        logger.warning("读取口袋残基文件失败：file_id=%s", file_id, exc_info=True)
+        return geometry
+
+    computed = _pdb_geometry(raw)
+    if computed is None:
+        return geometry
+    return {
+        "center": geometry["center"]
+        if geometry["center"][0] is not None
+        else computed["center"],
+        "box_size": geometry["box_size"] if geometry["volume"] is not None else computed["box_size"],
+        "volume": geometry["volume"] if geometry["volume"] is not None else computed["volume"],
     }
 
 
