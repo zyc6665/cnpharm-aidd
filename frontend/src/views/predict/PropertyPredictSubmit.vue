@@ -30,8 +30,13 @@ import type { ResearchProject } from '@/types/projects'
 import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
 
 const props = withDefaults(
-  defineProps<{ projectIdOverride?: string; initialGroups?: PredictTaskGroup[] }>(),
-  { projectIdOverride: '', initialGroups: undefined }
+  defineProps<{
+    projectIdOverride?: string
+    /** 宿主直接指定初始预测类型（向导把亲和力单独做成一步时用）。 */
+    initialType?: 'admet' | 'affinity'
+    initialGroups?: PredictTaskGroup[]
+  }>(),
+  { projectIdOverride: '', initialType: undefined, initialGroups: undefined }
 )
 
 const route = useRoute()
@@ -75,7 +80,10 @@ const {
 } = useModelOptions('admet_prediction', { defaultSlug: ADMET_TOOL_SLUG })
 
 // 预测类型：ADMET 分子性质 / 结合亲和力（亲和力属于评估验证→性质预测环节）。
-const predictType = ref<'admet' | 'affinity'>(route.query.type === 'affinity' ? 'affinity' : 'admet')
+// 宿主可以固定初始类型，避免"点了亲和力这一步却停在上传 SMILES 的表单上"。
+const predictType = ref<'admet' | 'affinity'>(
+  props.initialType === 'affinity' || route.query.type === 'affinity' ? 'affinity' : 'admet'
+)
 const {
   options: affinityOptions,
   selectedSlug: affinitySlug,
@@ -452,7 +460,14 @@ onMounted(() => {
 
 <template>
   <main class="predict-submit" data-testid="predict-submit-page">
-    <AppPageHeader :title="t('predict.submit.title')" :subtitle="t('predict.submit.subtitle')" />
+    <!-- 被设计流程内嵌时（传了 projectIdOverride）不渲染页面头：
+         外层已有步骤标题，这里的「性质预测 / 勾选指标组后提交 ADMET 任务」反而与
+         当前正在做的亲和力预测对不上。 -->
+    <AppPageHeader
+      v-if="!projectIdOverride"
+      :title="t('predict.submit.title')"
+      :subtitle="t('predict.submit.subtitle')"
+    />
 
     <a-card
       v-if="!projectIdOverride"
