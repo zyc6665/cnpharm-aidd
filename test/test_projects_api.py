@@ -19,6 +19,7 @@ from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User, UserRole, UserStatus
 from app.models.workflows import WorkflowDefinition
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 
 
 @pytest_asyncio.fixture
@@ -296,8 +297,15 @@ async def test_owner_can_add_project_member_by_username(
 @pytest.mark.asyncio
 async def test_owner_can_archive_project_and_default_list_hides_it(
     api_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     project = await _create_project(api_client)
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
 
     archive_response = await api_client.post(
         f"/api/v1/projects/{project['id']}/archive",
@@ -319,6 +327,46 @@ async def test_owner_can_archive_project_and_default_list_hides_it(
     )
     assert archived_response.status_code == 200
     assert archived_response.json()["data"]["items"][0]["id"] == project["id"]
+
+    # 归档是「从列表里移走」，不是终态：详情必须能打开，否则用户连看看都做不到。
+    detail_response = await api_client.get(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["data"]["status"] == "archived"
+
+    # 撤销归档后回到默认列表。
+    unarchive_response = await api_client.post(
+        f"/api/v1/projects/{project['id']}/unarchive",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert unarchive_response.status_code == 200
+    assert unarchive_response.json()["data"]["status"] == "active"
+
+    restored_list = await api_client.get(
+        "/api/v1/projects",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert [item["id"] for item in restored_list.json()["data"]["items"]] == [project["id"]]
+
+    # 重复撤销归档要明确报冲突，而不是静默把 active 又写一遍——
+    # 静默成功会让前端以为「归档中」的状态被采纳，掩盖真实的并发操作。
+    repeated = await api_client.post(
+        f"/api/v1/projects/{project['id']}/unarchive",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert repeated.status_code == 409
+
+    archive_events = [
+        event
+        for event in events
+        if event.resource_type is ResourceType.PROJECT and event.resource_id == project["id"]
+    ]
+    assert [event.extra["status"] for event in archive_events] == ["archived", "active"]
+    assert all(event.action is AuditAction.UPDATE for event in archive_events)
+    assert archive_events[0].resource_name == project["name"]
+
 
 
 @pytest.mark.asyncio

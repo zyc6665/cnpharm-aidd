@@ -9,7 +9,8 @@ import {
   getRecentWorkspaceProjects,
   getWorkspaceAttentionTasks,
   getWorkspaceTaskLabelKey,
-  hasWorkspaceSchemaMigrationHealthIssue
+  hasWorkspaceSchemaMigrationHealthIssue,
+  partitionWorkspaceProjects
 } from './overview'
 
 const projects = Array.from({ length: 10 }, (_, index) => ({
@@ -92,8 +93,22 @@ test('工作台最近项目和待关注任务保持页面展示上限', () => {
   assert.deepEqual(getWorkspaceAttentionTasks(tasks).map(task => task.id), ['pending', 'failure'])
 })
 
-test('工作台 Artifact 展示优先使用标准 Artifact，缺失时回退 legacy file', () => {
-  const standardRows = buildRecentWorkspaceArtifactRows({
+test('归档项目单独成组，不被当成删除也不混在常用列表里', () => {
+  const mixed = [
+    { id: 'active-1', status: 'active' },
+    { id: 'archived-1', status: 'archived' },
+    { id: 'paused-1', status: 'paused' },
+    { id: 'archived-2', status: 'archived' }
+  ] as ResearchProject[]
+
+  const { active, archived } = partitionWorkspaceProjects(mixed)
+  assert.deepEqual(active.map(project => project.id), ['active-1', 'paused-1'])
+  assert.deepEqual(archived.map(project => project.id), ['archived-1', 'archived-2'])
+  // 只暂停不算归档：暂停的项目仍然在常用列表里。
+  assert.equal(partitionWorkspaceProjects([]).archived.length, 0)
+})
+
+test('工作台 Artifact 展示优先使用标准 Artifact，缺失时回退 legacy file', () => {  const standardRows = buildRecentWorkspaceArtifactRows({
     artifacts: [artifact],
     legacyFiles: [legacyFile],
     unknownArtifactTypeLabel: '未知类型',

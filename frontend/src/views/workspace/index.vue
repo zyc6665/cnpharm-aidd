@@ -61,12 +61,41 @@
         <div class="section-heading">
           <div>
             <h2>{{ t('workspace.recentProjects') }}</h2>
-            <span>{{ t('workspace.projectCount', { count: projects.length }) }}</span>
+            <span>{{ t('workspace.projectCount', { count: activeProjects.length }) }}</span>
           </div>
         </div>
         <ProjectList
+          v-if="recentProjects.length"
           :projects="recentProjects"
           @archive="handleProjectArchive"
+          @delete="handleProjectDelete"
+        />
+        <!-- 全部项目都被归档时，不能再说「还没有研究项目」——项目明明在下面躺着。 -->
+        <p v-else-if="archivedProjects.length" class="projects-empty-hint">
+          {{ t('workspace.noActiveProjects') }}
+        </p>
+        <ProjectList
+          v-else
+          :projects="[]"
+        />
+      </section>
+
+      <!-- 已归档项目单独成段：归档是「收起来」不是「删掉」，
+           所以既要从常用列表里移走，又必须留一条能点进去看、能撤销归档的路。 -->
+      <section
+        v-if="archivedProjects.length"
+        class="workspace-section projects-section"
+        data-testid="workspace-archived-projects"
+      >
+        <div class="section-heading">
+          <div>
+            <h2>{{ t('workspace.archivedProjects') }}</h2>
+            <span>{{ t('workspace.archivedProjectsHint') }}</span>
+          </div>
+        </div>
+        <ProjectList
+          :projects="archivedProjects"
+          @unarchive="handleProjectUnarchive"
           @delete="handleProjectDelete"
         />
       </section>
@@ -190,7 +219,8 @@ import { FileOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import {
   archiveProject as archiveProjectApi,
   deleteProject as deleteProjectApi,
-  listProjects
+  listProjects,
+  unarchiveProject as unarchiveProjectApi
 } from '@/api/projects'
 import {
   getWorkspaceOverview,
@@ -213,6 +243,7 @@ import {
   getWorkspaceAttentionTasks,
   getWorkspaceTaskLabelKey,
   hasWorkspaceSchemaMigrationHealthIssue,
+  partitionWorkspaceProjects,
   type RecentWorkspaceArtifactRow
 } from '@/domain/workspace'
 import type { ResearchProject } from '@/types/projects'
@@ -238,7 +269,10 @@ const previewLegacyFile = ref<WorkspaceLegacyFile | null>(null)
 // 与任务中心的页签一一对应，点进去就能看到同一批记录。
 const todoCounts = ref<{ running: number; needs_attention: number; recent_results: number } | null>(null)
 
-const recentProjects = computed(() => getRecentWorkspaceProjects(projects.value))
+const projectGroups = computed(() => partitionWorkspaceProjects(projects.value))
+const activeProjects = computed(() => projectGroups.value.active)
+const archivedProjects = computed(() => projectGroups.value.archived)
+const recentProjects = computed(() => getRecentWorkspaceProjects(activeProjects.value))
 const attentionTasks = computed(() => getWorkspaceAttentionTasks(tasks.value))
 
 const todoCards = computed(() => {
@@ -288,7 +322,7 @@ async function loadWorkspace() {
   schemaMigrationLoadError.value = false
   try {
     const [projectResult, workspaceResult, countResult] = await Promise.allSettled([
-      listProjects(),
+      listProjects({ includeArchived: true }),
       getWorkspaceOverview(),
       getTaskCounts()
     ])
@@ -351,13 +385,31 @@ function handleProjectCreated(project: ResearchProject) {
 
 async function handleProjectArchive(projectId: string) {
   const previousProjects = projects.value
-  projects.value = projects.value.filter(project => project.id !== projectId)
+  // 归档不是删除：项目仍然存在，只是从「在用」列表挪到「已归档」。
+  // 直接把它从数组里删掉会让用户以为数据没了，也让「撤销归档」无处可点。
+  projects.value = projects.value.map(project =>
+    project.id === projectId ? { ...project, status: 'archived' } : project
+  )
   try {
     await archiveProjectApi(projectId)
     message.success(t('workspace.project.archiveSuccess'))
   } catch {
     projects.value = previousProjects
     message.error(t('workspace.project.archiveFailed'))
+  }
+}
+
+async function handleProjectUnarchive(projectId: string) {
+  const previousProjects = projects.value
+  projects.value = projects.value.map(project =>
+    project.id === projectId ? { ...project, status: 'active' } : project
+  )
+  try {
+    await unarchiveProjectApi(projectId)
+    message.success(t('workspace.project.unarchiveSuccess'))
+  } catch {
+    projects.value = previousProjects
+    message.error(t('workspace.project.unarchiveFailed'))
   }
 }
 
@@ -422,6 +474,7 @@ onMounted(() => { void loadWorkspace() })
 .todo-attention .todo-value { color: @error-color; }
 .todo-running .todo-value { color: @primary-color; }
 .projects-section { margin-bottom: @spacing-xl; border-bottom: 1px solid @border-color; }
+.projects-empty-hint { margin: 0; padding: @spacing-md @spacing-sm; color: @text-tertiary; font-size: @font-size-sm; }
 .workspace-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: @spacing-xxl; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; min-height: 40px; margin-bottom: @spacing-md; }
 .section-heading h2 { margin: 0; color: @text-primary; font-size: @font-size-md; letter-spacing: 0; }

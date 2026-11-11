@@ -34,6 +34,29 @@ export function getRecentWorkspaceProjects(
   return projects.slice(0, limit)
 }
 
+/**
+ * 把项目分成「在用」与「已归档」两组。
+ *
+ * 归档的语义是「从默认列表移走，但记录都还在」，所以它既不能被当成删除（数据还在），
+ * 也不能混在常用列表里（会稀释「我正在做的项目」）。分组这一步放在这里，
+ * 页面只负责渲染两个 section。
+ */
+export function partitionWorkspaceProjects(projects: ResearchProject[]): {
+  active: ResearchProject[]
+  archived: ResearchProject[]
+} {
+  const active: ResearchProject[] = []
+  const archived: ResearchProject[] = []
+  for (const project of projects) {
+    if (project.status === 'archived') {
+      archived.push(project)
+    } else {
+      active.push(project)
+    }
+  }
+  return { active, archived }
+}
+
 export function getWorkspaceAttentionTasks(
   tasks: WorkspaceAttentionTask[],
   limit = 6

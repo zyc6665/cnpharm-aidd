@@ -87,7 +87,9 @@ test('后端有删除端点且记录删除审计与行数', () => {
   assert.match(enums, /TARGET = "target"/)
 
   const generated = readSource('src/types/enums.generated.ts')
-  assert.match(generated, /"target"\]/)
+  // 断言落在 RESOURCE_TYPE 数组内部，而不是「数组以 target 结尾」——
+  // 后面再加资源类型（例如 project）不该让这条守护测试失败。
+  assert.match(generated, /RESOURCE_TYPE = \[[^\]]*"target"[^\]]*\] as const/)
 })
 
 test('deleteTarget 客户端指向单个靶点资源', () => {

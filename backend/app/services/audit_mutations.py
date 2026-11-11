@@ -30,8 +30,9 @@ from app.models.users import User
 logger = logging.getLogger(__name__)
 
 
-def record_domain_delete(
+def record_domain_action(
     *,
+    action: AuditAction,
     request: Optional[Request],
     current_user: User,
     resource_type: ResourceType,
@@ -40,12 +41,12 @@ def record_domain_delete(
     result: AuditResult = AuditResult.SUCCESS,
     **detail: Any,
 ) -> None:
-    """记录一次领域对象删除。``detail`` 里的键值会进审计详情的 ``detail`` 列。"""
+    """记录一次领域对象状态变更（删除、归档等）。``detail`` 进审计详情的 ``detail`` 列。"""
     client_ip, user_agent = client_meta(request)
     try:
         get_audit_logger().log(
             AuditEvent(
-                action=AuditAction.DELETE,
+                action=action,
                 result=result,
                 user_id=str(current_user.id),
                 user_email=getattr(current_user, "email", None),
@@ -57,8 +58,33 @@ def record_domain_delete(
                 extra=detail,
             )
         )
-    except Exception:  # pragma: no cover - 防御性：审计不能阻断删除
-        logger.warning("记录删除审计失败：resource=%s/%s", resource_type, resource_id)
+    except Exception:  # pragma: no cover - 防御性：审计不能阻断业务动作
+        logger.warning(
+            "记录领域对象审计失败：action=%s resource=%s/%s", action, resource_type, resource_id
+        )
 
 
-__all__ = ["record_domain_delete"]
+def record_domain_delete(
+    *,
+    request: Optional[Request],
+    current_user: User,
+    resource_type: ResourceType,
+    resource_id: str,
+    resource_name: Optional[str] = None,
+    result: AuditResult = AuditResult.SUCCESS,
+    **detail: Any,
+) -> None:
+    """记录一次领域对象删除（``record_domain_action`` 的 ``DELETE`` 快捷方式）。"""
+    record_domain_action(
+        action=AuditAction.DELETE,
+        request=request,
+        current_user=current_user,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        resource_name=resource_name,
+        result=result,
+        **detail,
+    )
+
+
+__all__ = ["record_domain_action", "record_domain_delete"]

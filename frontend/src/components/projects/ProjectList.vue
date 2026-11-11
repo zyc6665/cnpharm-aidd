@@ -22,9 +22,21 @@
             type="link"
             size="small"
             class="project-action"
-            @click="handleArchive(project.id, $event)"
+            @click="handleAction('archive', project.id, $event)"
           >
             {{ t('workspace.project.archive') }}
+          </a-button>
+          <!-- 已归档项目必须在这里就能撤销：默认列表不显示归档项目，
+               如果只把入口放在详情页，用户得先「猜」到能点进去才找得到。 -->
+          <a-button
+            v-if="canUnarchive(project)"
+            type="link"
+            size="small"
+            class="project-action"
+            data-testid="project-unarchive-button"
+            @click="handleAction('unarchive', project.id, $event)"
+          >
+            {{ t('workspace.project.unarchive') }}
           </a-button>
           <span v-if="canDelete(project)" @click.prevent.stop>
             <a-popconfirm
@@ -64,13 +76,18 @@ import type { ResearchProject } from '@/types/projects'
 defineProps<{ projects: ResearchProject[] }>()
 const emit = defineEmits<{
   archive: [projectId: string]
+  unarchive: [projectId: string]
   delete: [projectId: string]
 }>()
 
 const { t } = useI18n()
 const formatUpdatedAt = (value: string) => formatDateTimeMinutes(value)
+const canManage = (project: ResearchProject) =>
+  ['owner', 'editor', 'admin'].includes(project.role)
 const canArchive = (project: ResearchProject) =>
-  project.status !== 'archived' && ['owner', 'editor', 'admin'].includes(project.role)
+  project.status !== 'archived' && canManage(project)
+const canUnarchive = (project: ResearchProject) =>
+  project.status === 'archived' && canManage(project)
 const canDelete = (project: ResearchProject) => ['owner', 'admin'].includes(project.role)
 
 function stopAction(event?: Event) {
@@ -78,9 +95,17 @@ function stopAction(event?: Event) {
   event?.stopPropagation()
 }
 
-function handleArchive(projectId: string, event?: Event) {
+function handleAction(
+  action: 'archive' | 'unarchive',
+  projectId: string,
+  event?: Event
+) {
   stopAction(event)
-  emit('archive', projectId)
+  if (action === 'archive') {
+    emit('archive', projectId)
+  } else {
+    emit('unarchive', projectId)
+  }
 }
 </script>
 

@@ -13,6 +13,29 @@
       <template #action><a-button size="small" @click="load">重试</a-button></template>
     </a-alert>
 
+    <!-- 归档项目能打开、能看，缺的只是「撤销」。横幅就是那个入口。 -->
+    <a-alert
+      v-if="isArchived"
+      class="overview-alert"
+      type="warning"
+      show-icon
+      message="该项目已归档"
+      description="归档只表示它不在工作台的常用列表里，项目数据、任务与产物都保留。撤销归档后可以继续提交任务。"
+      data-testid="project-archived-banner"
+    >
+      <template #action>
+        <a-button
+          v-if="canUnarchive"
+          size="small"
+          :loading="unarchiving"
+          data-testid="project-unarchive-action"
+          @click="handleUnarchive"
+        >
+          撤销归档
+        </a-button>
+      </template>
+    </a-alert>
+
     <a-skeleton v-if="loading && !overview" active :paragraph="{ rows: 10 }" />
     <template v-else-if="overview">
       <header class="overview-header">
@@ -174,7 +197,8 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import { getProjectOverview } from '@/api/projects'
+  import { message } from 'ant-design-vue'
+  import { getProjectOverview, unarchiveProject } from '@/api/projects'
   import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
   import { mergeCursorPage } from '@/utils/pagination'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -203,6 +227,7 @@
   const overview = ref<ProjectOverview | null>(null)
   const loading = ref(false)
   const loadError = ref(false)
+  const unarchiving = ref(false)
   const artifactFilterPresets = PROJECT_ARTIFACT_FILTER_PRESETS
   const activeArtifactFilterKey = ref<ProjectArtifactFilterPreset['key']>('recent')
   const artifactPageSize = 20
@@ -214,6 +239,24 @@
   const artifactFilterError = ref(false)
 
   const statCards = computed(() => getProjectOverviewStatCards(overview.value?.counts))
+  const isArchived = computed(() => overview.value?.project.status === 'archived')
+  const canUnarchive = computed(() =>
+    ['owner', 'editor', 'admin'].includes(overview.value?.project.role ?? '')
+  )
+
+  async function handleUnarchive() {
+    if (unarchiving.value || !projectId.value) return
+    unarchiving.value = true
+    try {
+      await unarchiveProject(projectId.value)
+      message.success('已撤销归档')
+      await load()
+    } catch {
+      message.error('撤销归档失败，请重试')
+    } finally {
+      unarchiving.value = false
+    }
+  }
   const displayedArtifacts = computed(
     () => artifactItems.value ?? overview.value?.artifacts ?? []
   )
