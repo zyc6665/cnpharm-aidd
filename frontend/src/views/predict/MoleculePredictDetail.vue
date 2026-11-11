@@ -18,7 +18,6 @@ import {
   type PredictDetailProfile
 } from '@/views/predict/predictDetailProfiles'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
-import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const props = defineProps<{
   row: CsvPreviewRow | null
@@ -439,7 +438,6 @@ onBeforeUnmount(() => {
     </div>
     <a-empty v-else :description="t('predict.result.detailNoData')" />
   </a-drawer>
-  <ResultDisclaimer />
 </template>
 
 <style scoped lang="less">

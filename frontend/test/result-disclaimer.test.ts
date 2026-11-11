@@ -14,13 +14,15 @@ function read(relativePath: string): string {
  * V3.0 每条需求的用例表业务规则都写着「预测与计算结果仅作为研发辅助参考，
  * 不作为实验验证结论」，而全站此前零命中（`docs/26` MOL-03-3 判为未实现）。
  * 这里锁住「所有展示预测/计算结果的页面都挂了免责说明」，新增结果页漏挂会红。
+ *
+ * 注意这些条目都是「页面级」组件：`views/tasks/Result.vue` 只负责分发到具体结果
+ * 面板、`MoleculePredictDetail`/`AffinityPredictDetail` 是面板内部的抽屉与详情，
+ * 它们不再各自挂一条，否则同一页会出现三遍（见 result-disclaimer-ownership.test.ts）。
  */
 const RESULT_VIEWS = [
   'src/views/results/ResultDetail.vue',
   'src/views/md/MdResult.vue',
   'src/views/md/FreeEnergyResult.vue',
-  'src/views/predict/AffinityPredictDetail.vue',
-  'src/views/predict/MoleculePredictDetail.vue',
   'src/views/predict/PropertyPredictResult.vue',
   'src/views/screening/DockingResultDetail.vue',
   'src/views/screening/ScreenResult.vue',
@@ -30,7 +32,6 @@ const RESULT_VIEWS = [
   'src/views/targets/StructureDetail.vue',
   'src/views/targets/Pockets.vue',
   'src/views/targets/PocketResidues.vue',
-  'src/views/tasks/Result.vue',
   'src/views/tasks/GenericTaskResult.vue',
   'src/views/tasks/PocketTaskResult.vue',
   'src/views/tasks/StructureTaskResult.vue',

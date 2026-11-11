@@ -153,7 +153,6 @@
     </div>
   </div>
   <a-empty v-else :description="t('predict.result.detailNoData')" />
-  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -166,7 +165,6 @@ import {
   type AffinityCandidate
 } from './affinityComparison'
 import type { CsvPreviewRow } from '@/domain/tasks/csv-result'
-import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const props = defineProps<{
   row: CsvPreviewRow
