@@ -34,8 +34,7 @@
 
     <template v-else>
       <p v-if="residues.length" class="residue-hint" data-testid="residues-ranking-hint">
-        按口袋内评分从高到低排列。评分是几何与理化启发式（贴近口袋中心 0.45 + 接触面
-        0.30 + 埋深 0.15 + 疏水 0.10），用于排序参考，不是结合自由能。
+        按口袋内评分从高到低排列。
       </p>
 
       <AppEmptyState

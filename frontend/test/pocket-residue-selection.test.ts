@@ -106,3 +106,28 @@ test('Mol* 相机对焦点必须是 Sphere3D，传普通对象会把相机写成
   assert.match(source, /keepCamera/)
   assert.match(source, /camera\.setState\(/)
 })
+
+test('关键残基在 3D 里是球棍模型，不只是换个颜色', () => {
+  const viewer = readSource('src/components/tasks/PocketViewer.vue')
+  // 关键残基独立成组，用球棍
+  assert.match(viewer, /'key-residues'/)
+  assert.match(viewer, /type: 'ball-and-stick'/)
+  // 与选中残基（同样是球棍）互不重叠：卡通层要排除这两类
+  assert.match(viewer, /const peripheral = props\.resIds\.filter/)
+  assert.match(viewer, /!selected\.has\(id\) && !keySet\.has\(id\)/)
+  // 图例要能对上看到的形态
+  assert.match(viewer, /关键残基（球棍）/)
+
+  const page = readSource('src/views/demo/Achievements.vue')
+  assert.match(page, /:key-res-ids="keyResIds"/)
+})
+
+test('界面上不写打分工与疏水指数的解释性文字', () => {
+  const page = readSource('src/views/demo/Achievements.vue')
+  assert.doesNotMatch(page, /贴近口袋中心 0\.45/)
+  assert.doesNotMatch(page, /Kyte–Doolittle/)
+  assert.doesNotMatch(page, /不是结合自由能/)
+
+  const table = readSource('src/views/targets/PocketResidues.vue')
+  assert.doesNotMatch(table, /贴近口袋中心 0\.45/)
+})

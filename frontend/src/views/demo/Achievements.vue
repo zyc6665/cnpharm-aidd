@@ -120,6 +120,7 @@
                   v-if="pdbUrl"
                   :pdb-url="pdbUrl"
                   :res-ids="pocketResIds"
+                  :key-res-ids="keyResIds"
                   :selected-res-ids="selectedResIds"
                   :pocket-center="pocketCenter"
                   :chain="pocketChain"
@@ -184,11 +185,6 @@
                 </div>
                 <div v-else class="residue-empty">
                   该口袋暂未存储残基注释数据，仍可在 3D 中查看整个蛋白结构。
-                </div>
-                <div v-if="keyResidues.length" class="residue-note">
-                  评分 = 贴近口袋中心 0.45 + 接触面 0.30 + 埋深 0.15 + 疏水 0.10，
-                  用于排序参考；它衡量的是几何关系，不是结合贡献，也不能当结合自由能用。
-                  疏水指数为 Kyte–Doolittle 标度。
                 </div>
                 <div v-if="selectedSummary" class="residue-detail" data-testid="residue-selection-detail">
                   {{ selectedSummary }}
@@ -560,6 +556,13 @@ const keyResidues = computed(() =>
   rankedResidues.value.filter(
     (residue) => residue.score_tier === 'core' || residue.score_tier === 'key'
   )
+)
+
+/** 关键残基在 3D 中以球棍模型展示，需要把残基序号直接交给视图。 */
+const keyResIds = computed(() =>
+  keyResidues.value
+    .map((residue) => residue.residue_seq)
+    .filter((seq): seq is number => typeof seq === 'number')
 )
 
 const allResidueRows = computed(() =>
@@ -1250,15 +1253,6 @@ onBeforeUnmount(() => {
   border: 1px dashed var(--color-border-secondary);
   border-radius: 8px;
   font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-.residue-note {
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--color-bg-layout);
-  font-size: 11px;
-  line-height: 1.6;
   color: var(--color-text-tertiary);
 }
 .residue-detail {
