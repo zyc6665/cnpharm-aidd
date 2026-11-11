@@ -61,6 +61,7 @@ from app.services.traceability import (  # noqa: E402
     build_traceability_package,
     record_task_inputs,
     role_for_semantic_type,
+    serialize_snapshots,
 )
 from app.tasks.service import create_and_schedule_tool_task  # noqa: E402
 
@@ -560,6 +561,113 @@ async def test_snapshot_pins_downloadable_file_for_artifact_binding(
     artifact_row = next(row for row in rows if row.entity_type == "artifact_version")
     assert artifact_row.file_id == record.id
     assert artifact_row.detail["file_id"] == record.id
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshot_is_serialized_with_the_version_primary_file(
+    db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """读时纠正：历史快照记错文件 id 也能拿到真正的主文件。
+
+    早期写入按 role 字典序挑主文件，`metadata_json` 排在 `structure_file` 前面，
+    于是快照里存的是 268 字节的 sidecar。快照表只追加、不能改写，所以纠正必须发生在
+    读路径上；同时保留 `snapshotFileId`，让人能看出「记录里原本写的是什么」。
+    渲染端因此只下载一个文件，不需要逐个候选下载再看内容。
+    """
+    owner = users[OWNER]
+    tool = await _create_tool(db_session, owner)
+    task = Task(
+        id="task-domain-3",
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="legacy snapshot",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id)},
+    )
+    db_session.add(task)
+
+    structure = await store_file_bytes(
+        db_session,
+        content=(
+            b"ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+            b"END\n"
+        ),
+        filename="structure.pdb",
+        content_type="chemical/x-pdb",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    metadata = await store_file_bytes(
+        db_session,
+        content=b'{"residue_count": 327}',
+        filename="metadata.json",
+        content_type="application/json",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        name="EGFR structure",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="structure.pdb",
+        size_bytes=structure.size_bytes,
+        sha256=structure.sha256,
+        storage_key="artifacts/structure.pdb",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    from app.models.artifacts import ArtifactVersionFile
+
+    db_session.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="metadata_json",
+                file_id=metadata.id,
+                is_primary=False,
+                sort_order=0,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="structure_file",
+                file_id=structure.id,
+                is_primary=True,
+                sort_order=1,
+            ),
+        ]
+    )
+    # 模拟历史坏行：快照里的 file_id 指向元数据 sidecar。
+    legacy = TaskInputSnapshot(
+        task_id=task.id,
+        input_role=INPUT_ROLE_RECEPTOR,
+        ordinal=0,
+        entity_type="artifact_version",
+        entity_id=str(version.id),
+        urn=f"artifact:{version.id}",
+        file_id=metadata.id,
+        detail={"filename": "metadata.json"},
+    )
+    db_session.add(legacy)
+    await db_session.commit()
+
+    payloads = await serialize_snapshots(db_session, [legacy])
+    assert payloads[0]["fileId"] == structure.id
+    assert payloads[0]["snapshotFileId"] == metadata.id
+    assert payloads[0]["detail"]["filename"] == "metadata.json"
 
 
 # ---------------------------------------------------------------------------

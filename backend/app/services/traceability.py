@@ -441,8 +441,16 @@ async def load_task_snapshots(db: AsyncSession, *, task_id: str) -> list[TaskInp
     return list(result.scalars().all())
 
 
-def serialize_snapshot(row: TaskInputSnapshot) -> dict[str, Any]:
-    return {
+def serialize_snapshot(row: TaskInputSnapshot, *, primary_file_id: str | None = None) -> dict[str, Any]:
+    """把一个输入快照序列化成 API 形态。
+
+    ``fileId`` 是**下载入口**，不是历史字段的复制品：调用方应先用
+    :func:`resolve_snapshot_file_ids` 把 `artifact:<version>` 解析成该版本的主文件，
+    再传进来。这样历史快照（早期按 role 字典序挑主文件、错记成 metadata.json 的那些）
+    也会被读时纠正，而不需要改写只追加的快照表，前端也不用下载文件去猜内容。
+    """
+    resolved_file_id = primary_file_id or row.file_id
+    payload: dict[str, Any] = {
         "inputRole": row.input_role,
         "ordinal": row.ordinal,
         "entityType": row.entity_type,
@@ -450,10 +458,69 @@ def serialize_snapshot(row: TaskInputSnapshot) -> dict[str, Any]:
         "urn": row.urn,
         "sha256": row.sha256,
         "dataVersion": row.data_version,
-        "fileId": row.file_id,
+        "fileId": resolved_file_id,
         "detail": row.detail or {},
         "recordedAt": _iso(row.created_at),
     }
+    if resolved_file_id and row.file_id and resolved_file_id != row.file_id:
+        # 快照里记的原值仍要能看到：追溯记录不能因为「读时纠正」而看不出改过什么。
+        payload["snapshotFileId"] = row.file_id
+    return payload
+
+
+def _snapshot_version_id(row: TaskInputSnapshot) -> str | None:
+    if str(row.entity_type or "") == "artifact_version" and row.entity_id:
+        return str(row.entity_id)
+    urn = str(row.urn or "")
+    prefix = "artifact:"
+    if urn.startswith(prefix):
+        return urn[len(prefix):] or None
+    return None
+
+
+async def resolve_snapshot_file_ids(
+    db: AsyncSession, rows: Iterable[TaskInputSnapshot]
+) -> dict[str, str]:
+    """批量把 `artifact:<version>` 快照解析成版本主文件 id（一次查询，不按行 N+1）。
+
+    排序规则与写入侧一致：`is_primary desc → sort_order → role`。渲染端拿这个
+    `fileId` 直接下载一个文件即可，不需要「逐个候选下载再看内容」——那是把
+    服务端的排序缺陷转嫁成客户端的流量与延迟。
+    """
+    version_ids = {vid for row in rows if (vid := _snapshot_version_id(row))}
+    if not version_ids:
+        return {}
+    result = await db.execute(
+        select(
+            ArtifactVersionFile.artifact_version_id,
+            ArtifactVersionFile.file_id,
+        )
+        .where(ArtifactVersionFile.artifact_version_id.in_(sorted(version_ids)))
+        .order_by(
+            ArtifactVersionFile.artifact_version_id,
+            ArtifactVersionFile.is_primary.desc(),
+            ArtifactVersionFile.sort_order,
+            ArtifactVersionFile.role,
+        )
+    )
+    primaries: dict[str, str] = {}
+    for version_id, file_id in result.all():
+        primaries.setdefault(str(version_id), str(file_id))
+    return primaries
+
+
+async def serialize_snapshots(
+    db: AsyncSession, rows: Iterable[TaskInputSnapshot]
+) -> list[dict[str, Any]]:
+    """:func:`serialize_snapshot` 的批量版：先解析主文件，再逐条序列化。"""
+    materialized = list(rows)
+    primaries = await resolve_snapshot_file_ids(db, materialized)
+    payloads: list[dict[str, Any]] = []
+    for row in materialized:
+        version_id = _snapshot_version_id(row)
+        resolved = primaries.get(version_id) if version_id else None
+        payloads.append(serialize_snapshot(row, primary_file_id=resolved))
+    return payloads
 
 
 async def build_traceability_package(
@@ -545,7 +612,7 @@ async def build_traceability_package(
             # 重试来源（重试链起点任务 id，G-4）；非重试任务为 None。
             "retryOf": task.retry_of,
         },
-        "inputs": [serialize_snapshot(row) for row in snapshots],
+        "inputs": await serialize_snapshots(db, snapshots),
         "environment": environment,
         "params": {
             "requested": dict(getattr(task_input, "params", None) or {}),
@@ -585,6 +652,8 @@ __all__ = [
     "package_sha256",
     "record_task_inputs",
     "role_for_semantic_type",
+    "resolve_snapshot_file_ids",
     "sequence_sha256",
     "serialize_snapshot",
+    "serialize_snapshots",
 ]

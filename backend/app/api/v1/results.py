@@ -66,7 +66,7 @@ from app.services.traceability import (
     build_traceability_package,
     load_task_snapshots,
     package_sha256,
-    serialize_snapshot,
+    serialize_snapshots,
 )
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -277,7 +277,7 @@ async def get_result(
     return success_response(
         data={
             **_serialize_result(task),
-            "inputs": [serialize_snapshot(row) for row in snapshots],
+            "inputs": await serialize_snapshots(db, snapshots),
             "outputs": await _artifact_outputs(db, str(task.id)),
             "output_data": task.outputs.result if task.outputs else None,
         }
