@@ -83,7 +83,7 @@ async def stage_kubernetes_inputs(
 
         slot_name = slot_by_file_id.get(normalized_file_id)
         input_name = _safe_segment(slot_name or f"file-{index}")
-        filename = safe_storage_filename(str(record.filename or "file"))
+        filename = _input_filename(str(record.filename or "file"), normalized_file_id)
         binding = binding_by_file_id.get(normalized_file_id, {})
         object_key = "/".join(
             (
@@ -210,3 +210,34 @@ def _safe_segment(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", value) or value in {".", ".."}:
         raise KubernetesInputStagingError(f"unsafe Kubernetes input path segment: {value}")
     return value
+
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
+_MAX_INPUT_FILENAME = 96
+
+
+def _input_filename(filename: str, file_id: str) -> str:
+    """Return an ASCII-safe file name for the staged object key.
+
+    Object keys are also path segments inside the Job, so a candidate set named
+    "Pocket2Mol 生成集" (exported as ``Pocket2Mol 生成集.csv``) used to fail the
+    whole task with "unsafe Kubernetes input path segment". Rejecting a task
+    because a user typed Chinese in a name is not acceptable, so the name is
+    normalized instead: keep the extension, transliterate the rest to
+    ``[A-Za-z0-9_.-]`` and prefix the file id (sanitizing collapses distinct
+    names, and two files can share one slot directory).
+    """
+    base = safe_storage_filename(str(filename or "file"))
+    stem, dot, extension = base.rpartition(".")
+    if dot and re.fullmatch(r"[A-Za-z0-9]{1,12}", extension):
+        suffix = "." + extension.lower()
+        stem = stem or "file"
+    else:
+        suffix = ""
+        stem = base
+    if re.fullmatch(r"[A-Za-z0-9_.-]+", stem) and stem not in {".", ".."}:
+        return stem[: max(_MAX_INPUT_FILENAME - len(suffix), 1)] + suffix
+    cleaned = _UNSAFE_FILENAME_CHARS.sub("_", stem).strip("._-") or "file"
+    prefix = re.sub(r"[^A-Za-z0-9]", "", str(file_id))[:8] or "file"
+    room = max(_MAX_INPUT_FILENAME - len(suffix) - len(prefix) - 1, 1)
+    return f"{prefix}-{cleaned[:room]}{suffix}"
