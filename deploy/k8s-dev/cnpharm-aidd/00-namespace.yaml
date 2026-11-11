@@ -1,0 +1,17 @@
+# 中国医药 AIDD 平台 —— 本地开发环境（Windows 平台机 + 4090 计算节点）
+#
+# 定位（2026-11-07 重置后）：
+#   4090        = 纯计算节点（保留 registry 与镜像 PVC、hostPath 权重缓存），不再承载平台服务
+#   Windows     = 平台部署机，承载 PostgreSQL / Redis / MinIO 与应用进程
+#   namespace   = cnpharm-aidd（本地与后续集群统一）
+#
+# 为什么用 NodePort 而不是 port-forward：
+#   kubectl port-forward 是前台进程，会话结束或网络抖动即断；
+#   断了以后后端启动直接 ConnectionRefused，表现为"过一夜平台打不开"。
+#   NodePort 由 kube-proxy 常驻转发，不依赖任何人工进程。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpharm-aidd
+  labels:
+    app.kubernetes.io/part-of: cnpharm-aidd
