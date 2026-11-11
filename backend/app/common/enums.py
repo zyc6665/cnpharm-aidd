@@ -179,6 +179,10 @@ class RESOURCE_TYPE(_StringEnum):
     #: 记成 ``file`` 会让审计员按资源维度排查时找不到那次导出。
     CANDIDATE_SET = "candidate_set"
     STRUCTURE = "structure"
+    #: 靶点删除会连带蛋白、结构、口袋与残基（领域表没有 ON DELETE CASCADE，
+    #: 由 ``delete_target_cascade`` 按序显式删）。记成 ``structure`` 或 ``file``
+    #: 都会让审计员按资源维度查「谁把 EGFR 删了」时找不到那条记录。
+    TARGET = "target"
 
 
 #: 供 schema 类型注解使用的 Literal 别名（值集合来自上面的枚举）。

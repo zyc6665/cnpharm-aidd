@@ -428,16 +428,29 @@ async def create_pocket(
 # ---------------------------------------------------------------------------
 
 
-async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> None:
+async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> dict[str, int]:
     """Delete a target with its proteins, structures, pockets and residues.
 
     显式按序删除而不是依赖 ORM cascade：异步会话下隐式懒加载会抛
     ``MissingGreenlet``，且数据库层没有 ``ON DELETE CASCADE``。
+
+    Returns:
+        删除行数（``proteins`` / ``structures`` / ``pockets`` / ``pocketResidues``），
+        供调用方写进审计详情：「删了一个靶点」和「删了一个靶点连带 4 个蛋白、
+        3 个结构、1 个口袋和 99 条残基」在事后追查时不是一回事。
     """
     structure_ids = select(ProteinStructure.id).join(
         Protein, Protein.id == ProteinStructure.protein_id
     ).where(Protein.target_id == target_id)
     pocket_ids = select(Pocket.id).where(Pocket.structure_id.in_(structure_ids))
+    removed = {
+        "proteins": await _count_rows(db, select(Protein.id).where(Protein.target_id == target_id)),
+        "structures": await _count_rows(db, structure_ids),
+        "pockets": await _count_rows(db, pocket_ids),
+        "pocketResidues": await _count_rows(
+            db, select(PocketResidue.id).where(PocketResidue.pocket_id.in_(pocket_ids))
+        ),
+    }
     await db.execute(sa_delete(PocketResidue).where(PocketResidue.pocket_id.in_(pocket_ids)))
     await db.execute(sa_delete(Pocket).where(Pocket.structure_id.in_(structure_ids)))
     await db.execute(
@@ -450,6 +463,13 @@ async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> None:
     await db.execute(sa_delete(Protein).where(Protein.target_id == target_id))
     await db.execute(sa_delete(Target).where(Target.id == target_id))
     await db.commit()
+    return removed
+
+
+async def _count_rows(db: AsyncSession, statement) -> int:
+    """数一条 ``select(<id>)`` 语句的行数（删除前统计，删除后就数不出来了）。"""
+    count_statement = select(func.count()).select_from(statement.subquery())
+    return int((await db.execute(count_statement)).scalar_one())
 
 
 async def delete_project_domain_rows(db: AsyncSession, *, project_id: str) -> None:

@@ -995,7 +995,12 @@ export default {
       gene: '基因名',
       description: '描述',
       descriptionPlaceholder: '补充靶点背景说明（可选）',
-      total: '共 {total} 个靶点'
+      total: '共 {total} 个靶点',
+      deleteConfirm: '删除靶点「{name}」？',
+      deleteConfirmContent:
+        '该靶点下的蛋白、结构与口袋记录会一并删除且不可恢复；已产出的任务结果与产物保留。',
+      deleteSuccess: '靶点「{name}」已删除',
+      deleteFailed: '靶点删除失败，请重试',
     },
     detail: {
       title: '靶点详情',

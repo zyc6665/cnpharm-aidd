@@ -285,7 +285,11 @@ async def test_outsider_cannot_read_target(api_client: httpx.AsyncClient, projec
 
 @pytest.mark.asyncio
 async def test_target_update_and_delete_cascade(
-    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, users: dict[str, User]
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+    monkeypatch,
 ):
     target = await _create_target(api_client, project.id)
     protein = await _create_protein(api_client, target["id"])
@@ -307,10 +311,25 @@ async def test_target_update_and_delete_cascade(
     assert updated.status_code == 200
     assert updated.json()["data"]["gene_name"] == "ERBB1"
 
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
     deleted = await api_client.delete(
         f"/api/v1/targets/{target['id']}", headers=_headers(OWNER)
     )
     assert deleted.status_code == 200
+    removed = deleted.json()["data"]["removed"]
+    # 删掉多少行要能回答：用户点一次「删除」，实际消失的是 1 个靶点 + 1 个蛋白
+    # + 1 个结构 + 1 个口袋 + 2 条残基，事后追查时靠这条计数。
+    assert removed == {
+        "proteins": 1,
+        "structures": 1,
+        "pockets": 1,
+        "pocketResidues": 2,
+    }
 
     for model, lookup in (
         (Target, "target"),
@@ -321,6 +340,17 @@ async def test_target_update_and_delete_cascade(
         remaining = (await db_session.execute(select(model))).scalars().all()
         assert remaining == [], f"{lookup} should be deleted with its target"
     assert (await db_session.execute(select(PocketResidue))).scalars().all() == []
+
+    delete_events = [event for event in events if event.action is AuditAction.DELETE]
+    assert len(delete_events) == 1
+    event = delete_events[0]
+    assert event.resource_type is ResourceType.TARGET
+    assert event.resource_id == target["id"]
+    # 名字快照必须落在 resource_name 列：靶点行已经删了，detail 里的名字也救不了
+    # 按资源名检索
+    assert event.resource_name == target["name"]
+    assert event.extra["removed"]["pocketResidues"] == 2
+    assert event.extra["project_id"] == project.id
 
 
 # ---------------------------------------------------------------------------

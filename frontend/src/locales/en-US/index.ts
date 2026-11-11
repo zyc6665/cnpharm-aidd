@@ -996,7 +996,12 @@ export default {
       gene: 'Gene name',
       description: 'Description',
       descriptionPlaceholder: 'Optional background notes for this target',
-      total: '{total} targets in total'
+      total: '{total} targets in total',
+      deleteConfirm: 'Delete target "{name}"?',
+      deleteConfirmContent:
+        'Its proteins, structures and pockets are deleted with it and cannot be recovered. Task results and artifacts already produced are kept.',
+      deleteSuccess: 'Target "{name}" deleted',
+      deleteFailed: 'Failed to delete target, please retry',
     },
     detail: {
       title: 'Target details',
