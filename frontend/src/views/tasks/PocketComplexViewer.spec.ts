@@ -127,4 +127,56 @@ describe('PocketComplexViewer', () => {
       '/api/v1/files/479f3ae8-4373-459d-9e3c-b5573e96f151/download',
     )
   })
+
+  it('skips a snapshot that points at version metadata and uses the real structure file', async () => {
+    // 真机数据：artifact_version 快照的文件 id 指向 268 字节的 metadata.json，
+    // 内容里没有 ATOM，直接当受体渲染就会退化成「只有口袋残基」。
+    const task = buildTask()
+    task.input_snapshots = [
+      {
+        inputRole: 'RECEPTOR',
+        entityType: 'artifact_version',
+        urn: 'artifact:1e429351-1b7f-4490-b535-72c9dc66b041',
+        fileId: 'file-metadata',
+        detail: { filename: 'structure.pdb' },
+      },
+      {
+        inputRole: 'RECEPTOR',
+        entityType: 'protein_structure',
+        urn: 'file:28fd57e1-8b5f-4492-83b2-40623ee60010',
+        fileId: 'file-structure',
+        detail: { source_type: 'PREDICTED' },
+      },
+    ] as never
+
+    const { fetchProtectedFileText } = await import('@/utils/protected-file-access')
+    vi.mocked(fetchProtectedFileText).mockImplementation(async (url: string) => {
+      if (url.includes('file-metadata')) {
+        return '{ "residue_count": 327, "atom_count": 2620 }'
+      }
+      return 'ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N'
+    })
+
+    const wrapper = mount(PocketComplexViewer, {
+      props: { task: task as never },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          MoleculeViewer: MoleculeViewerStub,
+          'a-alert': { template: '<div data-testid="stub-alert" />' },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const scene = wrapper.findComponent(MoleculeViewerStub).props('scene')
+    expect(scene.entries.map((entry: { role: string }) => entry.role)).toEqual([
+      'receptor',
+      'pocket',
+    ])
+    expect(scene.entries[0].url).toBe(
+      '/api/v1/files/file-structure/download',
+    )
+  })
 })

@@ -25,6 +25,8 @@ def test_prepare_protein_removes_water_and_returns_requested_roles(tmp_path, mon
         receptor_pdbqt.write_text("REMARK receptor pdbqt\n", encoding="utf-8")
 
     monkeypatch.setattr(engine, "convert_prepared_pdb_to_pdbqt", fake_convert)
+    # 缺 obabel 时引擎会跳过 PDBQT（只记 warning），这条用例要覆盖「有 obabel」那条路
+    monkeypatch.setattr(engine.shutil, "which", lambda name: "/usr/bin/obabel")
     monkeypatch.setattr(
         engine,
         "_run_open_source_preparation",
@@ -158,3 +160,35 @@ def test_prepare_protein_report_declares_open_source_backend(tmp_path, monkeypat
     assert result.report["engine"] == "open-source-basic-fallback"
     assert result.report["implementation"] == "open-source"
     assert result.report["status"] == "degraded"
+
+
+def test_prepare_protein_keeps_prepared_pdb_when_obabel_is_missing(tmp_path, monkeypatch):
+    """缺 obabel 只该少一个 PDBQT 产物，不该把整次制备判为失败。
+
+    真机现象：结构详情页点「结构准备」，任务 10 秒就 failed，错误是
+    「未知错误：蛋白制备需要 obabel 将 prepared PDB 转为 receptor PDBQT」——
+    而 prepared.pdb 其实已经算出来了。环境缺件要写进 warnings / missing_tools，
+    让用户看到「产物在、对接准备没做完」，而不是一句失败。
+    """
+    source = tmp_path / "raw.pdb"
+    source.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
+    monkeypatch.setattr(
+        engine,
+        "_run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            engine.OpenSourcePreparationUnavailable("PDBFixer 不可用")
+        ),
+    )
+    monkeypatch.setattr(engine.shutil, "which", lambda name: None)
+
+    result = engine.prepare_protein(
+        source,
+        ProteinPreparationOptions(output_formats=["prepared_pdb", "receptor_pdbqt"]),
+        output_dir=tmp_path / "out",
+    )
+
+    assert set(result.files) == {"prepared_pdb"}
+    assert result.files["prepared_pdb"].path.exists()
+    assert result.report["missing_tools"] == ["obabel"]
+    assert result.report["status"] == "degraded"
+    assert any("obabel" in warning for warning in result.warnings)

@@ -507,14 +507,39 @@ async def test_snapshot_pins_downloadable_file_for_artifact_binding(
         sha256=record.sha256,
         storage_key="artifacts/prepared.pdb",
     )
+    metadata = await store_file_bytes(
+        db_session,
+        content=b'{"residue_count": 327}',
+        filename="metadata.json",
+        content_type="application/json",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
     db_session.add(version)
     await db_session.flush()
     from app.models.artifacts import ArtifactVersionFile
 
-    db_session.add(
-        ArtifactVersionFile(
-            artifact_version_id=version.id, role="table_file", file_id=record.id
-        )
+    # 版本里既有坐标文件也有元数据 sidecar。只按 role 字典序取首个会拿到 metadata_json
+    # （"metadata_json" < "structure_file"），快照就记成那个 268 字节的 JSON，
+    # 结果页拿它当结构下载、解析不出原子，于是退化成「只有口袋残基」。
+    db_session.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="metadata_json",
+                file_id=metadata.id,
+                is_primary=False,
+                sort_order=0,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="structure_file",
+                file_id=record.id,
+                is_primary=True,
+                sort_order=1,
+            ),
+        ]
     )
     await db_session.flush()
 

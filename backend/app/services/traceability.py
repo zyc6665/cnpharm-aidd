@@ -86,11 +86,21 @@ def _file_id_from_urn(urn: str | None) -> str | None:
 
 
 async def _version_primary_file_id(db: AsyncSession, version_id: str) -> str | None:
-    """取 ArtifactVersion 的首个文件 id（按 role 排序，主产物 role 排在前面）。"""
+    """取 ArtifactVersion 的主文件 id。
+
+    排序必须是「主文件优先 → 版本内声明顺序 → role」，不能只按 role 字典序：
+    `protein_structure@1` 这类版本的 role 有 `structure_file` 与 `metadata_json`，
+    字典序会把 `metadata_json` 排在前面，快照就记成了那个 268 字节的元数据 JSON，
+    下游拿它当结构下载、解析不出原子，渲染退化成「只有口袋残基」。
+    """
     result = await db.execute(
         select(ArtifactVersionFile.file_id)
         .where(ArtifactVersionFile.artifact_version_id == version_id)
-        .order_by(ArtifactVersionFile.role)
+        .order_by(
+            ArtifactVersionFile.is_primary.desc(),
+            ArtifactVersionFile.sort_order,
+            ArtifactVersionFile.role,
+        )
         .limit(1)
     )
     return result.scalar_one_or_none()

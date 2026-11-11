@@ -105,17 +105,29 @@ def prepare_protein(
             content_type="chemical/x-pdb",
         )
 
+    missing_tools: list[str] = []
     if "receptor_pdbqt" in requested_formats:
-        receptor_pdbqt = output_dir / "receptor.pdbqt"
-        convert_prepared_pdb_to_pdbqt(prepared_pdb, receptor_pdbqt, rigid=True)
-        files["receptor_pdbqt"] = PreparedProteinFile(
-            role="receptor_pdbqt",
-            path=receptor_pdbqt,
-            content_type="chemical/x-pdbqt",
-        )
+        # 缺 obabel 时只跳过 PDBQT 这一项产物，不把整次制备判为失败：
+        # 制备本身产出的 prepared.pdb 是完整可用的（预览、口袋预测、下游都能吃），
+        # 而对接受阻这件事必须写进 report 与 warning，不能悄悄少一个文件。
+        if shutil.which("obabel"):
+            receptor_pdbqt = output_dir / "receptor.pdbqt"
+            convert_prepared_pdb_to_pdbqt(prepared_pdb, receptor_pdbqt, rigid=True)
+            files["receptor_pdbqt"] = PreparedProteinFile(
+                role="receptor_pdbqt",
+                path=receptor_pdbqt,
+                content_type="chemical/x-pdbqt",
+            )
+        else:
+            missing_tools.append("obabel")
+            warnings.append(
+                "执行环境未安装 obabel，未生成 receptor.pdbqt；对接任务需要它，"
+                "安装 openbabel 后重新执行结构准备即可"
+            )
 
     report = {
-        "status": "degraded" if fallback_reason else "prepared",
+        "status": "degraded" if (fallback_reason or missing_tools) else "prepared",
+        "missing_tools": missing_tools,
         "engine": preparation_engine,
         "implementation": "open-source",
         "fallback_reason": fallback_reason,

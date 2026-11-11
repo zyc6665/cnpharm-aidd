@@ -21,7 +21,7 @@
     <!-- 等体素格也解析完再挂 viewer：MoleculeViewer 对 entries/voxelGrid 都是 deep watch，
          先挂载再补体素会把整份结构重新下载、重渲染一次（用户看到的就是加载两遍）。 -->
     <MoleculeViewer
-      v-if="scene && voxelReady"
+      v-if="scene && voxelReady && receptorReady"
       :scene="scene"
       :voxel-grid="voxelGrid"
     />
@@ -87,24 +87,70 @@
     return ''
   }
 
-  const receptorEntry = computed<VisualizationSceneEntry | null>(() => {
-    const snapshot = (props.task.input_snapshots ?? []).find(item => {
-      const role = String(item.inputRole || '').toLowerCase()
-      return (role.includes('protein') || role.includes('receptor')) && Boolean(snapshotFileUrl(item))
-    })
-    if (!snapshot) {
-      return null
+  /**
+   * 受体快照可能不止一条：`artifact:<version>`（平台物化的结构版本）与
+   * `file:<id>`（领域结构）经常同时存在，而且历史快照里的 `fileId` 有的是版本 sidecar
+   * （metadata.json），下下来根本不是坐标文件。所以不能「取第一条就用」，要逐个探测：
+   * 只有内容里真有 ATOM/HETATM 记录的那一条才算受体。
+   */
+  const receptorCandidates = computed<{ url: string; label: string }[]>(() => {
+    const seen = new Set<string>()
+    const candidates: { url: string; label: string }[] = []
+    for (const snapshot of props.task.input_snapshots ?? []) {
+      const role = String(snapshot.inputRole || '').toLowerCase()
+      if (!role.includes('protein') && !role.includes('receptor')) {
+        continue
+      }
+      const url = snapshotFileUrl(snapshot)
+      if (!url || seen.has(url)) {
+        continue
+      }
+      seen.add(url)
+      candidates.push({ url, label: String(snapshot.detail?.filename || '') })
     }
+    return candidates
+  })
 
-    const url = snapshotFileUrl(snapshot)
-    if (!url) {
+  const receptorUrl = ref('')
+  const receptorLabel = ref('')
+  const receptorReady = ref(false)
+
+  function looksLikeStructure(text: string): boolean {
+    return /^(ATOM|HETATM)/m.test(text)
+  }
+
+  watch(
+    () => [props.task.id, receptorCandidates.value.map(item => item.url).join('|')],
+    async () => {
+      receptorReady.value = false
+      receptorUrl.value = ''
+      receptorLabel.value = ''
+      for (const candidate of receptorCandidates.value) {
+        try {
+          const content = await fetchProtectedFileText(candidate.url)
+          if (looksLikeStructure(content)) {
+            receptorUrl.value = candidate.url
+            receptorLabel.value = candidate.label
+            break
+          }
+        } catch {
+          // 这一条取不到就换下一条；全都取不到时退回「只有口袋残基」的降级视图
+        }
+      }
+      receptorReady.value = true
+    },
+    { immediate: true },
+  )
+
+  const receptorEntry = computed<VisualizationSceneEntry | null>(() => {
+    if (!receptorUrl.value) {
       return null
     }
 
     return {
       key: 'pocket-receptor',
-      url,
-      label: String(snapshot.detail?.filename || t('tasks.resultPage.legendProtein')),
+      url: receptorUrl.value,
+      label: receptorLabel.value || t('tasks.resultPage.legendProtein'),
       source: 'input',
       role: 'receptor',
       format: 'pdb',
