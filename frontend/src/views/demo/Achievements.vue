@@ -120,7 +120,6 @@
                   v-if="pdbUrl"
                   :pdb-url="pdbUrl"
                   :res-ids="pocketResIds"
-                  :key-res-ids="keyResIds"
                   :selected-res-ids="selectedResIds"
                   :pocket-center="pocketCenter"
                   :chain="pocketChain"
@@ -556,13 +555,6 @@ const keyResidues = computed(() =>
   rankedResidues.value.filter(
     (residue) => residue.score_tier === 'core' || residue.score_tier === 'key'
   )
-)
-
-/** 关键残基在 3D 中以球棍模型展示，需要把残基序号直接交给视图。 */
-const keyResIds = computed(() =>
-  keyResidues.value
-    .map((residue) => residue.residue_seq)
-    .filter((seq): seq is number => typeof seq === 'number')
 )
 
 const allResidueRows = computed(() =>

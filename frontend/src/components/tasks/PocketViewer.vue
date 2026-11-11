@@ -12,8 +12,7 @@
 
     <div class="pocket-legend">
       <span class="legend-item"><i class="dot dot--pocket" />口袋残基</span>
-      <span class="legend-item"><i class="dot dot--key" />关键残基（球棍）</span>
-      <span class="legend-item"><i class="dot dot--focus" />选中残基</span>
+      <span class="legend-item"><i class="dot dot--focus" />选中残基（球棍）</span>
       <span class="legend-item"><i class="dot dot--ligand" />共晶配体</span>
     </div>
   </div>
@@ -34,15 +33,13 @@ const props = withDefaults(
     pdbUrl: string
     /** auth_seq_id 列表：需要高亮的口袋残基 */
     resIds: number[]
-    /** 关键残基（核心 + 关键分级），以球棍模型单独展示 */
-    keyResIds?: number[]
-    /** 当前选中的残基（auth_seq_id），可多选，单独高亮 */
+    /** 当前选中的残基（auth_seq_id），可多选，以球棍模型显示 */
     selectedResIds?: number[]
     /** 口袋中心坐标，用于把镜头对焦到口袋 */
     pocketCenter?: [number, number, number] | null
     chain?: string
   }>(),
-  { keyResIds: () => [], selectedResIds: () => [], pocketCenter: null, chain: 'A' }
+  { selectedResIds: () => [], pocketCenter: null, chain: 'A' }
 )
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -127,24 +124,15 @@ async function buildHighlights() {
   const chainTest = MS.core.rel.eq([MS.ammp('auth_asym_id'), props.chain])
 
   const selected = new Set(props.selectedResIds)
-  const keyIds = props.keyResIds
-  const keySet = new Set(keyIds)
   const residueExpr = (ids: number[]) =>
     MS.struct.generator.atomGroups({
       'chain-test': chainTest,
       'residue-test': MS.core.set.has([MS.set(...ids), MS.ammp('auth_seq_id')])
     })
 
-  // 球棍只给少数几个残基用：关键残基与选中残基各自成组，互不重叠，
-  // 同一个原子不会被画两遍（重叠的球棍会互相穿插，看起来像噪点）。
-  const ballAndStick = (color: number) => ({
-    type: 'ball-and-stick',
-    color: 'uniform',
-    colorParams: { value: color }
-  })
-
-  // 1) 口袋残基里的外围部分 —— 橙色卡通（与整体蛋白同一种表示法，避免一堆小球把结构盖住）
-  const peripheral = props.resIds.filter((id) => !selected.has(id) && !keySet.has(id))
+  // 1) 口袋残基 —— 橙色卡通。选中的残基从中抽出来单独画，否则同一个原子
+  // 会被卡通与球棍画两遍，球棍正好埋在丝带里，看起来只是「颜色变了」。
+  const peripheral = props.resIds.filter((id) => !selected.has(id))
   if (peripheral.length) {
     const comp = await addComponent(MS, residueExpr(peripheral), 'pocket-residues', '口袋残基', {
       type: 'cartoon',
@@ -154,26 +142,23 @@ async function buildHighlights() {
     if (comp?.cell) focusCells.push(comp.cell)
   }
 
-  // 2) 关键残基 —— 球棍模型：颜色变化看不出「这是哪几个残基」，球棍能
-  const keyOnly = keyIds.filter((id) => !selected.has(id))
-  if (keyOnly.length) {
-    const comp = await addComponent(MS, residueExpr(keyOnly), 'key-residues', '关键残基', ballAndStick(0xffc53d))
-    if (comp?.cell) focusCells.push(comp.cell)
-  }
-
-  // 3) 选中残基 —— 同样球棍，换成青色以便和「关键但未选中」区分
+  // 2) 选中残基 —— 球棍模型，点哪个显示哪个；没有选中就一个球棍都不画
   if (props.selectedResIds.length) {
     const comp = await addComponent(
       MS,
       residueExpr(props.selectedResIds),
       'focus-residue',
       '选中残基',
-      ballAndStick(0x22d3ee)
+      {
+        type: 'ball-and-stick',
+        color: 'uniform',
+        colorParams: { value: 0x22d3ee }
+      }
     )
     if (comp?.cell) focusCells.push(comp.cell)
   }
 
-  // 4) 共晶配体（AN2, 601）—— 按元素着色
+  // 3) 共晶配体（AN2, 601）—— 按元素着色
   const ligandExpr = residueExpr([601])
   const lig = await addComponent(MS, ligandExpr, 'co-ligand', '共晶配体', {
     type: 'spacefill',
@@ -368,9 +353,9 @@ onMounted(async () => {
   await render()
 })
 
-// 结构、口袋残基集合或关键残基集合变了才重建场景；只改选中集时重建高亮并保留视角
+// 结构或口袋残基集合变了才重建场景；只改选中集时重建高亮并保留视角
 watch(
-  () => [props.pdbUrl, props.resIds, props.keyResIds, props.chain],
+  () => [props.pdbUrl, props.resIds, props.chain],
   () => {
     void render()
   },
@@ -463,10 +448,6 @@ onUnmounted(() => {
 
 .dot--pocket {
   background: #ff7a45;
-}
-
-.dot--key {
-  background: #ffc53d;
 }
 
 .dot--focus {

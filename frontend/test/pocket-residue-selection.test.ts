@@ -107,19 +107,21 @@ test('Mol* 相机对焦点必须是 Sphere3D，传普通对象会把相机写成
   assert.match(source, /camera\.setState\(/)
 })
 
-test('关键残基在 3D 里是球棍模型，不只是换个颜色', () => {
+test('只有选中的残基画球棍，关键残基不自动展开', () => {
   const viewer = readSource('src/components/tasks/PocketViewer.vue')
-  // 关键残基独立成组，用球棍
-  assert.match(viewer, /'key-residues'/)
+  // 选中残基用球棍表示
+  assert.match(viewer, /'focus-residue'/)
   assert.match(viewer, /type: 'ball-and-stick'/)
-  // 与选中残基（同样是球棍）互不重叠：卡通层要排除这两类
-  assert.match(viewer, /const peripheral = props\.resIds\.filter/)
-  assert.match(viewer, /!selected\.has\(id\) && !keySet\.has\(id\)/)
-  // 图例要能对上看到的形态
-  assert.match(viewer, /关键残基（球棍）/)
+  // 没有「关键残基」这个自动分组：不选就不画，选了才画
+  assert.doesNotMatch(viewer, /'key-residues'/)
+  assert.doesNotMatch(viewer, /keyResIds/)
+  // 卡通层要把选中的残基排除，否则同一个原子被画两遍，球棍埋在丝带里
+  assert.match(viewer, /const peripheral = props\.resIds\.filter\(\(id\) => !selected\.has\(id\)\)/)
+  // 图例说明球棍形态
+  assert.match(viewer, /选中残基（球棍）/)
 
   const page = readSource('src/views/demo/Achievements.vue')
-  assert.match(page, /:key-res-ids="keyResIds"/)
+  assert.doesNotMatch(page, /:key-res-ids/)
 })
 
 test('界面上不写打分工与疏水指数的解释性文字', () => {
