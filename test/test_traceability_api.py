@@ -455,6 +455,88 @@ async def test_snapshot_records_artifact_binding_and_domain_entity(
     assert artifact_row.data_version == 3
 
 
+@pytest.mark.asyncio
+async def test_snapshot_pins_downloadable_file_for_artifact_binding(
+    db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """快照要能落到具体文件，否则结果页没法按快照还原输入。
+
+    口袋结果页要把「受体 + 口袋残基 + 体素格」叠在一起；受体只能从快照取。历史快照里
+    只有 ``artifact:<version_id>`` 而没有文件 id，前端就只能退化成只画口袋残基——用户
+    看到的现象是「完整蛋白不见了」。
+    """
+    owner = users[OWNER]
+    tool = await _create_tool(db_session, owner)
+    task = Task(
+        id="task-domain-2",
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="pocket prediction",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id)},
+    )
+    db_session.add(task)
+
+    record = await store_file_bytes(
+        db_session,
+        content=b"ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\nEND\n",
+        filename="prepared.pdb",
+        content_type="chemical/x-pdb",
+        source_type=FileSourceType.USER_INPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        name="EGFR prepared",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="prepared.pdb",
+        size_bytes=record.size_bytes,
+        sha256=record.sha256,
+        storage_key="artifacts/prepared.pdb",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    from app.models.artifacts import ArtifactVersionFile
+
+    db_session.add(
+        ArtifactVersionFile(
+            artifact_version_id=version.id, role="table_file", file_id=record.id
+        )
+    )
+    await db_session.flush()
+
+    prepared = SimpleNamespace(
+        file_ids=[],
+        input_bindings={"protein": version.id},
+        standard_input_uploads={},
+    )
+    rows = await record_task_inputs(
+        db_session,
+        task=task,
+        tool_version=None,
+        prepared=prepared,
+        extra_data=task.extra_data,
+    )
+    await db_session.commit()
+
+    artifact_row = next(row for row in rows if row.entity_type == "artifact_version")
+    assert artifact_row.file_id == record.id
+    assert artifact_row.detail["file_id"] == record.id
+
+
 # ---------------------------------------------------------------------------
 # append-only guard (docs/10 DB-09)
 # ---------------------------------------------------------------------------

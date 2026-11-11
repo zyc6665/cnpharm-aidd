@@ -2447,6 +2447,7 @@ export default {
       pocketSubtitle: 'Review candidate pockets, pocket files and 3D structure preview',
       pocketComplexTitle: 'Protein · pocket · voxel overlay',
       pocketComplexHint: 'The full protein is shown as a cartoon, pocket residues as ball-and-stick, and pocket voxels as a cyan wireframe grid.',
+      pocketComplexLoading: 'Loading the protein structure and pocket data…',
       legendProtein: 'Protein',
       legendPocket: 'Pocket residues',
       legendVoxel: 'Voxel grid',

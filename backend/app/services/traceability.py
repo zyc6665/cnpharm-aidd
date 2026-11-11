@@ -28,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import isoformat_utc, utcnow
-from app.models.artifacts import Artifact, ArtifactVersion
+from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.tasks import Task, TaskInput, TaskLog
 from app.models.traceability import TaskInputSnapshot
@@ -69,6 +69,31 @@ def role_for_semantic_type(semantic_type: str | None) -> str | None:
 def _iso(value: datetime | None) -> str | None:
     """序列化时间时补 ``Z``（库里是 naive UTC，见 ``app.common.time``）。"""
     return isoformat_utc(value)
+
+
+def _file_id_from_urn(urn: str | None) -> str | None:
+    """从 ``file:<id>`` 形式的 URN 取文件 id。
+
+    快照里只有 ``urn`` 没有 ``file_id`` 时，前端就无从渲染「这份输入到底是什么」
+    （口袋结果页要拿受体结构做三维叠加，缺了文件 id 只能退化成「只画口袋残基」）。
+    凡是能落到具体文件的 URN，一律把文件 id 一并写进快照。
+    """
+    value = str(urn or "").strip()
+    if value.startswith("file:"):
+        candidate = value[len("file:") :].strip()
+        return candidate or None
+    return None
+
+
+async def _version_primary_file_id(db: AsyncSession, version_id: str) -> str | None:
+    """取 ArtifactVersion 的首个文件 id（按 role 排序，主产物 role 排在前面）。"""
+    result = await db.execute(
+        select(ArtifactVersionFile.file_id)
+        .where(ArtifactVersionFile.artifact_version_id == version_id)
+        .order_by(ArtifactVersionFile.role)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 def sequence_sha256(sequence: str | None) -> str | None:
@@ -235,6 +260,13 @@ async def record_task_inputs(
         source_file_id = derived_by_version.get(str(artifact_version_id))
         if source_file_id:
             detail["derived_from_file"] = source_file_id
+        # 版本级绑定本身没有「文件」，但下游渲染（口袋叠加视图等）只认文件 id，
+        # 所以在快照里预先解析出主文件，避免每次读的时候再回查。
+        primary_file_id = source_file_id or await _version_primary_file_id(
+            db, str(artifact_version_id)
+        )
+        if primary_file_id:
+            detail["file_id"] = primary_file_id
         rows.append(
             _build_snapshot(
                 task_id=task_id,
@@ -245,6 +277,7 @@ async def record_task_inputs(
                 urn=f"artifact:{artifact_version_id}",
                 sha256=getattr(version, "sha256", None),
                 data_version=getattr(version, "version", None),
+                file_id=primary_file_id,
                 detail=detail,
             )
         )
@@ -351,6 +384,7 @@ async def _domain_snapshots(
                     entity_id=str(structure.id),
                     urn=structure.structure_urn,
                     sha256=structure.sha256,
+                    file_id=_file_id_from_urn(structure.structure_urn),
                     detail={
                         "source_type": structure.source_type,
                         "model_name": structure.model_name,

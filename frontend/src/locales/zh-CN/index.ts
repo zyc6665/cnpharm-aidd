@@ -2436,6 +2436,7 @@ export default {
       pocketSubtitle: '查看候选口袋、口袋文件与三维结构预览',
       pocketComplexTitle: '蛋白 · 口袋 · 体素格叠加视图',
       pocketComplexHint: '灰色卡通显示完整蛋白，橙色球棍显示口袋残基，青色线框显示口袋体素占位，三者叠加查看结合位点。',
+      pocketComplexLoading: '正在装载蛋白结构与口袋数据…',
       legendProtein: '蛋白结构',
       legendPocket: '口袋残基',
       legendVoxel: '体素格',
