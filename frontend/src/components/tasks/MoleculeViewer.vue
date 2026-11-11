@@ -224,7 +224,9 @@ async function renderScene() {
         }
 
         if (entry.role === 'pocket') {
-          await loadPresetStructure(viewer, entry, resource.url, 'atomic-detail', 0xf59e0b)
+          // 口袋残基也用卡通渲染：球棍（atomic-detail）在每个原子上画球，口袋动辄上百个残基，
+          // 叠在卡通蛋白上会糊成一团、把完整蛋白整个盖住。卡通 + 单色反而更容易看出口袋位置。
+          await loadPresetStructure(viewer, entry, resource.url, 'polymer-cartoon', 0xf59e0b)
           continue
         }
 

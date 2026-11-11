@@ -118,18 +118,16 @@ async function buildHighlights() {
   const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
   const chainTest = MS.core.rel.eq([MS.ammp('auth_asym_id'), props.chain])
 
-  // 1) 口袋残基 —— 橙色球棍模型
+  // 1) 口袋残基 —— 橙色卡通（与整体蛋白同一种表示法，避免一堆小球把结构盖住）
   if (props.resIds.length) {
     const pocketExpr = MS.struct.generator.atomGroups({
       'chain-test': chainTest,
       'residue-test': MS.core.set.has([MS.set(...props.resIds), MS.ammp('auth_seq_id')])
     })
     const comp = await addComponent(MS, pocketExpr, 'pocket-residues', '口袋残基', {
-      type: 'spacefill',
+      type: 'cartoon',
       color: 'uniform',
-      colorParams: { value: 0xff7a45 },
-      size: 'uniform',
-      sizeParams: { value: 0.85 }
+      colorParams: { value: 0xff7a45 }
     })
     if (comp?.cell) focusCells.push(comp.cell)
   }
@@ -147,18 +145,16 @@ async function buildHighlights() {
   })
   if (lig?.cell) focusCells.push(lig.cell)
 
-  // 3) 选中残基 —— 青色大球突出显示
+  // 3) 选中残基 —— 青色卡通高亮（同样不用球，保持整套视图只有卡通 + 线框两种形态）
   if (props.selectedResId != null) {
     const focusExpr = MS.struct.generator.atomGroups({
       'chain-test': chainTest,
       'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), props.selectedResId])
     })
     const foc = await addComponent(MS, focusExpr, 'focus-residue', '选中残基', {
-      type: 'spacefill',
+      type: 'cartoon',
       color: 'uniform',
-      colorParams: { value: 0x22d3ee },
-      size: 'uniform',
-      sizeParams: { value: 1.1 }
+      colorParams: { value: 0x22d3ee }
     })
     if (foc?.cell) focusCells.push(foc.cell)
   }
