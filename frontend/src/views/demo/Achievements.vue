@@ -99,13 +99,42 @@
           </a-empty>
 
           <template v-else>
+            <!-- 一个蛋白经常有多个结构（重复预测 / 导入 / 准备后各一条），
+                 而口袋与残基挂在结构 id 上。没有这个选择器，用户只能看最新的那个，
+                 早先结构上的口袋与残基就再也点不到。 -->
+            <div class="structure-bar">
+              <span class="structure-bar__label">蛋白结构</span>
+              <a-select
+                v-model:value="structureId"
+                class="structure-bar__select"
+                :options="structureOptions"
+                data-testid="structure-select"
+                @change="handleStructureChange"
+              />
+              <span class="structure-bar__hint">
+                共 {{ structures.length }} 个结构 · 切换后口袋与残基跟随所选结构
+              </span>
+            </div>
+
             <div class="pocket-layout">
               <div class="pocket-list">
                 <div class="section-title">
                   候选结合口袋
                   <span class="section-hint">按预测评分排序 · 点击行切换口袋</span>
                 </div>
+                <div
+                  v-if="!pocketLoading && !pocketRows.length"
+                  class="pocket-empty"
+                  data-testid="pocket-empty-state"
+                >
+                  <a-empty description="该结构还没有口袋记录" />
+                  <p class="pocket-empty-hint">
+                    口袋是按结构预测的：如果口袋是在另一个结构上跑的，请在上方切换结构查看；
+                    否则可以到工作流发起一次口袋预测。
+                  </p>
+                </div>
                 <a-table
+                  v-else
                   size="small"
                   :columns="pocketColumns"
                   :data-source="pocketRows"
@@ -341,6 +370,10 @@ import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { listProjects } from '@/api/projects'
 import { residueCategoryColor, residuePropertyOf } from '@/domain/targets/residue-property'
 import {
+  sortStructuresByNewest,
+  structureOptionLabel
+} from '@/domain/targets/structure-option'
+import {
   getStructurePdbManifest,
   getTarget,
   listPocketResidues,
@@ -393,6 +426,13 @@ const targetDetail = ref<TargetSummary | null>(null)
 
 const structures = ref<ProteinStructureDetail[]>([])
 const structureId = ref('')
+
+const structureOptions = computed(() =>
+  structures.value.map((structure) => ({
+    value: structure.id,
+    label: structureOptionLabel(structure)
+  }))
+)
 
 const pockets = ref<PocketSummary[]>([])
 const selectedPocketId = ref('')
@@ -779,7 +819,7 @@ async function loadTargetContext() {
     const protein = response.data.proteins?.[0]
     if (!protein) return
     const structureResponse = await listStructures(protein.id)
-    structures.value = structureResponse.data.items ?? []
+    structures.value = sortStructuresByNewest(structureResponse.data.items ?? [])
     structureId.value = structures.value[0]?.id ?? ''
   } catch {
     targetDetail.value = null
@@ -792,8 +832,26 @@ async function loadTargetContext() {
   }
 }
 
-async function loadPockets(id: string) {
-  pocketLoading.value = true
+/**
+ * 切换蛋白结构。
+ *
+ * 口袋与残基都挂在**结构** id 上，不是挂在蛋白或项目上：同一个蛋白重新预测一次，
+ * 新的结构没有任何口袋，旧结构上的口袋与残基也不会跟过来。所以切换时必须把
+ * 上一个结构的口袋、选中口袋与选中残基全部清掉，再用新 id 重新拉取。
+ */
+async function handleStructureChange(value: unknown) {
+  const nextId = String(value || '')
+  if (!nextId) return
+  structureId.value = nextId
+  pockets.value = []
+  pocketResidues.value = []
+  selectedPocketId.value = ''
+  selectedResIds.value = []
+  clearPdb()
+  await Promise.all([loadPockets(nextId), loadPdb(nextId)])
+}
+
+async function loadPockets(id: string) {  pocketLoading.value = true
   try {
     const response = await listPockets(id)
     pockets.value = [...(response.data.items ?? [])].sort(
@@ -1132,6 +1190,36 @@ onBeforeUnmount(() => {
   margin-left: 8px;
   font-size: 12px;
   font-weight: 400;
+  color: var(--color-text-tertiary);
+}
+
+.structure-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.structure-bar__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.structure-bar__select {
+  width: 420px;
+  max-width: 100%;
+}
+.structure-bar__hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.pocket-empty {
+  padding: 12px 0;
+}
+.pocket-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--color-text-tertiary);
 }
 
