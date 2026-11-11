@@ -12,7 +12,7 @@
         <a-breadcrumb-item>{{ task?.name || task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
       </a-breadcrumb>
 
-      <SkeletonDetail v-if="loading" />
+      <SkeletonDetail v-if="loading && !task" />
           <div v-else-if="task" class="detail-content">
             <AppPageHeader :title="detailTitle" :subtitle="detailSubtitle">
               <template #actions>
@@ -394,7 +394,9 @@ const progressStroke = computed(() => ({
 }))
 
 // 计算属性
-const loading = computed(() => tasksStore.loading)
+// 详情页只看详情自己的加载态：任务在跑时 SSE/轮询会反复刷新详情，
+// 若跟着列表的 loading 走，每来一条进度事件整页都会闪成骨架屏。
+const loading = computed(() => tasksStore.detailLoading)
 const task = computed(() => tasksStore.currentTask)
 const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
 const detailTitle = computed(() =>

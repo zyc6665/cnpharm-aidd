@@ -6,8 +6,96 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <title>中国医药 AI 药物研发平台</title>
+    <style>
+      /*
+        首屏骨架：浏览器拿到 HTML 到 Vue 挂载之间有一段空白期。
+        没有这层的话，刷新一次就是「白屏 → 内容」的硬切换（暗色主题下尤其刺眼）。
+        这一层不依赖任何构建产物，HTML 解析完立刻可见；`main.ts` 在路由就绪后淡出并移除。
+      */
+      html {
+        background: #09090b;
+      }
+
+      html[data-theme='light'] {
+        background: #f8fafc;
+      }
+
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: inherit;
+        color: #e4e4e7;
+        font-family:
+          Inter, 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+        transition: opacity 220ms ease;
+      }
+
+      html[data-theme='light'] #app-splash {
+        color: #3f3f46;
+      }
+
+      #app-splash.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .app-splash__spinner {
+        width: 26px;
+        height: 26px;
+        border: 2px solid currentColor;
+        border-color: currentColor transparent transparent transparent;
+        border-radius: 50%;
+        opacity: 0.75;
+        animation: app-splash-spin 0.9s linear infinite;
+      }
+
+      .app-splash__label {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+        opacity: 0.7;
+      }
+
+      @keyframes app-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-splash__spinner {
+          animation-duration: 2.4s;
+        }
+      }
+    </style>
+    <script>
+      /*
+        主题在 HTML 解析阶段先落一次，避免刷新时「暗色 UI 先闪一下亮色」。
+        键名与 `src/stores/app.ts` 的 THEME_STORAGE_KEY 保持一致（cpumodel_theme），
+        默认暗色；读不到或抛错（隐私模式禁 localStorage）都退回默认值。
+      */
+      ;(function () {
+        var theme = 'dark'
+        try {
+          theme = window.localStorage.getItem('cpumodel_theme') === 'light' ? 'light' : 'dark'
+        } catch (error) {
+          theme = 'dark'
+        }
+        document.documentElement.setAttribute('data-theme', theme)
+      })()
+    </script>
   </head>
   <body>
+    <div id="app-splash" aria-hidden="true">
+      <div class="app-splash__spinner"></div>
+      <p class="app-splash__label">中国医药 AI 药物研发平台</p>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

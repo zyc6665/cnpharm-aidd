@@ -94,7 +94,9 @@
     </div>
 
       <!-- 工具列表 -->
-      <SkeletonList v-if="loading" :count="8" />
+      <!-- 骨架屏只用于首次加载；筛选/刷新时保持卡片原地挂载，避免整块白闪。 -->
+      <LoadingBar :active="loading && displayTools.length > 0" />
+      <SkeletonList v-if="loading && !displayTools.length" :count="8" />
         <div v-else-if="displayTools.length" class="tools-grid">
           <a-row :gutter="[24, 24]">
             <a-col v-for="tool in displayTools" :key="tool.id" :xs="24" :sm="12" :lg="8" :xl="6">
@@ -211,6 +213,7 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
+import LoadingBar from '@/components/common/LoadingBar.vue'
   import {
     buildToolListParams,
     formatToolCount,
