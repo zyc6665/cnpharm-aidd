@@ -19,6 +19,12 @@ export interface ToolRef {
 }
 
 /** 口袋残基（`serialize_residue`）。 */
+/**
+ * 口袋残基评分分级（后端 `pocket-residue-score.v1` 由分数派生）。
+ * 历史数据没有分数时为 null，界面不能当成「外围」展示。
+ */
+export type PocketResidueTier = 'core' | 'key' | 'peripheral'
+
 export interface PocketResidue {
   id: string
   pocket_id: string
@@ -26,7 +32,9 @@ export interface PocketResidue {
   residue_seq: number | null
   residue_name: string | null
   is_key: boolean
+  /** 0~1 的口袋内排序分（几何 + 理化启发式），不是结合自由能。 */
   contribution: number | null
+  score_tier?: PocketResidueTier | null
 }
 
 /** 口袋摘要（`serialize_pocket`）。 */

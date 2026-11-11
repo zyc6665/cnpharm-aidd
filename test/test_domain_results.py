@@ -166,6 +166,32 @@ def _pdb_with_coordinates(points: list[tuple[float, float, float]]) -> bytes:
     return ("\n".join(lines) + "\nEND\n").encode("utf-8")
 
 
+def _atoms_pdb(
+    atoms: list[tuple[str, int, str, str, tuple[float, float, float], str]],
+    *,
+    record: str = "ATOM",
+) -> bytes:
+    """生成任意记录类型的 PDB（链、序号、残基名、原子名、坐标、元素）。
+
+    残基打分的输入是坐标与残基三元组，用 ``_pdb`` 那种「坐标全 10.0」的夹具无法
+    区分远近，所以这里单独造带真实坐标的记录。
+    """
+    lines = []
+    for index, (chain, seq, res_name, atom_name, (x, y, z), element) in enumerate(atoms):
+        chars = list(" " * 80)
+        chars[0:6] = f"{record:<6s}"
+        chars[6:11] = f"{index + 1:>5d}"
+        chars[12:16] = f" {atom_name:<3s}"[:4]
+        chars[17:20] = f"{res_name:<3s}"
+        chars[21] = chain
+        chars[22:26] = f"{seq:>4d}"
+        for start, value in zip((30, 38, 46), (x, y, z)):
+            chars[start : start + 8] = f"{value:>8.3f}"
+        chars[76:78] = f"{element:>2s}"
+        lines.append("".join(chars))
+    return ("\n".join(lines) + "\nEND\n").encode("utf-8")
+
+
 async def _store(
     db: AsyncSession, *, project: Project, owner: User, filename: str, content: bytes
 ):
@@ -535,6 +561,91 @@ async def test_pocket_prediction_creates_pocket_with_residues(
         ("A", 745, "LYS"),
     }
     assert all(item.is_key for item in residues)
+
+
+@pytest.mark.asyncio
+async def test_pocket_prediction_scores_residues_when_geometry_is_available(
+    db_session: AsyncSession, project: Project, owner: User, protein: Protein
+):
+    """有受体坐标与口袋点云时，残基带分数并据此分级。
+
+    模型只给残基清单，99 个残基全标「关键残基」等于没有优先级；打分把它们排出
+    顺序，``is_key`` 也从「清单里都有」变成「分数够高的才标」。
+    """
+    receptor = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="receptor.pdb",
+        content=_atoms_pdb(
+            [
+                ("A", 15, "LEU", "N", (1.0, 0.0, 0.0), "N"),
+                ("A", 15, "LEU", "CA", (1.5, 0.0, 0.0), "C"),
+                ("A", 20, "PHE", "N", (20.0, 0.0, 0.0), "N"),
+                ("A", 20, "PHE", "CA", (20.5, 0.0, 0.0), "C"),
+            ]
+        ),
+    )
+    structure = ProteinStructure(
+        protein_id=protein.id, source_type="PREDICTED", structure_urn=f"file:{receptor.id}"
+    )
+    db_session.add(structure)
+    await db_session.commit()
+    await db_session.refresh(structure)
+
+    residue_pdb = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="pocket.pdb",
+        content=_pdb(("A", 15, "LEU", 0), ("A", 20, "PHE", 0)),
+    )
+    point_pdb = await _store(
+        db_session,
+        project=project,
+        owner=owner,
+        filename="pocket_points.pdb",
+        content=_atoms_pdb(
+            [("A", 1, "UNL", "C", (0.0, 0.0, 0.0), "*")], record="HETATM"
+        ),
+    )
+
+    persistence = _persistence(
+        [
+            {
+                "ref": "pocket",
+                "type": POCKET_TYPE,
+                "roles": {
+                    "residue_pocket_pdb": residue_pdb.id,
+                    "atom_pocket_pdb": point_pdb.id,
+                },
+                "metadata": {
+                    "center": [1.0, 2.0, 3.0],
+                    "bbox": {"min": [0, 0, 0], "max": [10, 20, 30]},
+                },
+            }
+        ]
+    )
+    marker = await write_back_domain_results(
+        db_session,
+        task=_task({"kind": "pocket_prediction", "structure_id": structure.id}),
+        persistence_result=persistence,
+    )
+    await db_session.commit()
+
+    assert marker["status"] == "written"
+    assert marker["scoredResidues"] == 2
+
+    residues = {
+        (item.chain, item.residue_seq): item
+        for item in (await db_session.execute(select(PocketResidue))).scalars().all()
+    }
+    core = residues[("A", 15)]
+    far = residues[("A", 20)]
+    assert core.contribution is not None and far.contribution is not None
+    assert float(core.contribution) > float(far.contribution)
+    assert core.is_key is True
+    assert far.is_key is False
 
 
 @pytest.mark.asyncio

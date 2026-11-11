@@ -144,37 +144,45 @@
               <div class="residue-panel">
                 <div class="section-title">
                   关键残基
-                  <span class="section-hint">点击残基在 3D 中高亮</span>
+                  <span class="section-hint">按口袋内评分从高到低，点击在 3D 中高亮</span>
                 </div>
-                <div v-if="pocketResidues.length" class="residue-chips">
+                <div v-if="rankedResidues.length" class="residue-chips">
                   <span
-                    v-for="residue in pocketResidues"
+                    v-for="residue in rankedResidues"
                     :key="residue.id"
                     class="residue-chip"
                     :class="{
-                      'residue-chip--key': residue.is_key,
+                      'residue-chip--core': residue.score_tier === 'core',
+                      'residue-chip--key': residue.score_tier === 'key',
                       'residue-chip--active': residue.residue_seq === selectedResId
                     }"
+                    :data-testid="`residue-chip-${residue.residue_seq}`"
                     @click="selectResidue(residue.residue_seq)"
                   >
                     {{ residue.residue_name }}{{ residue.residue_seq }}
                     <em v-if="residue.contribution !== null">
-                      {{ (residue.contribution * 100).toFixed(0) }}%
+                      {{ residue.contribution.toFixed(2) }}
                     </em>
                   </span>
                 </div>
                 <div v-else class="residue-empty">
                   该口袋暂未存储残基注释数据，仍可在 3D 中查看整个蛋白结构。
                 </div>
+                <div v-if="rankedResidues.length" class="residue-note">
+                  评分 = 贴近口袋中心 0.45 + 接触面 0.30 + 埋深 0.15 + 疏水 0.10，
+                  用于排序参考；它衡量的是几何关系，不是结合贡献，也不能当结合自由能用。
+                </div>
                 <div v-if="selectedResidue" class="residue-detail">
                   <span class="rd-name">{{ selectedResidue.residue_name }}{{ selectedResidue.residue_seq }}</span>
-                  <a-tag v-if="selectedResidue.is_key" color="orange">关键残基</a-tag>
+                  <a-tag :color="tierTagColor(selectedResidue.score_tier)" data-testid="residue-tier-tag">
+                    {{ tierLabel(selectedResidue.score_tier) }}
+                  </a-tag>
                   <span class="rd-item">链 {{ selectedResidue.chain || '-' }}</span>
                   <span class="rd-item">
-                    贡献度
+                    评分
                     {{
                       selectedResidue.contribution !== null
-                        ? (selectedResidue.contribution * 100).toFixed(1) + '%'
+                        ? selectedResidue.contribution.toFixed(2)
                         : '-'
                     }}
                   </span>
@@ -319,6 +327,7 @@ import { listProjectResults } from '@/api/results'
 import type { ResearchProject } from '@/types/projects'
 import type {
   PocketResidue,
+  PocketResidueTier,
   PocketSummary,
   ProteinStructureDetail,
   TargetSummary
@@ -477,6 +486,35 @@ const pocketCenter = computed<[number, number, number] | null>(() => {
 })
 
 const pocketChain = computed(() => pocketResidues.value[0]?.chain || 'A')
+
+/**
+ * 按口袋内评分排序。
+ *
+ * 口袋残基是「距口袋点 8 Å 内」的整份清单，按残基序号排等于把「先看哪几个」
+ * 这个问题丢回用户。没有分数的历史行排在最后，不当作 0 分混进末尾——那会让
+ * 「没算过」和「算了很低」长得一样。
+ */
+const rankedResidues = computed(() =>
+  [...pocketResidues.value].sort((left, right) => {
+    const a = left.contribution ?? Number.NEGATIVE_INFINITY
+    const b = right.contribution ?? Number.NEGATIVE_INFINITY
+    if (a !== b) return b - a
+    return (left.residue_seq ?? 0) - (right.residue_seq ?? 0)
+  })
+)
+
+function tierLabel(tier: PocketResidueTier | null | undefined): string {
+  if (tier === 'core') return '核心残基'
+  if (tier === 'key') return '关键残基'
+  if (tier === 'peripheral') return '外围残基'
+  return '未评分'
+}
+
+function tierTagColor(tier: PocketResidueTier | null | undefined): string {
+  if (tier === 'core') return 'orange'
+  if (tier === 'key') return 'gold'
+  return 'default'
+}
 
 const selectedResidue = computed(
   () => pocketResidues.value.find((residue) => residue.residue_seq === selectedResId.value) ?? null
@@ -660,8 +698,8 @@ async function selectPocket(id: string) {
   try {
     const response = await listPocketResidues(id)
     pocketResidues.value = response.data.items ?? []
-    const keyResidue = pocketResidues.value.find((residue) => residue.is_key)
-    selectedResId.value = keyResidue?.residue_seq ?? pocketResidues.value[0]?.residue_seq ?? null
+    // 默认选中排名第一的残基：「清单第一个」和「最值得先看的那个」不是同一件事
+    selectedResId.value = rankedResidues.value[0]?.residue_seq ?? null
   } catch {
     pocketResidues.value = []
   }
@@ -1056,9 +1094,23 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: var(--color-text-tertiary);
 }
+.residue-chip--core {
+  border-color: #ff4d4f;
+  color: #cf1322;
+  font-weight: 600;
+}
 .residue-chip--key {
-  border-color: #ff7a45;
-  color: #d4561c;
+  border-color: #d48806;
+  color: #ad6800;
+}
+.residue-note {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-layout);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-tertiary);
 }
 .residue-chip--active {
   background: #22d3ee;

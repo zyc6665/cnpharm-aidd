@@ -38,6 +38,7 @@ from app.models.tools import Tool, ToolStatus
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.schemas.targets import PocketCreate, StructurePredict, StructurePrepareRequest
+from app.services.pocket_residue_scoring import tier_for
 from app.services.project_access import load_project_membership, require_project_role
 from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.service import create_and_schedule_tool_task
@@ -194,6 +195,7 @@ def _number(value: Any) -> Any:
 
 
 def serialize_residue(residue: PocketResidue) -> dict:
+    contribution = _number(residue.contribution)
     return {
         "id": residue.id,
         "pocket_id": residue.pocket_id,
@@ -201,7 +203,10 @@ def serialize_residue(residue: PocketResidue) -> dict:
         "residue_seq": residue.residue_seq,
         "residue_name": residue.residue_name,
         "is_key": bool(residue.is_key),
-        "contribution": _number(residue.contribution),
+        "contribution": contribution,
+        # 分级由分数派生而不是另存一列：阈值调整后历史数据自动跟着变口径，
+        # 不会出现「分数 0.72 但标签写着外围」这种自相矛盾的行。
+        "score_tier": tier_for(contribution) if contribution is not None else None,
     }
 
 

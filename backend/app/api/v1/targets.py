@@ -735,6 +735,7 @@ async def select_pocket(
 async def list_pocket_residues(
     pocket_id: str,
     key_only: bool = Query(False),
+    order: str = Query("score", pattern="^(score|position)$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -745,7 +746,18 @@ async def list_pocket_residues(
     residues = list(domain_targets.loaded_relationship(pocket, "residues") or [])
     if key_only:
         residues = [item for item in residues if item.is_key]
-    residues.sort(key=lambda item: (item.chain, item.residue_seq))
+    if order == "position":
+        residues.sort(key=lambda item: (item.chain, item.residue_seq))
+    else:
+        # 默认按打分从高到低：口袋残基是 8 Å 内的整份清单，按序号排等于把「哪个更
+        # 值得看」这个问题丢回给用户。没有分数的历史行排在最后，而不是当作 0 分。
+        residues.sort(
+            key=lambda item: (
+                -(float(item.contribution) if item.contribution is not None else -1.0),
+                item.chain,
+                item.residue_seq,
+            )
+        )
     return success_response(
         data={
             "pocket_id": pocket.id,

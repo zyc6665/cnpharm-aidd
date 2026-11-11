@@ -41,7 +41,14 @@ from app.models.targets import (
     ProteinStructure,
 )
 from app.models.tasks import Task
-from app.services.domain_targets import file_urn
+from app.services.domain_targets import file_urn, urn_file_id
+from app.services.pocket_residue_scoring import (
+    TIER_CORE,
+    TIER_KEY,
+    parse_pocket_points,
+    parse_structure_atoms,
+    score_residues,
+)
 from app.services.standard_artifacts import StandardArtifactPersistenceResult
 
 logger = logging.getLogger(__name__)
@@ -56,6 +63,8 @@ REPORT_STANDARD_TYPE = "run_report@1"
 STRUCTURE_FILE_ROLES = ("structure_file", "prepared_pdb")
 PDBQT_FILE_ROLE = "receptor_pdbqt"
 POCKET_RESIDUE_FILE_ROLE = "residue_pocket_pdb"
+#: 口袋占位点文件角色（LVpocket 的 ``pocket0.pdb``，``UNL`` 伪原子点云）：残基打分要用它。
+POCKET_POINT_FILE_ROLE = "atom_pocket_pdb"
 
 #: 报告产物的文件角色：不同模型给的名字不一样，按可信度排序取第一个存在的。
 REPORT_FILE_ROLES = ("report_json", "report_file", "metadata_json")
@@ -274,10 +283,15 @@ async def _write_pocket_prediction(
 
     created: list[str] = []
     residue_total = 0
+    scored_total = 0
+    receptor_atoms = await _receptor_atoms(db, structure)
     for ref, artifact in pockets:
         residues = await _pocket_residues(db, persistence_result, ref)
         geometry = await _pocket_geometry_with_fallback(db, persistence_result, ref, artifact)
         residue_ids = _sequence(artifact.metadata.get("residue_ids"))
+        scores = await _score_pocket_residues(
+            db, persistence_result, ref, residues, receptor_atoms
+        )
         pocket = Pocket(
             structure_id=structure_id,
             rank=next_rank,
@@ -298,18 +312,22 @@ async def _write_pocket_prediction(
         db.add(pocket)
         await db.flush()
         for residue in residues:
+            score = scores.get((residue["chain"], residue["residue_seq"]))
             db.add(
                 PocketResidue(
                     pocket_id=pocket.id,
                     chain=residue["chain"],
                     residue_seq=residue["residue_seq"],
                     residue_name=residue["residue_name"],
-                    # 残基清单本身就是模型给出的「口袋残基」集合，逐条标为关键残基；
-                    # 逐残基贡献度模型没有输出，留空而不是编一个数。
-                    is_key=True,
-                    contribution=None,
+                    # 打分可用时按分级定 is_key（核心/关键才算关键残基），contribution 存分数；
+                    # 打分不可用（缺受体结构或缺口袋点云）时退回「清单即关键残基、贡献度未知」，
+                    # 不能因为算不出分数就把全部残基降级成外围——那等于宣称它们都不重要。
+                    is_key=True if score is None else score.tier in (TIER_CORE, TIER_KEY),
+                    contribution=None if score is None else score.score,
                 )
             )
+            if score is not None:
+                scored_total += 1
         await db.flush()
         created.append(str(pocket.id))
         residue_total += len(residues)
@@ -320,6 +338,7 @@ async def _write_pocket_prediction(
         "structureId": structure_id,
         "pocketIds": created,
         "residueCount": residue_total,
+        "scoredResidues": scored_total,
         "replacedPockets": removed,
     }
 
@@ -364,6 +383,63 @@ async def _pocket_residues(
         logger.warning("口袋残基文件读不到: %s", file_id)
         return []
     return parse_pdb_residues(content)
+
+
+async def _read_pdb_text(db: AsyncSession, file_id: str) -> str | None:
+    file_record = await db.get(FileModel, file_id)
+    if file_record is None:
+        return None
+    try:
+        content = await read_file_bytes(file_record)
+    except FileNotFoundError:
+        logger.warning("口袋残基打分读不到文件: %s", file_id)
+        return None
+    return content.decode("utf-8", errors="ignore")
+
+
+async def _receptor_atoms(db: AsyncSession, structure: ProteinStructure) -> list:
+    """受体坐标：优先 ``prepared_urn``（Vina 准备过的受体），退回原始结构文件。
+
+    打分只需要重原子坐标，准备与否不改变残基位置；优先取准备过的受体是为了与
+    对接、口袋预测看到的那份结构保持一致。
+    """
+    for urn in (structure.prepared_urn, structure.structure_urn):
+        file_id = urn_file_id(urn)
+        if not file_id:
+            continue
+        text = await _read_pdb_text(db, file_id)
+        if text:
+            atoms = parse_structure_atoms(text)
+            if atoms:
+                return atoms
+    return []
+
+
+async def _score_pocket_residues(
+    db: AsyncSession,
+    persistence_result: StandardArtifactPersistenceResult,
+    ref: str,
+    residues: list[dict[str, Any]],
+    receptor_atoms: list,
+) -> dict[tuple[str, int], Any]:
+    """给本次口袋的残基打分，返回 ``{(chain, residue_seq): ResidueScore}``。
+
+    缺受体坐标或缺口袋点云就返回空字典：打分是增强，不是回写的前置条件。
+    """
+    if not residues or not receptor_atoms:
+        return {}
+    point_file_id = _role_file_id(persistence_result, ref, POCKET_POINT_FILE_ROLE)
+    if point_file_id is None:
+        logger.info("口袋产物没有 %s，跳过残基打分", POCKET_POINT_FILE_ROLE)
+        return {}
+    text = await _read_pdb_text(db, point_file_id)
+    if not text:
+        return {}
+    points = parse_pocket_points(text)
+    if not points:
+        return {}
+    scored = score_residues(residues, receptor_atoms, points)
+    return {(item.chain, item.residue_seq): item for item in scored}
 
 
 def parse_pdb_residues(content: bytes) -> list[dict[str, Any]]:
