@@ -120,7 +120,7 @@
                   v-if="pdbUrl"
                   :pdb-url="pdbUrl"
                   :res-ids="pocketResIds"
-                  :selected-res-id="selectedResId"
+                  :selected-res-ids="selectedResIds"
                   :pocket-center="pocketCenter"
                   :chain="pocketChain"
                 />
@@ -144,49 +144,82 @@
               <div class="residue-panel">
                 <div class="section-title">
                   关键残基
-                  <span class="section-hint">按口袋内评分从高到低，点击在 3D 中高亮</span>
+                  <span class="section-hint">
+                    按口袋内评分从高到低 · 点击可在 3D 中多选高亮
+                  </span>
                 </div>
-                <div v-if="rankedResidues.length" class="residue-chips">
-                  <span
-                    v-for="residue in rankedResidues"
+                <div v-if="keyResidues.length" class="residue-actions">
+                  <a-button size="small" @click="selectAllKeyResidues">全选关键残基</a-button>
+                  <a-button size="small" :disabled="!selectedResIds.length" @click="clearResidueSelection">
+                    清空选择
+                  </a-button>
+                  <span class="residue-selected-count">已选 {{ selectedResIds.length }} / {{ keyResidues.length }}</span>
+                </div>
+                <div v-if="keyResidues.length" class="key-residue-list">
+                  <div
+                    v-for="(residue, index) in keyResidues"
                     :key="residue.id"
-                    class="residue-chip"
+                    class="key-residue"
                     :class="{
-                      'residue-chip--core': residue.score_tier === 'core',
-                      'residue-chip--key': residue.score_tier === 'key',
-                      'residue-chip--active': residue.residue_seq === selectedResId
+                      'key-residue--core': residue.score_tier === 'core',
+                      'key-residue--key': residue.score_tier === 'key',
+                      'key-residue--active': selectedResIds.includes(residue.residue_seq ?? -1)
                     }"
                     :data-testid="`residue-chip-${residue.residue_seq}`"
-                    @click="selectResidue(residue.residue_seq)"
+                    @click="toggleResidue(residue.residue_seq)"
                   >
-                    {{ residue.residue_name }}{{ residue.residue_seq }}
-                    <em v-if="residue.contribution !== null">
-                      {{ residue.contribution.toFixed(2) }}
-                    </em>
-                  </span>
+                    <span class="kr-rank">{{ index + 1 }}</span>
+                    <span class="kr-name">{{ residue.residue_name }}{{ residue.residue_seq }}</span>
+                    <span class="kr-chinese">{{ propertyOf(residue.residue_name).chinese }}</span>
+                    <a-tag :color="residueCategoryColor(propertyOf(residue.residue_name).category)">
+                      {{ propertyOf(residue.residue_name).category }}
+                    </a-tag>
+                    <span class="kr-score">
+                      {{ residue.contribution !== null ? residue.contribution.toFixed(2) : '-' }}
+                    </span>
+                    <a-tag :color="tierTagColor(residue.score_tier)" data-testid="residue-tier-tag">
+                      {{ tierLabel(residue.score_tier) }}
+                    </a-tag>
+                  </div>
                 </div>
                 <div v-else class="residue-empty">
                   该口袋暂未存储残基注释数据，仍可在 3D 中查看整个蛋白结构。
                 </div>
-                <div v-if="rankedResidues.length" class="residue-note">
+                <div v-if="keyResidues.length" class="residue-note">
                   评分 = 贴近口袋中心 0.45 + 接触面 0.30 + 埋深 0.15 + 疏水 0.10，
                   用于排序参考；它衡量的是几何关系，不是结合贡献，也不能当结合自由能用。
+                  疏水指数为 Kyte–Doolittle 标度。
                 </div>
-                <div v-if="selectedResidue" class="residue-detail">
-                  <span class="rd-name">{{ selectedResidue.residue_name }}{{ selectedResidue.residue_seq }}</span>
-                  <a-tag :color="tierTagColor(selectedResidue.score_tier)" data-testid="residue-tier-tag">
-                    {{ tierLabel(selectedResidue.score_tier) }}
-                  </a-tag>
-                  <span class="rd-item">链 {{ selectedResidue.chain || '-' }}</span>
-                  <span class="rd-item">
-                    评分
-                    {{
-                      selectedResidue.contribution !== null
-                        ? selectedResidue.contribution.toFixed(2)
-                        : '-'
-                    }}
-                  </span>
+                <div v-if="selectedSummary" class="residue-detail" data-testid="residue-selection-detail">
+                  {{ selectedSummary }}
                 </div>
+
+                <div class="section-title all-residues-title">
+                  全部残基
+                  <span class="section-hint">完整清单（{{ allResidueRows.length }}），此处不列分数</span>
+                </div>
+                <a-table
+                  size="small"
+                  class="all-residues-table"
+                  :columns="allResidueColumns"
+                  :data-source="allResidueRows"
+                  :pagination="{ pageSize: 10, size: 'small', showSizeChanger: false }"
+                  :row-class-name="allResidueRowClass"
+                  :custom-row="allResidueRowEvents"
+                  data-testid="all-residues-table"
+                >
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.key === 'residue'">
+                      <span class="mono">{{ record.residue_name }}{{ record.residue_seq }}</span>
+                    </template>
+                    <template v-else-if="column.key === 'category'">
+                      <a-tag :color="residueCategoryColor(record.category)">{{ record.category }}</a-tag>
+                    </template>
+                    <template v-else-if="column.key === 'tier'">
+                      <a-tag :color="tierTagColor(record.tier)">{{ tierLabel(record.tier) }}</a-tag>
+                    </template>
+                  </template>
+                </a-table>
               </div>
               <div class="pocket-meta">
                 <a-descriptions :column="1" size="small" bordered>
@@ -311,6 +344,7 @@ import PocketViewer from '@/components/tasks/PocketViewer.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 
 import { listProjects } from '@/api/projects'
+import { residueCategoryColor, residuePropertyOf } from '@/domain/targets/residue-property'
 import {
   getStructurePdbManifest,
   getTarget,
@@ -368,7 +402,7 @@ const structureId = ref('')
 const pockets = ref<PocketSummary[]>([])
 const selectedPocketId = ref('')
 const pocketResidues = ref<PocketResidue[]>([])
-const selectedResId = ref<number | null>(null)
+const selectedResIds = ref<number[]>([])
 
 const pdbUrl = ref('')
 const pdbFallback = ref(false)
@@ -516,9 +550,99 @@ function tierTagColor(tier: PocketResidueTier | null | undefined): string {
   return 'default'
 }
 
-const selectedResidue = computed(
-  () => pocketResidues.value.find((residue) => residue.residue_seq === selectedResId.value) ?? null
+/**
+ * 「关键残基」只列核心与关键两级。
+ *
+ * 用户要的是「先看哪几个」，把 99 个残基连分数一起铺开等于没给结论；
+ * 外围残基留在下面的「全部残基」清单里备查，不在主视图占版面。
+ */
+const keyResidues = computed(() =>
+  rankedResidues.value.filter(
+    (residue) => residue.score_tier === 'core' || residue.score_tier === 'key'
+  )
 )
+
+const allResidueRows = computed(() =>
+  rankedResidues.value.map((residue, index) => {
+    const property = residuePropertyOf(residue.residue_name)
+    return {
+      key: residue.id ?? `${residue.residue_seq}-${index}`,
+      residue_seq: residue.residue_seq,
+      residue_name: residue.residue_name,
+      chain: residue.chain,
+      chinese: property.chinese,
+      category: property.category,
+      hydropathy: property.hydropathy,
+      tier: residue.score_tier ?? null
+    }
+  })
+)
+
+const allResidueColumns = [
+  { title: '残基', key: 'residue', width: 96 },
+  { title: '中文名', dataIndex: 'chinese', key: 'chinese', width: 96 },
+  { title: '类别', key: 'category', width: 84 },
+  { title: '疏水指数', dataIndex: 'hydropathy', key: 'hydropathy', width: 90 },
+  { title: '分级', key: 'tier', width: 90 }
+]
+
+function allResidueRowClass(record: { residue_seq: number | null }): string {
+  return selectedResIds.value.includes(record.residue_seq ?? -1) ? 'all-residues-row--active' : ''
+}
+
+function allResidueRowEvents(record: { residue_seq: number | null }) {
+  return { onClick: () => toggleResidue(record.residue_seq) }
+}
+
+function propertyOf(name: string | null | undefined) {
+  return residuePropertyOf(name)
+}
+
+function toggleResidue(seq: number | null | undefined) {
+  if (typeof seq !== 'number') return
+  const index = selectedResIds.value.indexOf(seq)
+  if (index >= 0) {
+    selectedResIds.value = selectedResIds.value.filter((item) => item !== seq)
+  } else {
+    selectedResIds.value = [...selectedResIds.value, seq]
+  }
+}
+
+function selectAllKeyResidues() {
+  selectedResIds.value = keyResidues.value
+    .map((residue) => residue.residue_seq)
+    .filter((seq): seq is number => typeof seq === 'number')
+}
+
+function clearResidueSelection() {
+  selectedResIds.value = []
+}
+
+/** 选中集的一句话摘要：选 1 个给细节，选多个给清单。 */
+const selectedSummary = computed(() => {
+  if (!selectedResIds.value.length) return ''
+  const picked = rankedResidues.value.filter(
+    (residue) => residue.residue_seq != null && selectedResIds.value.includes(residue.residue_seq)
+  )
+  if (!picked.length) return ''
+  if (picked.length === 1) {
+    const residue = picked[0]
+    if (!residue) return ''
+    const property = residuePropertyOf(residue.residue_name)
+    return [
+      `${residue.residue_name}${residue.residue_seq}`,
+      property.chinese,
+      `${property.category}性`,
+      `疏水指数 ${property.hydropathy.toFixed(1)}`,
+      `链 ${residue.chain || '-'}`,
+      tierLabel(residue.score_tier),
+      `评分 ${residue.contribution !== null ? residue.contribution.toFixed(2) : '-'}`
+    ].join(' · ')
+  }
+  return `已选 ${picked.length} 个残基：${picked
+    .map((residue) => `${residue.residue_name}${residue.residue_seq}`)
+    .join('、')}`
+})
 
 const structureFileHint = computed(() => {
   const structure = structures.value.find((item) => item.id === structureId.value)
@@ -646,7 +770,7 @@ async function loadTargetContext() {
   pockets.value = []
   pocketResidues.value = []
   selectedPocketId.value = ''
-  selectedResId.value = null
+  selectedResIds.value = []
   clearPdb()
 
   if (!targetId.value) {
@@ -694,20 +818,15 @@ async function loadPockets(id: string) {
 async function selectPocket(id: string) {
   selectedPocketId.value = id
   pocketResidues.value = []
-  selectedResId.value = null
+  selectedResIds.value = []
   try {
     const response = await listPocketResidues(id)
     pocketResidues.value = response.data.items ?? []
     // 默认选中排名第一的残基：「清单第一个」和「最值得先看的那个」不是同一件事
-    selectedResId.value = rankedResidues.value[0]?.residue_seq ?? null
+    const top = rankedResidues.value[0]?.residue_seq
+    selectedResIds.value = typeof top === 'number' ? [top] : []
   } catch {
     pocketResidues.value = []
-  }
-}
-
-function selectResidue(seq: number | null) {
-  if (typeof seq === 'number') {
-    selectedResId.value = seq
   }
 }
 
@@ -1064,10 +1183,67 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 16px;
 }
-.residue-chips {
+.residue-actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 10px;
+}
+.residue-selected-count {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.key-residue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.key-residue {
+  display: grid;
+  grid-template-columns: 28px minmax(72px, auto) minmax(64px, auto) auto minmax(48px, auto) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--color-bg-layout);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.key-residue:hover {
+  border-color: var(--color-border-secondary);
+}
+.key-residue--core .kr-name {
+  color: #cf1322;
+  font-weight: 600;
+}
+.key-residue--key .kr-name {
+  color: #ad6800;
+  font-weight: 600;
+}
+.key-residue--active {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.14);
+}
+.kr-rank {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kr-name {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.kr-chinese {
+  color: var(--color-text-secondary);
+}
+.kr-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
 }
 .residue-empty {
   padding: 10px 12px;
@@ -1075,33 +1251,6 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   font-size: 12px;
   color: var(--color-text-tertiary);
-}
-.residue-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-container);
-  transition: all 0.15s ease;
-}
-.residue-chip em {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-}
-.residue-chip--core {
-  border-color: #ff4d4f;
-  color: #cf1322;
-  font-weight: 600;
-}
-.residue-chip--key {
-  border-color: #d48806;
-  color: #ad6800;
 }
 .residue-note {
   margin-top: 8px;
@@ -1111,14 +1260,6 @@ onBeforeUnmount(() => {
   font-size: 11px;
   line-height: 1.6;
   color: var(--color-text-tertiary);
-}
-.residue-chip--active {
-  background: #22d3ee;
-  border-color: #22d3ee;
-  color: #06232b;
-}
-.residue-chip--active em {
-  color: #06232b;
 }
 .residue-detail {
   display: flex;
@@ -1130,10 +1271,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--color-text-secondary);
 }
-.rd-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+.all-residues-title {
+  margin-top: 18px;
+}
+.all-residues-table :deep(tr.all-residues-row--active > td) {
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .candidate-substance {

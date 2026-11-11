@@ -25,19 +25,21 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { Asset } from 'molstar/lib/mol-util/assets'
 import { Color } from 'molstar/lib/mol-util/color'
+import { Sphere3D } from 'molstar/lib/mol-math/geometry'
+import { Vec3 } from 'molstar/lib/mol-math/linear-algebra'
 
 const props = withDefaults(
   defineProps<{
     pdbUrl: string
     /** auth_seq_id 列表：需要高亮的口袋残基 */
     resIds: number[]
-    /** 当前选中的残基（auth_seq_id），单独高亮 */
-    selectedResId?: number | null
+    /** 当前选中的残基（auth_seq_id），可多选，单独高亮 */
+    selectedResIds?: number[]
     /** 口袋中心坐标，用于把镜头对焦到口袋 */
     pocketCenter?: [number, number, number] | null
     chain?: string
   }>(),
-  { selectedResId: null, pocketCenter: null, chain: 'A' }
+  { selectedResIds: () => [], pocketCenter: null, chain: 'A' }
 )
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -54,6 +56,9 @@ let resizeObserver: ResizeObserver | null = null
 
 let creating: Promise<void> | null = null
 
+/** 只改选中集时重建高亮，但保留用户当前的视角。 */
+let keepCamera = false
+
 async function ensureViewer() {
   if (viewer || !containerRef.value) {
     return
@@ -64,29 +69,29 @@ async function ensureViewer() {
   }
 
   creating = (async () => {
-  const host = containerRef.value
-  if (!host) return
-  const { Viewer } = await import('molstar/lib/apps/viewer/app')
-  viewer = await Viewer.create(host, {
-    layoutIsExpanded: false,
-    layoutShowControls: false,
-    collapseLeftPanel: true,
-    collapseRightPanel: true,
-    viewportShowControls: false,
-    viewportShowExpand: false,
-    viewportShowToggleFullscreen: false,
-    viewportShowSettings: false,
-    viewportShowSelectionMode: false,
-    viewportShowAnimation: false,
-    viewportShowTrajectoryControls: false,
-    viewportShowScreenshotControls: false
-  })
-  plugin = viewer.plugin
-  try {
-    plugin.canvas3d?.setProps({ renderer: { backgroundColor: Color(0x0b1a2e) } })
-  } catch {
-    /* 背景色设置失败不影响渲染 */
-  }
+    const host = containerRef.value
+    if (!host) return
+    const { Viewer } = await import('molstar/lib/apps/viewer/app')
+    viewer = await Viewer.create(host, {
+      layoutIsExpanded: false,
+      layoutShowControls: false,
+      collapseLeftPanel: true,
+      collapseRightPanel: true,
+      viewportShowControls: false,
+      viewportShowExpand: false,
+      viewportShowToggleFullscreen: false,
+      viewportShowSettings: false,
+      viewportShowSelectionMode: false,
+      viewportShowAnimation: false,
+      viewportShowTrajectoryControls: false,
+      viewportShowScreenshotControls: false
+    })
+    plugin = viewer.plugin
+    try {
+      plugin.canvas3d?.setProps({ renderer: { backgroundColor: Color(0x0b1a2e) } })
+    } catch {
+      /* 背景色设置失败不影响渲染 */
+    }
   })()
   await creating
   creating = null
@@ -145,11 +150,11 @@ async function buildHighlights() {
   })
   if (lig?.cell) focusCells.push(lig.cell)
 
-  // 3) 选中残基 —— 青色卡通高亮（同样不用球，保持整套视图只有卡通 + 线框两种形态）
-  if (props.selectedResId != null) {
+  // 3) 选中残基 —— 青色卡通高亮（可多选；同样不用球，保持整套视图只有卡通 + 线框两种形态）
+  if (props.selectedResIds.length) {
     const focusExpr = MS.struct.generator.atomGroups({
       'chain-test': chainTest,
-      'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), props.selectedResId])
+      'residue-test': MS.core.set.has([MS.set(...props.selectedResIds), MS.ammp('auth_seq_id')])
     })
     const foc = await addComponent(MS, focusExpr, 'focus-residue', '选中残基', {
       type: 'cartoon',
@@ -228,11 +233,16 @@ function focusPocket() {
   if (!plugin) return
   try {
     const sphere = localSphere ?? cellBoundingSphere(focusCells)
-    if (sphere) {
-      plugin.managers.camera.focusSphere(sphere, { durationMs: 0 })
-    } else {
+    if (!sphere) {
       plugin.managers.camera.reset(undefined, 0)
+      return
     }
+    // 必须包成 Sphere3D：直接传 { center, radius } 会把相机状态写成 NaN，
+    // 之后拖拽与滚轮都不再生效（NaN 参与任何运算仍是 NaN）。
+    plugin.managers.camera.focusSphere(
+      Sphere3D.create(Vec3.create(sphere.center.x, sphere.center.y, sphere.center.z), sphere.radius),
+      { durationMs: 0 }
+    )
   } catch (cause) {
     console.warn('focusPocket failed', cause)
   }
@@ -274,14 +284,19 @@ async function fadeCartoon() {
 let renderRunning = false
 let renderQueued = false
 
-async function render() {
+async function render(options: { keepCamera?: boolean } = {}) {
+  keepCamera = Boolean(options.keepCamera)
   if (renderRunning) {
     renderQueued = true
     return
   }
   renderRunning = true
-  loading.value = true
+  const silent = keepCamera
+  if (!silent) {
+    loading.value = true
+  }
   error.value = ''
+  const savedCamera = silent ? plugin?.canvas3d?.camera.state : null
   try {
     if (!props.pdbUrl) {
       loading.value = false
@@ -307,8 +322,13 @@ async function render() {
     await buildHighlights()
     await fadeCartoon()
     viewer?.handleResize()
-    window.setTimeout(focusPocket, 400)
-    window.setTimeout(focusPocket, 1500)
+    if (savedCamera) {
+      // 选中集变化时相机原样恢复：用户刚拖到的角度不该被一次高亮刷新夺走
+      plugin.canvas3d?.camera.setState(savedCamera, 0)
+    } else {
+      window.setTimeout(focusPocket, 400)
+      window.setTimeout(focusPocket, 1500)
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -316,7 +336,7 @@ async function render() {
     renderRunning = false
     if (renderQueued) {
       renderQueued = false
-      void render()
+      void render({ keepCamera })
     }
   }
 }
@@ -329,10 +349,20 @@ onMounted(async () => {
   await render()
 })
 
+// 结构或口袋残基集合变了才重建场景；只改选中集时重建高亮并保留视角
 watch(
-  () => [props.pdbUrl, props.resIds, props.selectedResId],
+  () => [props.pdbUrl, props.resIds, props.chain],
   () => {
     void render()
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.selectedResIds,
+  () => {
+    if (!plugin) return
+    void render({ keepCamera: true })
   },
   { deep: true }
 )
