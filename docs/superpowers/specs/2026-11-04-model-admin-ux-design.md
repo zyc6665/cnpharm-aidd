@@ -2,7 +2,7 @@
 
 - 日期：2026-11-04
 - 状态：设计待评审（未实现）
-- 关联：`docs/07-模型交付与运行规范.md`、`docs/23-模型接入操作手册`、`frontend/src/views/tools/Create.vue`、`frontend/src/views/admin/Tools.vue`、`backend/app/execution/adapters/kubernetes_manifest.py`
+- 关联：`docs/03-接口/07-模型交付与运行规范.md`、`docs/23-模型接入操作手册`、`frontend/src/views/tools/Create.vue`、`frontend/src/views/admin/Tools.vue`、`backend/app/execution/adapters/kubernetes_manifest.py`
 - 目标架构：**模型统一通过 k8s_job 调度**（Docker/SSH/Python 执行器不再作为管理员选项）
 
 ## 1. 为什么改（intent）
