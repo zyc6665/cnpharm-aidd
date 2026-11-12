@@ -107,9 +107,24 @@ def _rewrite(bind, mapping: dict[str, tuple[str, str]], *, forward: bool) -> Non
         )
 
 
+def _has_tables(bind) -> bool:
+    """``tools`` / ``tool_versions`` 由基线 ``create_all`` 建出；``alembic_version``
+    已经越过基线时它们可能并不存在（历史库从中间某个 revision 续跑的场景），
+    这时本次改写无事可做，不能直接抛 ``no such table``。
+    """
+    names = set(sa.inspect(bind).get_table_names())
+    return {"tools", "tool_versions"}.issubset(names)
+
+
 def upgrade() -> None:
-    _rewrite(op.get_bind(), NEW_DIGESTS, forward=True)
+    bind = op.get_bind()
+    if not _has_tables(bind):
+        return
+    _rewrite(bind, NEW_DIGESTS, forward=True)
 
 
 def downgrade() -> None:
-    _rewrite(op.get_bind(), NEW_DIGESTS, forward=False)
+    bind = op.get_bind()
+    if not _has_tables(bind):
+        return
+    _rewrite(bind, NEW_DIGESTS, forward=False)

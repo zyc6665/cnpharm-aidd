@@ -511,8 +511,16 @@ class Settings(BaseSettings):
     # API 进程保持 `pooled`。见 docs/internal/17「Celery Worker 部署前置条件」。
     DB_POOL_MODE: Literal["pooled", "null"] = "pooled"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
-    CELERY_TASK_SOFT_TIME_LIMIT: int = 3600  # 1小时软超时
-    CELERY_TASK_TIME_LIMIT: int = 7200  # 2小时硬超时
+    # 任务执行时限的上限（秒）。工具自己的 timeout_minutes 可以很长（MD 轨迹要跑几天），
+    # 但平台必须有一个封顶值，否则一个卡死的 Job 能占着卡位到天荒地老。
+    # 7 天既覆盖长轨迹，又留出「迟早会有人发现」的窗口。
+    TASK_TIMEOUT_MAX_SECONDS: int = 7 * 24 * 60 * 60
+    # Celery 的软/硬超时是**最后一道**兜底，必须大于任何工具的执行时限——
+    # 否则工具侧还没到时限，Celery 先以 SoftTimeLimitExceeded 把 worker 任务掐掉，
+    # 表现为「任务莫名其妙失败、日志里看不到模型错误」。
+    # 因此这里从 TASK_TIMEOUT_MAX_SECONDS 派生，而不是各自写死一个数。
+    CELERY_TASK_SOFT_TIME_LIMIT: int = TASK_TIMEOUT_MAX_SECONDS + 1800
+    CELERY_TASK_TIME_LIMIT: int = TASK_TIMEOUT_MAX_SECONDS + 3600
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     # Worker 可用性探测：派发任务与健康检查都先问一次「有没有 Worker 在消费」。
     # 单次 ping 的等待上限，以及结果缓存时长（避免每次提交任务都付一次广播开销）。

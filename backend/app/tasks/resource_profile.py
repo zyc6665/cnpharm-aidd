@@ -5,7 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 import json
+import logging
 from typing import Any
+
+from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -146,6 +151,15 @@ def build_resource_request(
         or (float(profile.get("timeout_minutes", 0) or 0) * 60)
         or 600
     )
+    # 工具可以声明很长的时限（MD 轨迹跑几天），但平台侧要封顶：一个卡死的 Job
+    # 不应该无限占着卡位。上限来自配置，命中上限时留一条 warning，便于回溯
+    # 「明明是 72 小时的任务，为什么 7 天就超时了」。
+    max_timeout_sec = int(getattr(settings, "TASK_TIMEOUT_MAX_SECONDS", 0) or 0)
+    if max_timeout_sec > 0 and timeout_sec > max_timeout_sec:
+        logger.warning(
+            "任务时限 %s 秒超过平台上限 %s 秒，已按上限截断", timeout_sec, max_timeout_sec
+        )
+        timeout_sec = max_timeout_sec
     parallelism = _positive_int(profile.get("parallelism")) or 1
 
     return ResourceRequest(
