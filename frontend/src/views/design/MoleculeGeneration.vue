@@ -18,29 +18,80 @@
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
+        <a-radio-group
+          v-model:value="sourceMode"
+          button-style="solid"
+          class="source-mode"
+          data-testid="molecule-source-mode"
+        >
+          <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
+          <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
+        </a-radio-group>
+
+        <div v-if="sourceMode === 'project'" class="source-body">
+          <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
+        </div>
+
+        <div v-else class="source-body" data-testid="molecule-upload-source">
+          <div class="source-field">
+            <span class="source-label">{{ t('design.molecule.project') }}</span>
+            <a-select
+              v-model:value="uploadProjectId"
+              show-search
+              option-filter-prop="label"
+              :options="projectOptions"
+              :placeholder="t('design.molecule.projectPlaceholder')"
+              data-testid="molecule-upload-project"
+            />
+          </div>
+          <div class="source-field">
+            <span class="source-label">{{ t('design.molecule.structureFile') }}</span>
+            <a-upload
+              :file-list="structureFileList"
+              :before-upload="handleStructureFile"
+              accept=".pdb,.cif,.ent"
+              :max-count="1"
+              data-testid="molecule-upload-structure"
+            >
+              <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
+            </a-upload>
+          </div>
+          <div class="source-field">
+            <span class="source-label">{{ t('design.molecule.pocketFile') }}</span>
+            <a-upload
+              :file-list="pocketFileList"
+              :before-upload="handlePocketFile"
+              accept=".pdb"
+              :max-count="1"
+              data-testid="molecule-upload-pocket"
+            >
+              <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
+            </a-upload>
+            <span class="source-hint">{{ t('design.molecule.pocketFileHint') }}</span>
+          </div>
+        </div>
       </section>
 
       <a-alert
-        v-if="pocketSelection && !pocketSelection.structureFileId"
+        v-if="hasSelection && !structureReady"
         type="warning"
         show-icon
         :message="t('design.molecule.pocketMissingFile')"
         class="pocket-alert"
       />
       <a-alert
-        v-else-if="pocketSelection && !hasCenter"
+        v-else-if="hasSelection && !hasCenter"
         type="warning"
         show-icon
         :message="t('design.molecule.pocketMissingCenter')"
         class="pocket-alert"
       />
 
-      <section v-if="pocketSelection" class="design-section pocket-summary" data-testid="molecule-pocket-summary">
+      <section v-if="hasSelection" class="design-section pocket-summary" data-testid="molecule-pocket-summary">
         <h3 class="design-section__title">{{ t('design.molecule.pocketSummary') }}</h3>
         <a-descriptions :column="3" size="small" bordered>
           <a-descriptions-item :label="t('design.molecule.pocketLabel')">
-            {{ pocketSelection.pocketLabel || '-' }}
+            {{ pocketLabelText }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('design.molecule.pocketCenter')">
             {{ centerText }}
@@ -89,6 +140,9 @@
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import { uploadFile } from '@/api/files'
+  import { listProjects } from '@/api/projects'
+  import { parsePocketGeometry, radiusOf } from '@/domain/pockets/pocket-geometry'
   import {
     buildDefaultValues,
     normalizeParameters,
@@ -96,6 +150,7 @@
     type ParameterValues
   } from '@/domain/tools/parameterSchema'
   import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
+  import type { ResearchProject } from '@/types/projects'
   import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
   import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
@@ -118,6 +173,47 @@
   const toolError = ref(false)
   const pocketSelection = ref<DesignPocketSelection | null>(null)
 
+  /**
+   * 输入来源：项目里挑口袋，或者直接上传「结构 + 口袋文件」。
+   *
+   * 分子生成的核心输入只有两样：受体结构、口袋中心与半径。前者可以来自项目里的
+   * 准备产物，也可以是用户手上的一个 PDB；后者在项目模式下由口袋记录给出，
+   * 上传模式下从口袋文件里算（`pocket0.pdb` 的 UNL 点最准）。
+   */
+  const sourceMode = ref<'project' | 'upload'>('project')
+  const projects = ref<ResearchProject[]>([])
+  const uploadProjectId = ref<string>(route.query.project_id as string || '')
+  const structureFile = ref<File | null>(null)
+  const structureFileList = ref<unknown[]>([])
+  const pocketFile = ref<File | null>(null)
+  const pocketFileList = ref<unknown[]>([])
+  const uploadCenter = ref<{ x: number; y: number; z: number } | null>(null)
+  const uploadBoxSize = ref<{ x: number; y: number; z: number } | null>(null)
+
+  const projectOptions = computed(() =>
+    projects.value.map((project) => ({ label: project.name, value: project.id }))
+  )
+
+  /** 上传模式下「用户已经选了东西」——用来决定要不要显示提示与摘要。 */
+  const hasSelection = computed(() =>
+    sourceMode.value === 'project'
+      ? Boolean(pocketSelection.value)
+      : Boolean(structureFile.value || pocketFile.value)
+  )
+
+  /** 受体结构是否就位：项目模式看口袋附件，上传模式看用户是否选了文件。 */
+  const structureReady = computed(() =>
+    sourceMode.value === 'project'
+      ? Boolean(pocketSelection.value?.structureFileId)
+      : Boolean(structureFile.value)
+  )
+
+  const pocketLabelText = computed(() =>
+    sourceMode.value === 'project'
+      ? pocketSelection.value?.pocketLabel || '-'
+      : pocketFile.value?.name || '-'
+  )
+
   // 同类分子生成模型可自由选择；默认 pocket2mol；参数 schema 随模型切换。
   const {
     options: modelOptions,
@@ -136,8 +232,16 @@
     pocket_radius: { hidden: false }
   }
 
+  const activeCenter = computed(() =>
+    sourceMode.value === 'project' ? pocketSelection.value?.center ?? null : uploadCenter.value
+  )
+
+  const activeBoxSize = computed(() =>
+    sourceMode.value === 'project' ? pocketSelection.value?.boxSize ?? null : uploadBoxSize.value
+  )
+
   const hasCenter = computed(() => {
-    const center = pocketSelection.value?.center
+    const center = activeCenter.value
     return Boolean(
       center &&
         center.x !== null &&
@@ -153,20 +257,20 @@
     () =>
       Boolean(
         resolvedTool.value &&
-          pocketSelection.value?.structureFileId &&
+          structureReady.value &&
           hasCenter.value &&
           validateParameters(selectedOption.value?.parameterSchema ?? null, form.params).length === 0
       )
   )
 
   const centerText = computed(() => {
-    const center = pocketSelection.value?.center
+    const center = activeCenter.value
     if (!center || center.x === null || center.y === null || center.z === null) return '-'
     return `${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)} Å`
   })
 
   const boxText = computed(() => {
-    const box = pocketSelection.value?.boxSize
+    const box = activeBoxSize.value
     if (!box || box.x === null || box.y === null || box.z === null) return '-'
     return `${box.x.toFixed(1)} × ${box.y.toFixed(1)} × ${box.z.toFixed(1)} Å`
   })
@@ -176,9 +280,52 @@
     return Number.isFinite(parsed) ? parsed : fallback
   }
 
+  async function loadProjects(): Promise<void> {
+    try {
+      const response = await listProjects()
+      projects.value = response.data.items ?? []
+    } catch {
+      projects.value = []
+    }
+  }
+
+  /** a-upload 的 before-upload 返回 false 就只拿文件、不发请求。 */
+  function handleStructureFile(file: File): boolean {
+    structureFile.value = file
+    structureFileList.value = [file]
+    return false
+  }
+
+  async function handlePocketFile(file: File): Promise<boolean> {
+    pocketFile.value = file
+    pocketFileList.value = [file]
+    let geometry = null
+    try {
+      geometry = parsePocketGeometry(await file.text())
+    } catch {
+      geometry = null
+    }
+    if (!geometry) {
+      uploadCenter.value = null
+      uploadBoxSize.value = null
+      message.warning(t('design.molecule.pocketFileUnreadable'))
+      return false
+    }
+    uploadCenter.value = geometry.center
+    uploadBoxSize.value = geometry.boxSize
+    const radius = radiusOf(geometry)
+    if (radius > 0) {
+      form.params = { ...form.params, pocket_radius: radius }
+    }
+    return false
+  }
+
   function validate(): string | null {
-    if (!pocketSelection.value?.structureFileId) {
+    if (!structureReady.value) {
       return t('design.molecule.pocketMissingFile')
+    }
+    if (sourceMode.value === 'upload' && !uploadProjectId.value) {
+      return t('design.molecule.needProject')
     }
     if (!hasCenter.value) {
       return t('design.molecule.pocketMissingCenter')
@@ -204,7 +351,7 @@
   }
 
   async function handleSubmit(): Promise<void> {
-    if (!resolvedTool.value || !pocketSelection.value) {
+    if (!resolvedTool.value) {
       message.warning(t('design.molecule.selectPocketFirst'))
       return
     }
@@ -214,8 +361,7 @@
       return
     }
 
-    const selection = pocketSelection.value
-    const center = selection.center
+    const center = activeCenter.value
     const schema = selectedOption.value?.parameterSchema ?? null
     const params = {
       ...normalizeParameters(schema, form.params),
@@ -226,13 +372,22 @@
 
     submitting.value = true
     try {
+      let projectId = pocketSelection.value?.projectId ?? ''
+      let proteinPdbFileId = pocketSelection.value?.structureFileId ?? ''
+      if (sourceMode.value === 'upload') {
+        projectId = uploadProjectId.value
+        // 上传模式自己把结构传上去；项目模式的文件早就在库里，直接用 id。
+        if (structureFile.value) {
+          proteinPdbFileId = (await uploadFile(structureFile.value)).data.id
+        }
+      }
       const response = await submitDesignTask({
         name: t('design.molecule.taskName'),
-        projectId: selection.projectId,
+        projectId,
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
         params,
-        standardInputUploads: { protein_pdb: selection.structureFileId as string }
+        standardInputUploads: { protein_pdb: proteinPdbFileId }
       })
       message.success(t('design.molecule.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
@@ -271,6 +426,7 @@
 
   onMounted(() => {
     void loadModels().then(() => loadTool())
+    void loadProjects()
   })
 
   watch(selectedSlug, () => {
@@ -303,6 +459,34 @@
 
   .pocket-alert {
     margin-bottom: 24px;
+  }
+
+  .source-mode {
+    margin-bottom: 16px;
+  }
+
+  .source-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .source-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .source-label {
+    min-width: 72px;
+    color: @text-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .source-hint {
+    color: @text-tertiary;
+    font-size: @font-size-sm;
   }
 
   .number-input {

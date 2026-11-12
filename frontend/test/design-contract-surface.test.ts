@@ -21,7 +21,11 @@ describe('设计流程参数按选中模型动态渲染', () => {
 
   it('分子生成使用 pocket2mol 的 protein_pdb 输入与口袋中心注入', () => {
     const text = source('src/views/design/MoleculeGeneration.vue')
-    expect(text).toContain('protein_pdb: selection.structureFileId')
+    // 两种输入来源都要能落到 protein_pdb：项目里挑的口袋，或用户上传的结构文件。
+    expect(text).toContain('standardInputUploads: { protein_pdb: proteinPdbFileId }')
+    expect(text).toContain('pocketSelection.value?.structureFileId')
+    expect(text).toContain("sourceMode.value === 'upload'")
+    expect(text).toContain('parsePocketGeometry')
     expect(text).toContain('ModelParameterForm')
     expect(text).toContain('selectedOption?.parameterSchema')
     expect(text).toContain('center_x: toNumber')
