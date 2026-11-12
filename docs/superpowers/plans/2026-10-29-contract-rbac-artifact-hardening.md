@@ -7,11 +7,11 @@
 **Tech Stack**：FastAPI 0.112 / SQLAlchemy 2 async / Alembic（单 head `20261030_02`）/ Pydantic v2 / Vue3 + Vite + ant-design-vue / PostgreSQL + Redis + MinIO。
 
 **Spec**：
-- `docs/04-数据模型设计说明书.md` §5.0（RBAC）、§5.4（audit_log）、§5.6（并发控制）、§9（task/artifact）
-- `docs/05-API接口规格说明书.md` §1.2（统一响应体）、§9.2（追溯视图）、§10.1（追溯包）
-- `docs/06-UI交互与原型说明.md` P-12（数据资产 Tab = 化合物/蛋白/数据集）
-- `docs/10-开发规范与编码约定.md` DB-09（只追加）、API-08（SSE）
-- `docs/18-项目验收报告.md` §6.3/§6.4（已登记缺口，本计划不重复其条目）
+- `docs/02-架构/04-数据模型设计说明书.md` §5.0（RBAC）、§5.4（audit_log）、§5.6（并发控制）、§9（task/artifact）
+- `docs/03-接口/05-API接口规格说明书.md` §1.2（统一响应体）、§9.2（追溯视图）、§10.1（追溯包）
+- `docs/02-架构/06-UI交互与原型说明.md` P-12（数据资产 Tab = 化合物/蛋白/数据集）
+- `docs/08-开发与工程/10-开发规范与编码约定.md` DB-09（只追加）、API-08（SSE）
+- `docs/07-验收/18-项目验收报告.md` §6.3/§6.4（已登记缺口，本计划不重复其条目）
 
 **Global Constraints**（违反即打回）：
 1. 私有化离线内网：不得引入任何公网依赖、不得新增外部服务。

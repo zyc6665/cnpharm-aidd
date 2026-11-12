@@ -10,7 +10,7 @@
 
 **Tech Stack:** 后端 FastAPI 0.109 + SQLAlchemy 2 async + Alembic + Pydantic v2 + RDKit；前端 Vue 3 `<script setup>` + Vite + ant-design-vue 4 + vue-i18n 9 + molstar 5 + smiles-drawer 2 + vitest 4。
 
-**Spec:** `docs/05-API接口规格说明书.md`（§3.2 阶段、§3.3 决策记录、§4 数据资产与 §4.2 分片上传）、`docs/04-数据模型设计说明书.md`（§5.6 乐观锁、§5.8 upload_session、§9.5 decision_record）、`docs/06-UI交互与原型说明.md`（§3 页面清单 P-06~P-14、P-18~P-20、P-33/P-34、P-36/P-38）、`docs/17-交付仓库与分支策略.md`（§5 步骤表、§7.3 合入流程）
+**Spec:** `docs/03-接口/05-API接口规格说明书.md`（§3.2 阶段、§3.3 决策记录、§4 数据资产与 §4.2 分片上传）、`docs/02-架构/04-数据模型设计说明书.md`（§5.6 乐观锁、§5.8 upload_session、§9.5 decision_record）、`docs/02-架构/06-UI交互与原型说明.md`（§3 页面清单 P-06~P-14、P-18~P-20、P-33/P-34、P-36/P-38）、`docs/17-交付仓库与分支策略.md`（§5 步骤表、§7.3 合入流程）
 
 # Global Constraints
 
