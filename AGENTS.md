@@ -166,7 +166,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 ## 9. 文档治理
 
-- 索引在 [docs/README.md](docs/README.md)（§0.1 编号规则、§10 治理规则）。
+- 索引在 [docs/README.md](docs/README.md)（§0.1 编号规则、§0.2 交付文档八类汇总与交付打包建议、§10 治理规则）。
 - 交付文档放 `docs/` 根，内部记录放 `docs/internal/`，一次性记录放 `docs/archive/`（**只读，不要改**）。
 - 新增文档取全局最大号 +1（当前 `31`），命名 `NN-中文标题.md`。
 - 改完必须过 `python scripts/check_doc_links.py`，并同步 `docs/README.md` 与 `docs/00` 里的份数。
