@@ -37,6 +37,7 @@
             <span class="source-label">{{ t('design.molecule.project') }}</span>
             <a-select
               v-model:value="uploadProjectId"
+              class="source-control"
               show-search
               option-filter-prop="label"
               :options="projectOptions"
@@ -46,28 +47,37 @@
           </div>
           <div class="source-field">
             <span class="source-label">{{ t('design.molecule.structureFile') }}</span>
-            <a-upload
-              :file-list="structureFileList"
-              :before-upload="handleStructureFile"
-              accept=".pdb,.cif,.ent"
-              :max-count="1"
-              data-testid="molecule-upload-structure"
-            >
-              <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
-            </a-upload>
+            <div class="source-upload">
+              <a-upload
+                :show-upload-list="false"
+                :before-upload="handleStructureFile"
+                accept=".pdb,.cif,.ent"
+                data-testid="molecule-upload-structure"
+              >
+                <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
+              </a-upload>
+              <span v-if="structureFile" class="source-file" data-testid="molecule-upload-structure-name">
+                {{ structureFile.name }}
+              </span>
+              <span v-else class="source-hint">{{ t('design.molecule.structureFileHint') }}</span>
+            </div>
           </div>
           <div class="source-field">
             <span class="source-label">{{ t('design.molecule.pocketFile') }}</span>
-            <a-upload
-              :file-list="pocketFileList"
-              :before-upload="handlePocketFile"
-              accept=".pdb"
-              :max-count="1"
-              data-testid="molecule-upload-pocket"
-            >
-              <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
-            </a-upload>
-            <span class="source-hint">{{ t('design.molecule.pocketFileHint') }}</span>
+            <div class="source-upload">
+              <a-upload
+                :show-upload-list="false"
+                :before-upload="handlePocketFile"
+                accept=".pdb"
+                data-testid="molecule-upload-pocket"
+              >
+                <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
+              </a-upload>
+              <span v-if="pocketFile" class="source-file" data-testid="molecule-upload-pocket-name">
+                {{ pocketFile.name }}
+              </span>
+              <span class="source-hint">{{ t('design.molecule.pocketFileHint') }}</span>
+            </div>
           </div>
         </div>
       </section>
@@ -184,9 +194,7 @@
   const projects = ref<ResearchProject[]>([])
   const uploadProjectId = ref<string>(route.query.project_id as string || '')
   const structureFile = ref<File | null>(null)
-  const structureFileList = ref<unknown[]>([])
   const pocketFile = ref<File | null>(null)
-  const pocketFileList = ref<unknown[]>([])
   const uploadCenter = ref<{ x: number; y: number; z: number } | null>(null)
   const uploadBoxSize = ref<{ x: number; y: number; z: number } | null>(null)
 
@@ -292,13 +300,11 @@
   /** a-upload 的 before-upload 返回 false 就只拿文件、不发请求。 */
   function handleStructureFile(file: File): boolean {
     structureFile.value = file
-    structureFileList.value = [file]
     return false
   }
 
   async function handlePocketFile(file: File): Promise<boolean> {
     pocketFile.value = file
-    pocketFileList.value = [file]
     let geometry = null
     try {
       geometry = parsePocketGeometry(await file.text())
@@ -468,25 +474,42 @@
   .source-body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
+    max-width: 560px;
   }
 
   .source-field {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .source-label {
-    min-width: 72px;
     color: @text-secondary;
     font-size: @font-size-sm;
+  }
+
+  .source-control {
+    width: 100%;
+  }
+
+  .source-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .source-file {
+    color: @text-primary;
+    font-size: @font-size-sm;
+    word-break: break-all;
   }
 
   .source-hint {
     color: @text-tertiary;
     font-size: @font-size-sm;
+    line-height: 1.5;
   }
 
   .number-input {

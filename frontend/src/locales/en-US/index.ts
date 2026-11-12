@@ -1952,6 +1952,7 @@ export default {
       structureFile: 'Protein structure',
       pocketFile: 'Pocket file',
       pocketFileHint: 'Used to derive the pocket center and radius, e.g. pocket0.pdb or a protein-pocket complex',
+      structureFileHint: 'Receptor structure; .pdb / .cif / .ent are accepted. A raw PDB is better prepared on the target page first.',
       pocketFileUnreadable: 'No coordinates found in that file. Try another PDB.',
       chooseFile: 'Choose file',
       numMolecules: 'Number of molecules',

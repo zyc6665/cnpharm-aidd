@@ -1942,6 +1942,7 @@ export default {
       structureFile: '蛋白结构',
       pocketFile: '口袋文件',
       pocketFileHint: '用于取口袋中心与半径，如口袋预测产出的 pocket0.pdb 或蛋白-口袋残基复合物',
+      structureFileHint: '作为受体结构，支持 .pdb / .cif / .ent；未做过结构准备的 PDB 建议先在靶点页准备一次。',
       pocketFileUnreadable: '没从口袋文件里读到坐标，请换一个 PDB 文件',
       chooseFile: '选择文件',
       numMolecules: '生成数量',
