@@ -183,7 +183,7 @@ Login.vue（用户名+口令）
 - 前端 `frontend/src/views/auth/Login.spec.ts`（提交体 username）、
   `frontend/test/ldap-auth-ui.test.ts`（LDAP 用户隐藏重置按钮、表单 auth_source 切换）。
 - 文档：`docs/04-接口规范.md`（登录/注册/用户接口变更）、`docs/05-错误码.md`（新增 40007/40300/50301
-  说明）、`docs/18-项目验收报告.md`（§3.25 企业 LDAP 认证落地、G-8/D-04 关闭）、
+  说明）、`docs/07-验收/18-项目验收报告.md`（§3.25 企业 LDAP 认证落地、G-8/D-04 关闭）、
   `docs/README.md`（如涉及接口清单）、本计划 Status 追加。
 - 设计文档状态改「已实现」。
 

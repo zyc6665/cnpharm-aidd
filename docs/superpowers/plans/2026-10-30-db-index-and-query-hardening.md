@@ -15,7 +15,7 @@
 
 - **索引层**（`backend/app/models/*.py` 的 `Index(...)` + 一个新迁移）：只加/删索引与约束，不改任何 SQL 语义。生产走 `CONCURRENTLY`，SQLite 走普通建索引（方言分支）。
 - **查询层**（`backend/app/services/*.py`、`backend/app/api/v1/*.py`）：把「索引用不上」的写法改成「索引用得上」，结果集与返回结构不变。
-- **规范层**（`docs/20-数据库索引与查询规范.md`）：把判断依据写成团队可执行的条目，避免下一个人再引入同类写法。
+- **规范层**（`docs/08-开发与工程/20-数据库索引与查询规范.md`）：把判断依据写成团队可执行的条目，避免下一个人再引入同类写法。
 
 ## Tech Stack
 
@@ -82,7 +82,7 @@ SQLAlchemy 2.0 async / Alembic / PostgreSQL 16（生产）/ SQLite（开发与�
 
 ### 三、规范层
 
-`docs/20-数据库索引与查询规范.md`：列顺序规则、什么时候不加索引、禁止清单（前导 `%` LIKE、函数包列、
+`docs/08-开发与工程/20-数据库索引与查询规范.md`：列顺序规则、什么时候不加索引、禁止清单（前导 `%` LIKE、函数包列、
 JSON 提取进 WHERE/JOIN、无界 `offset`）、分页与计数写法、新表上线检查表。
 
 ## Global Constraints

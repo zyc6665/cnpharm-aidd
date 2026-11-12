@@ -110,7 +110,7 @@
 ### 7）【P2】文档路由与实际路由不一致，5 个文档页面直接 404
 - `/projects`（P-03）、`/projects/:id/members`（P-05）、`/results`（P-33）、`/workflows/templates`（P-29）、`/workflows/:id`（P-30）、`/workflows/templates/:id/edit`（P-40）均未注册，落到 `/404`（截图 `desktop/projects.png`、`desktop/project-members.png`、`desktop/results.png`、`desktop/workflows-templates.png`、`desktop/workflow-instance.png`）。
 - 影响：按文档走查/验收/外部链接会直接 404；用户从书签进入失败。
-- 建议：`frontend/src/router/index.ts` 增补别名或 302 到实际实现（`/projects`→`/workspace`，`/results`→ 项目内结果中心，`/workflows/*`→`/workflow`），或修订 `docs/06-UI交互与原型说明.md` §3 路由列。
+- 建议：`frontend/src/router/index.ts` 增补别名或 302 到实际实现（`/projects`→`/workspace`，`/results`→ 项目内结果中心，`/workflows/*`→`/workflow`），或修订 `docs/02-架构/06-UI交互与原型说明.md` §3 路由列。
 - 严重度：P2（若产品确认按文档交付则为 P1）
 
 ### 8）【P2】移动端项目导航 / 管理台 Tab 横向裁切，无滚动提示

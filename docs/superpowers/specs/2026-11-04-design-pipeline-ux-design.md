@@ -2,7 +2,7 @@
 
 - 日期：2026-11-04
 - 状态：**已实现**（2026-11-04；实现见分支 `feat/design-pipeline-ux`，计划见 `plans/2026-11-04-design-pipeline-ux.md`）
-- 关联：`docs/06-UI交互与原型说明.md`、`docs/16-用户操作手册.md`、`docs/01-PRD`（P-06~P-17）
+- 关联：`docs/02-架构/06-UI交互与原型说明.md`、`docs/07-验收/16-用户操作手册.md`、`docs/01-PRD`（P-06~P-17）
 - 涉及代码：`frontend/src/components/layout/AppShell.vue`、`frontend/src/views/design/*`、`frontend/src/domain/design/runs.ts`、`frontend/src/views/targets/*`、`frontend/src/api/{design,targets}.ts`、`frontend/src/locales/*`
 
 ## 1. 为什么做（intent）

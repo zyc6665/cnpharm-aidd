@@ -2,7 +2,7 @@
 
 面向两类读者：**新加入的团队成员**，以及在仓库里工作的 **AI Agent**。读完这份应该能独立跑起来、知道改动边界在哪、不踩已知的坑。
 
-> 分工：`README.md` 是「三分钟上手」，[CONTRIBUTING.md](CONTRIBUTING.md) 是提交与评审流程，[docs/internal/30-团队协作与域划分.md](docs/internal/30-团队协作与域划分.md) 是「谁负责什么」，[docs/10-开发规范与编码约定.md](docs/10-开发规范与编码约定.md) 是代码风格。本文只写**怎么做、别做什么**。
+> 分工：`README.md` 是「三分钟上手」，[CONTRIBUTING.md](CONTRIBUTING.md) 是提交与评审流程，[docs/internal/30-团队协作与域划分.md](docs/internal/30-团队协作与域划分.md) 是「谁负责什么」，[docs/08-开发与工程/10-开发规范与编码约定.md](docs/08-开发与工程/10-开发规范与编码约定.md) 是代码风格。本文只写**怎么做、别做什么**。
 
 ---
 
@@ -35,7 +35,7 @@
 | `docs/` | 交付文档集，先看 [docs/README.md](docs/README.md) | 全队 |
 | `test/` | 290 个后端测试文件 | 全队 |
 
-**没有 Makefile**：`docs/10` §12.2 提到的 `make` 目标、`packages/drp_compute`、`deploy/dev/` 属于产品线口径，本仓库不存在。**以仓库实际目录为准**。
+**没有 Makefile**：`docs/08-开发与工程/10-开发规范与编码约定.md` §12.2 提到的 `make` 目标、`packages/drp_compute`、`deploy/dev/` 属于产品线口径，本仓库不存在。**以仓库实际目录为准**。
 
 ---
 
@@ -47,7 +47,7 @@
 | 前端 | Vue 3、Vite、ant-design-vue 4、Pinia、vitest、Playwright、Node 20 |
 | 数据 | PostgreSQL **16**（`postgres:16-alpine`）、Redis 7、MinIO `RELEASE.2024-06-13T22-53-53Z` |
 
-> `docs/04` 里写的 PostgreSQL 15 是早期口径；以 compose 与集群清单里的 16 为准。
+> `docs/02-架构/04-数据模型设计说明书.md` 里写的 PostgreSQL 15 是早期口径；以 compose 与集群清单里的 16 为准。
 
 ---
 
@@ -121,7 +121,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 - `backend/app/api/v1/__init__.py` — 路由注册表
 - `backend/app/services/platform_tool_seeding.py` — 10 个平台工具 slug 与时限的**唯一真源**（`REQUIRED_TOOL_SLUGS` / `TOOL_TIMEOUT_MINUTES`，gromacs-md 4320 分钟、pocket2mol 720、boltz2 各 360、多数 240、默认 60）
 - `backend/app/tool_templates/` — 工具模板 YAML
-- `docs/05-API接口规格说明书.md` — 接口契约
+- `docs/03-接口/05-API接口规格说明书.md` — 接口契约
 - `.github/`、`deploy/`、`scripts/` — 门禁、部署与公共脚本
 
 ### 6.2 汇聚点（一次改一处，改完立刻提交，双语必须同改）
@@ -167,9 +167,9 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 ## 9. 文档治理
 
 - 索引在 [docs/README.md](docs/README.md)（§0.1 编号规则、§0.2 交付文档八类汇总与交付打包建议、§10 治理规则）。
-- 交付文档放 `docs/` 根，内部记录放 `docs/internal/`，一次性记录放 `docs/archive/`（**只读，不要改**）。
+- 交付文档按八类分子目录：`docs/01-需求/` `02-架构/` `03-接口/` `04-测试/` `05-部署/` `06-运维/` `07-验收/` `08-开发与工程/`；`docs/` 根只留 `README.md`。内部记录放 `docs/internal/`，一次性记录放 `docs/archive/`（**只读，不要改**）。
 - 新增文档取全局最大号 +1（当前 `31`），命名 `NN-中文标题.md`。
-- 改完必须过 `python scripts/check_doc_links.py`，并同步 `docs/README.md` 与 `docs/00` 里的份数。
+- 改完必须过 `python scripts/check_doc_links.py`，并同步 `docs/README.md` 与 `docs/02-架构/00-项目总览与研发流程总纲.md` 里的份数。
 - `docs/superpowers/specs/2026-10-30-enterprise-ldap-auth-design.md` 被后端代码注释直接引用，**不可移动或改名**。
 
 ---
@@ -182,7 +182,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 4. **迁移必须可回滚**：写 `downgrade()`，本地跑 `upgrade head` → `downgrade base` → `upgrade head`。
 5. **报完成前先跑基线**：第 5 节的四件套（flake8 / pytest / npm test / npm build）加上改动相关的检查，贴出实际输出再下结论。
 6. **不写死密钥**：`backend/.env` 不进仓库；文档里用 `<密码>` 占位。
-7. **文档与代码同批**：改了接口就改 `docs/05`，改了部署就改 `docs/13`/`docs/internal/21`，否则下一个人按旧文档操作。
+7. **文档与代码同批**：改了接口就改 `docs/03-接口/05-API接口规格说明书.md`，改了部署就改 `docs/05-部署/13-部署架构与上线方案.md`/`docs/internal/21`，否则下一个人按旧文档操作。
 
 ---
 
@@ -190,7 +190,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 | 天 | 做什么 |
 |---|---|
-| D1 | 读 `README.md` → 本文 → `docs/00`（总纲）→ `docs/02`（需求追踪矩阵）；改好 `backend/.env`，把后端、worker、beat、前端四进程跑起来，`/health` 全绿 |
-| D2 | 读 `docs/internal/30`（域划分）+ `docs/03`（架构）+ `docs/05`（接口）；跑一遍基线测试，确认本地全绿 |
+| D1 | 读 `README.md` → 本文 → `docs/02-架构/00-项目总览与研发流程总纲.md`（总纲）→ `docs/01-需求/02-需求追踪矩阵.md`；改好 `backend/.env`，把后端、worker、beat、前端四进程跑起来，`/health` 全绿 |
+| D2 | 读 `docs/internal/30`（域划分）+ `docs/02-架构/03-系统架构设计说明书.md`（架构）+ `docs/03-接口/05-API接口规格说明书.md`（接口）；跑一遍基线测试，确认本地全绿 |
 | D3 | 认领一个 `Ready` 列的小 Issue（≤ 1 天），走完「切分支 → 小步提交 → PR → 1 人评审 → squash 合并」全流程 |
-| D4–D5 | 在自己域内认领一个真实需求（对应 M1–M7 的某条），按 `docs/02` 的验收标准交付 |
+| D4–D5 | 在自己域内认领一个真实需求（对应 M1–M7 的某条），按 `docs/01-需求/02-需求追踪矩阵.md` 的验收标准交付 |
