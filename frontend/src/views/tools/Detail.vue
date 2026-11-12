@@ -433,7 +433,7 @@
   .tool-main {
     display: flex;
     width: 100%;
-    max-width: 920px;
+    max-width: @page-max-width;
     min-width: 0;
     flex-direction: column;
     gap: @spacing-xl;

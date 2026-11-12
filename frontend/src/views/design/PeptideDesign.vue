@@ -62,8 +62,10 @@
             data-testid="peptide-protein-select"
             @change="handleProteinChange"
           />
-          <p class="field-hint">{{ t('design.peptide.targetSequenceHint') }}</p>
         </div>
+        <p v-if="sequenceSource === 'target'" class="field-hint">
+          {{ t('design.peptide.targetSequenceHint') }}
+        </p>
       </section>
 
       <section class="design-section">
@@ -303,18 +305,20 @@
 
   .sequence-source {
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(@field-grid-min, 1fr));
     gap: 12px;
+    align-items: start;
     margin-top: 12px;
   }
 
   .field-hint {
-    margin: 0;
+    margin: 12px 0 0;
     color: var(--color-text-secondary, #8c8c8c);
     font-size: 12px;
   }
 
   .design-page {
-    max-width: 960px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: 32px 24px 48px;
   }

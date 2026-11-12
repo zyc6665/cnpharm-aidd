@@ -174,7 +174,7 @@
   @import '@/assets/styles/variables.less';
 
   .pocket-residues-page {
-    max-width: 860px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

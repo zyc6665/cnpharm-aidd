@@ -182,7 +182,7 @@
   @import '@/assets/styles/variables.less';
 
   .structure-predict-page {
-    max-width: 640px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

@@ -380,7 +380,7 @@
   @import '@/assets/styles/variables.less';
 
   .project-overview-page {
-    max-width: 1180px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

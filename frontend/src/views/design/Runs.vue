@@ -307,13 +307,15 @@ watch(activeCategory, () => {
 </script>
 
 <style scoped lang="less">
+@import '@/assets/styles/variables.less';
+
 .design-runs-page {
   min-height: 100%;
   padding: 0 0 40px;
 }
 
 .container {
-  max-width: 1440px;
+  max-width: @page-max-width;
   margin: 0 auto;
   padding: 24px 24px 0;
 }

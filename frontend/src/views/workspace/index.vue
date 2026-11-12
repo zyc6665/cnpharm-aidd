@@ -436,7 +436,7 @@ onMounted(() => { void loadWorkspace() })
 <style scoped lang="less">
 @import '@/assets/styles/variables.less';
 
-.workspace-page { max-width: 1180px; margin: 0 auto; padding: @spacing-xl @spacing-lg @spacing-xxl; }
+.workspace-page { max-width: @page-max-width; margin: 0 auto; padding: @spacing-xl @spacing-lg @spacing-xxl; }
 .workspace-header { display: flex; align-items: flex-start; justify-content: space-between; gap: @spacing-lg; margin-bottom: @spacing-xl; }
 .workspace-header h1 { margin: 0; color: @text-primary; font-size: @font-size-xxl; line-height: @line-height-tight; letter-spacing: 0; }
 .workspace-error { margin-bottom: @spacing-lg; }

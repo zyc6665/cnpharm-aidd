@@ -560,7 +560,7 @@ import { formatNumber } from '@/domain/common/format'
   @import '@/assets/styles/variables.less';
 
   .results-page {
-    max-width: 1200px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: 32px 24px 48px;
   }

@@ -202,7 +202,7 @@ watch(
 @import '@/assets/styles/variables.less';
 
 .design-pipeline-page {
-  max-width: 1280px;
+  max-width: @page-max-width;
   margin: 0 auto;
   padding: @spacing-xl @spacing-lg @spacing-xxl;
 

@@ -530,7 +530,7 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   @import '@/assets/styles/variables.less';
 
   .result-detail-page {
-    max-width: 1240px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

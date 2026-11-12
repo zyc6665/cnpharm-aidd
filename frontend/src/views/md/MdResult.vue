@@ -410,7 +410,7 @@
   @import '@/assets/styles/variables.less';
 
   .md-result {
-    max-width: @container-xxl;
+    max-width: @page-max-width;
     margin: 0 auto;
   }
 

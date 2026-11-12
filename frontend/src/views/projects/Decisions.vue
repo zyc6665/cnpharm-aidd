@@ -676,7 +676,7 @@
   @import '@/assets/styles/variables.less';
 
   .decisions-page {
-    max-width: 1240px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

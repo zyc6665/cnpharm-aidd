@@ -32,7 +32,7 @@
           <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
         </div>
 
-        <div v-else class="source-body" data-testid="molecule-upload-source">
+        <div v-else class="source-body source-body--fields" data-testid="molecule-upload-source">
           <div class="source-field">
             <span class="source-label">{{ t('design.molecule.project') }}</span>
             <a-select
@@ -444,7 +444,7 @@
   @import '@/assets/styles/variables.less';
 
   .design-page {
-    max-width: 960px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: 32px 24px 48px;
   }
@@ -475,7 +475,14 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 560px;
+  }
+
+  // 上传模式的几个字段：宽屏时并排铺开，窄屏自动退成单列
+  .source-body--fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(@field-grid-min, 1fr));
+    gap: 16px;
+    align-items: start;
   }
 
   .source-field {

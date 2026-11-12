@@ -261,7 +261,7 @@ import { formatFixed } from '@/domain/common/format'
   @import '@/assets/styles/variables.less';
 
   .free-energy {
-    max-width: @container-xxl;
+    max-width: @page-max-width;
     margin: 0 auto;
   }
 
