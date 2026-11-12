@@ -459,3 +459,21 @@ async def test_reconcile_query_filters_healthy_running_tasks_before_batch_limit(
     sql = str(statement.compile(dialect=sqlite.dialect()))
     assert "LEFT OUTER JOIN tasks" in sql
     assert "tasks.status !=" in sql
+
+
+def test_running_records_query_locks_only_the_execution_record_table():
+    """PostgreSQL 不允许 `FOR UPDATE` 作用在左外连接的可空侧。
+
+    这条语句带 `LEFT OUTER JOIN tasks`，所以必须显式写 `FOR UPDATE OF
+    execution_records`；否则 PG 直接报
+    `FOR UPDATE cannot be applied to the nullable side of an outer join`，
+    而 SQLite 只会忽略 `FOR UPDATE`，单测全绿、生产每轮巡检都失败。
+    """
+    from sqlalchemy.dialects import postgresql
+
+    from app.execution.records import running_records_query
+
+    sql = str(running_records_query(batch_size=5).compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE OF execution_records SKIP LOCKED" in sql
+    assert "LIMIT" in sql
