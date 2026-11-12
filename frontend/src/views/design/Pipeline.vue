@@ -119,7 +119,8 @@ function goProjects(): void {
 }
 
 function goAdvanced(): void {
-  void router.push('/workflow')
+  // 画布编排是设计流程的高级形态：带上项目，进去就是同一个项目的画布。
+  void router.push(projectId.value ? `/projects/${projectId.value}/workflow` : '/workflow')
 }
 
 function onProjectChange(value: unknown): void {

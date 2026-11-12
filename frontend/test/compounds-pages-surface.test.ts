@@ -71,12 +71,12 @@ test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既�
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
-  // targets 由 PR3 加入（锚点：overview 之后、workflow 之前），此处只断言本 PR 新增的两项相对位置。
+  // targets 由 PR3 加入（锚点：overview 之后），design 取代了原来的 workflow 顶级位，此处只断言新增项的相对位置。
   // decisions 由 P-39 决策记录页加入（锚点：results 之后、lineage 之前），因此需补进本清单。
   assert.deepEqual(keys, [
     'overview',
     'targets',
-    'workflow',
+    'design',
     'tasks',
     'assets',
     'candidates',

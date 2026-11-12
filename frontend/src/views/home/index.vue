@@ -127,7 +127,7 @@
         <span class="footer-brand">{{ PLATFORM_NAME }}</span>
         <nav class="footer-nav">
           <router-link to="/tools">{{ t('nav.tools') }}</router-link>
-          <router-link to="/workflow">{{ t('nav.workflow') }}</router-link>
+          <router-link to="/design">{{ t('nav.designFlow') }}</router-link>
           <router-link to="/login">{{ t('nav.login') }}</router-link>
         </nav>
         <span class="footer-copy">{{ buildCopyright(year) }}</span>

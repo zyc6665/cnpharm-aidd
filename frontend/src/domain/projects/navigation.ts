@@ -1,6 +1,7 @@
 export type ProjectWorkspaceNavKey =
   | 'overview'
   | 'targets'
+  | 'design'
   | 'workflow'
   | 'tasks'
   | 'assets'
@@ -28,6 +29,14 @@ export function buildProjectTaskPath(projectId: string): string {
 
 export function buildProjectWorkflowPath(projectId: string): string {
   return `/projects/${projectId}/workflow`
+}
+
+/**
+ * 项目内的主入口是「设计流程」（引导式五步）；画布编排是它的高级形态，
+ * 从设计流程页的「高级」按钮进入，不再单独占一个顶级导航位。
+ */
+export function buildProjectDesignPath(projectId: string): string {
+  return `/design?project_id=${encodeURIComponent(projectId)}`
 }
 
 export function buildProjectTargetsPath(projectId: string): string {
@@ -59,7 +68,7 @@ export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspa
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
     { key: 'targets', label: '靶点与结构', to: buildProjectTargetsPath(projectId) },
-    { key: 'workflow', label: '高级编排', to: buildProjectWorkflowPath(projectId) },
+    { key: 'design', label: '设计流程', to: buildProjectDesignPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'assets', label: '数据资产', to: buildProjectAssetsPath(projectId) },
     { key: 'candidates', label: '候选物', to: buildProjectCandidatesPath(projectId) },
@@ -76,6 +85,15 @@ export function isProjectWorkspaceNavItemActive(
 ): boolean {
   if (item.key === 'tasks') {
     return location.currentPath === '/tasks' && location.queryProjectId === location.currentProjectId
+  }
+
+  if (item.key === 'design') {
+    // 设计流程页的地址是 `/design?project_id=…`：路径与查询参数都要对上，
+    // 否则任何项目在设计流程页都会亮起来。画布编排是它的高级形态，同一项也亮。
+    if (location.currentPath === `/projects/${location.currentProjectId}/workflow`) {
+      return true
+    }
+    return location.currentPath === '/design' && location.queryProjectId === location.currentProjectId
   }
 
   if (item.key === 'overview') {

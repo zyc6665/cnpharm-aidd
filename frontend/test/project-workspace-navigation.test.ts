@@ -40,7 +40,10 @@ test('项目工作台导航应覆盖当前项目内主要入口', () => {
   const navDomain = readSource('src/domain/projects/navigation.ts')
 
   assert.equal(navDomain.includes('项目总览'), true)
-  assert.equal(navDomain.includes('Workflow'), true)
+  assert.equal(navDomain.includes('设计流程'), true)
+  // 画布编排是设计流程的高级形态，不再单独占顶级导航位
+  assert.equal(navDomain.includes('高级编排'), false)
+  assert.equal(navDomain.includes('buildProjectWorkflowPath'), true)
   assert.equal(navDomain.includes('任务中心'), true)
   assert.equal(navDomain.includes('Artifact 谱系'), true)
   assert.equal(navDomain.includes('项目设置'), true)
