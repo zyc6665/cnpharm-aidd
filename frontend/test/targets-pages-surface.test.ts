@@ -89,8 +89,9 @@ test('项目导航含 targets 项且位于 overview 之后', () => {
   assert.notEqual(targetsIndex, -1, 'targets 项必须存在')
   assert.equal(overviewIndex < targetsIndex, true, 'targets 必须排在 overview 之后')
 
-  const workflowIndex = source.indexOf("key: 'workflow'")
-  assert.equal(targetsIndex < workflowIndex, true, 'targets 必须紧跟在 overview 之后（第 2 项）')
+  const designIndex = source.indexOf("key: 'design'")
+  assert.notEqual(designIndex, -1, 'design 项必须存在')
+  assert.equal(targetsIndex < designIndex, true, 'targets 必须紧跟在 overview 之后（第 2 项）')
 })
 
 test('i18n 中英两份都补齐 targets 命名空间', () => {

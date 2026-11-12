@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="tasks-page">
     <div class="container">
       <AppPageHeader :title="t('tasks.title')" :subtitle="t('tasks.subtitle')" />
@@ -171,7 +171,13 @@
       </div>
 
       <!-- 任务列表（紧凑表格，与「设计任务」同一视觉） -->
-      <SkeletonList v-if="loading" :count="5" />
+      <!--
+        骨架屏只服务于「首次进入、还没有任何内容」；自动刷新（每 10s）时
+        表格保持挂载，只在上方显示一条进度条。否则每 10 秒整表卸载重挂一次，
+        就是肉眼可见的白闪。
+      -->
+      <LoadingBar :active="backgroundLoading" />
+      <SkeletonList v-if="loading && !hasDisplayItems" :count="5" />
       <a-table
         v-else-if="hasDisplayItems"
         class="tasks-table"
@@ -302,6 +308,7 @@
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
+import LoadingBar from '@/components/common/LoadingBar.vue'
   import {
     UnorderedListOutlined,
     SyncOutlined,
@@ -399,6 +406,10 @@
     keyword: searchKeyword.value,
     counts: taskViewCounts.value,
   }))
+
+  // 「已有内容时的刷新」与「首次加载」是两种观感需求：前者必须原地不动，
+  // 后者才允许用骨架屏占位。
+  const backgroundLoading = computed(() => loading.value && taskListViewModel.value.hasDisplayItems)
 
   const runningTasks = computed(() => taskListViewModel.value.runningTasks)
   const allCount = computed(() => taskListViewModel.value.counts.all)

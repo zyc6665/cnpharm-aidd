@@ -1,5 +1,6 @@
 import sys
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -416,6 +417,58 @@ async def test_task_logs_endpoint_returns_paginated_items_with_metadata(test_cli
     assert len(payload["items"]) == 1
     assert payload["items"][0]["message"] == "任务执行成功"
     assert payload["items"][0]["metadata"] == {"step": "completed"}
+
+
+@pytest.mark.asyncio
+async def test_task_logs_endpoint_can_tail_the_newest_page(test_client):
+    """`order=desc` 必须能取到最新的一段，且返回顺序仍是时间升序。
+
+    长任务（这里用 120 行模拟）的日志远超一页；默认的 asc 分页只能拿到开头，
+    界面看上去就是「日志停在刚开始那几行」。desc 让 page=1 变成「最新一页」。
+    """
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+    # 固定基时间：种子那条日志是「现在」，所以它排在最后（最新）。
+    log_base_time = datetime(2026, 1, 1, 0, 0, 0)
+
+    async with session_factory() as session:
+        for index in range(120):
+            session.add(
+                TaskLog(
+                    task_id=seeded["task_id"],
+                    timestamp=log_base_time + timedelta(seconds=index),
+                    level="info",
+                    message=f"line-{index:03d}",
+                    log_data={"source": "runtime", "sequence": index},
+                )
+            )
+        await session.commit()
+
+    head = await client.get(
+        f"/api/v1/tasks/{seeded['task_id']}/logs",
+        params={"page": 1, "page_size": 10},
+    )
+    assert head.status_code == 200
+    head_messages = [item["message"] for item in head.json()["data"]["items"]]
+    # 升序第一页是任务开头那几行——这正是界面「日志停在最开始」的原因。
+    assert head_messages == [f"line-{index:03d}" for index in range(10)], head_messages
+
+    tail = await client.get(
+        f"/api/v1/tasks/{seeded['task_id']}/logs",
+        params={"page": 1, "page_size": 10, "order": "desc"},
+    )
+    assert tail.status_code == 200
+    tail_payload = tail.json()["data"]
+    assert tail_payload["total"] == 121
+    tail_items = tail_payload["items"]
+    # 最新一页 = 最后 9 行 + 种子里那条「任务执行成功」（它是最新的）。
+    assert [item["message"] for item in tail_items] == [
+        *(f"line-{index:03d}" for index in range(111, 120)),
+        "任务执行成功",
+    ], [item["message"] for item in tail_items]
+    # 页内仍然按时间升序：调用方不需要自己再翻转。
+    timestamps = [item["timestamp"] for item in tail_items]
+    assert timestamps == sorted(timestamps)
 
 
 @pytest.mark.asyncio

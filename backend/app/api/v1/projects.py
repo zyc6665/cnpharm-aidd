@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.common.time import utcnow
 from app.database.session import get_db
 from app.files.file_records import delete_stored_content
 from app.feature_flags import require_feature_flag
+from app.logging.audit import AuditAction, ResourceType
 from app.models.artifacts import (
     Artifact,
     ArtifactLineage,
@@ -40,6 +41,7 @@ from app.schemas.projects import (
     ProjectMemberUpdate,
     ProjectUpdate,
 )
+from app.services.audit_mutations import record_domain_action
 from app.services.domain_compounds import (
     delete_project_compound_rows,
     project_compound_counts,
@@ -367,6 +369,7 @@ async def update_project(
 @router.post("/{project_id}/archive", response_model=dict)
 async def archive_project(
     project_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -376,10 +379,61 @@ async def archive_project(
         user=current_user,
         allowed_roles={"owner", "editor"},
     )
+    previous_status = str(project.status)
     project.status = "archived"
     await db.commit()
     await db.refresh(project)
+    record_domain_action(
+        action=AuditAction.UPDATE,
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.PROJECT,
+        resource_id=project_id,
+        resource_name=str(project.name),
+        # 归档是可逆动作，但不是「无影响的动作」：结果会被默认列表藏起来，
+        # 所以审计里要留下「从什么状态归档的」，撤销时才知道恢复成什么。
+        previous_status=previous_status,
+        status="archived",
+    )
     return success_response(data=_serialize(project, membership), message="研究项目已归档")
+
+
+@router.post("/{project_id}/unarchive", response_model=dict)
+async def unarchive_project(
+    project_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """撤销归档：把项目恢复成 ``active``。
+
+    ``projects`` 表不记「归档前的状态」，所以恢复只能落在语义最宽的 ``active``——
+    归档只是把项目从默认列表里移走（见 ``docs/04`` §项目状态），不是终态，
+    恢复后它要能继续承接任务与产物。
+    """
+    project, membership = await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner", "editor"},
+    )
+    if str(project.status) != "archived":
+        raise ConflictException("项目当前未归档，无需撤销归档")
+    project.status = "active"
+    await db.commit()
+    await db.refresh(project)
+    record_domain_action(
+        action=AuditAction.UPDATE,
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.PROJECT,
+        resource_id=project_id,
+        resource_name=str(project.name),
+        previous_status="archived",
+        status="active",
+    )
+    return success_response(data=_serialize(project, membership), message="已撤销归档")
+
 
 
 async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> None:

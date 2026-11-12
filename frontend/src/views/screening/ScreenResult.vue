@@ -14,6 +14,7 @@ import {
   SCREENING_RANKED_COLUMN_I18N
 } from '@/types/screening'
 import type { CsvPreviewRow } from '@/domain/tasks/csv-result'
+import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -223,6 +224,7 @@ onMounted(() => {
       </a-card>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <style scoped lang="less">

@@ -29,6 +29,9 @@ export const useTasksStore = defineStore('tasks', () => {
   const tasks = ref<Task[]>([])
   const currentTask = ref<Task | null>(null)
   const loading = ref(false)
+  // 详情页自己的加载态：与列表的 `loading` 分开，避免详情页的实时刷新
+  // 把列表页（或反过来）整块切成骨架屏。
+  const detailLoading = ref(false)
   // 加载失败要能被页面看见：否则 500/断网会和"确实没有任务"长得一模一样
   const loadError = ref(false)
   const total = ref(0)
@@ -98,7 +101,9 @@ export const useTasksStore = defineStore('tasks', () => {
 
   const fetchTaskDetail = async (id: string) => {
     const requestId = ++taskDetailRequestId
-    loading.value = true
+    // 详情加载与列表加载是两个主体，共用一个 loading 会让「详情页收到一条
+    // 进度事件」顺带把列表页也切成骨架屏。分开放，各自只影响自己。
+    detailLoading.value = true
     try {
       const res = await getTaskDetail(id)
       if (requestId === taskDetailRequestId) {
@@ -107,7 +112,7 @@ export const useTasksStore = defineStore('tasks', () => {
       return res.data
     } finally {
       if (requestId === taskDetailRequestId) {
-        loading.value = false
+        detailLoading.value = false
       }
     }
   }
@@ -190,7 +195,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const clearCurrentTask = () => {
     taskDetailRequestId += 1
     currentTask.value = null
-    loading.value = false
+    detailLoading.value = false
   }
 
   return {
@@ -198,6 +203,7 @@ export const useTasksStore = defineStore('tasks', () => {
     tasks,
     currentTask,
     loading,
+    detailLoading,
     loadError,
     total,
     viewCounts,

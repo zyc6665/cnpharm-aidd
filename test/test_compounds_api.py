@@ -30,6 +30,7 @@ from app.auth.dependencies import get_current_user  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.files.writer import store_file_bytes  # noqa: E402
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.compounds import (  # noqa: E402
     Candidate,
@@ -749,6 +750,39 @@ async def test_export_set_returns_csv(
         header = content.splitlines()[0]
         assert "inchikey" in header
         assert "LFQSCWFLJHTTHZ-UHFFFAOYSA-N" in content
+
+
+@pytest.mark.asyncio
+async def test_export_set_writes_audit_event(
+    api_client: httpx.AsyncClient, project: Project, monkeypatch
+):
+    """导出候选集必须留痕（V3.0 §6.2 / docs/26 H-9）。"""
+    candidate = await _create_candidate(api_client, project.id, smiles="CCO")
+    candidate_set = await _create_set(api_client, project.id)
+    await api_client.post(
+        f"/api/v1/candidate-sets/{candidate_set['id']}/items",
+        headers=_headers(OWNER),
+        json={"candidate_ids": [candidate["id"]]},
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(
+        f"/api/v1/candidate-sets/{candidate_set['id']}:export", headers=_headers(OWNER)
+    )
+    assert response.status_code == 200, response.text
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.CANDIDATE_SET
+    assert event.resource_id == candidate_set["id"]
+    assert event.extra["kind"] == "candidate_set_csv"
+    assert event.extra["row_count"] == 1
 
 
 @pytest.mark.asyncio

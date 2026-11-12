@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/zyc6665/cnpharm-aidd/blob/main/CONTRIBUTING.md
     about: 分支模型、提交规范、PR 流程、高危改动清单
   - name: 分支与仓库策略
-    url: https://github.com/zyc6665/cnpharm-aidd/blob/main/docs/17-交付仓库与分支策略.md
+    url: https://github.com/zyc6665/cnpharm-aidd/blob/main/docs/internal/17-交付仓库与分支策略.md
     about: 与产品线 CPUmodel_V2 的关系、分叉点标签、首轮改造顺序

@@ -42,6 +42,9 @@
       </div>
 
       <div class="sidebar-scroll">
+      <!-- 当前项目上下文：换项目 / 直达该项目的各个入口 -->
+      <SidebarProjectContext :collapsed="collapsed" />
+
       <!-- 主导航 -->
       <nav class="sidebar-nav" aria-label="主导航">
         <router-link
@@ -150,7 +153,14 @@
     <main class="shell-content">
       <router-view v-slot="{ Component, route }">
         <transition :name="transitionName" mode="out-in">
-          <component :is="Component" :key="route.path" />
+          <!--
+            过渡的子节点必须是单个元素：许多结果页有多个根节点（页头 + 内容 +
+            免责声明），`mode="out-in"` 遇到 Fragment 根时会先移除旧页却永远
+            不进场，表现为「URL 变了、页面全白，必须刷新」。
+          -->
+          <div :key="route.path" class="shell-route">
+            <component :is="Component" />
+          </div>
         </transition>
       </router-view>
     </main>
@@ -187,6 +197,7 @@ import {
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
+import SidebarProjectContext from '@/components/layout/SidebarProjectContext.vue'
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
 import { buildDesignNavGroups, isDesignNavItemActive, type DesignNavItem } from '@/domain/design/navigation'
 
@@ -631,6 +642,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 .sidebar-collapsed .shell-content {
   margin-left: @sidebar-collapsed-width;
+}
+
+// 路由页面的单元素包裹层（见模板注释）：页面自己多根时也要能作为过渡的单个子节点
+.shell-route {
+  min-height: 100vh;
 }
 
 .focus-mode {

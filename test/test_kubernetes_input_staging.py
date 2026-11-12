@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -252,3 +253,55 @@ async def test_stage_kubernetes_inputs_rejects_checksum_mismatch():
             attempt_id="attempt-1",
             storage=FakeStorage({"source/input.txt": content}),
         )
+
+
+@pytest.mark.asyncio
+async def test_stage_kubernetes_inputs_normalizes_non_ascii_filenames():
+    """Candidate-set exports are named after the set ("Pocket2Mol 生成集.csv").
+
+    The staged object key doubles as a Job path segment, so such a name used to
+    fail the whole task with "unsafe Kubernetes input path segment".
+    """
+    from app.services.kubernetes_input_staging import stage_kubernetes_inputs
+
+    content = b"smiles\nCCO\n"
+    file_record = SimpleNamespace(
+        id="368db3de-979a-475a-9ee9-314311d08209",
+        filename="Pocket2Mol 生成集.csv",
+        storage_path="source/export.csv",
+        sha256=hashlib.sha256(content).hexdigest(),
+        content_type="text/csv",
+    )
+    storage = FakeStorage({"source/export.csv": content})
+    task = SimpleNamespace(
+        id="task-1",
+        inputs=SimpleNamespace(file_ids=["368db3de-979a-475a-9ee9-314311d08209"]),
+        extra_data={"standard_input_uploads": {"ligand_smiles": file_record.id}},
+    )
+
+    inputs = await stage_kubernetes_inputs(
+        FakeDb([file_record]),
+        task=task,
+        attempt_id="attempt-1",
+        storage=storage,
+    )
+
+    uri = inputs[0].uri
+    assert inputs[0].name == "ligand_smiles"
+    assert uri == "inputs/task-1/attempt-1/ligand_smiles/368db3de-Pocket2Mol.csv"
+    assert re.fullmatch(r"[A-Za-z0-9_.-]+", uri.rsplit("/", 1)[-1])
+    # The name the model sees is the uri basename, so the extension has to survive.
+    assert uri.endswith(".csv")
+
+
+def test_input_filename_keeps_safe_names_and_separates_collisions():
+    from app.services.kubernetes_input_staging import _input_filename
+
+    assert _input_filename("protein.pdb", "file-1") == "protein.pdb"
+    assert _input_filename("run.tar.gz", "file-1") == "run.tar.gz"
+    first = _input_filename("配体 表.csv", "aaaa1111-2b3c")
+    second = _input_filename("配体 表.csv", "bbbb2222-9c8d")
+    assert first == "aaaa1111-file.csv"
+    assert second == "bbbb2222-file.csv"
+    assert first != second
+    assert _input_filename("..", "file-1") == "file"

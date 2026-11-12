@@ -3,11 +3,12 @@
  *
  * 约定：
  * - 所有数值列都以列名（契约冻结）读取，缺列返回 null。
- * - ΔG 单位 kJ·mol⁻¹；标准差默认取样本标准差（n-1）。
+ * - ΔG 单位 kcal·mol⁻¹（gmx_MMPBSA 的原始单位，平台不做换算）。
+ * - 标准差默认取样本标准差（n-1）。
  */
 
 import type { ResultOutputArtifact } from '@/types/compounds'
-import type { FreeEnergyRow, MdAnalysisRow } from '@/types/md'
+import type { FreeEnergyRow, MdAnalysisRow, RmsfRow } from '@/types/md'
 
 /** 把任意输入转成有限数字；无法转换返回 null（不把 0 当缺失）。 */
 export function toFiniteNumber(value: unknown): number | null {
@@ -135,6 +136,22 @@ export function buildAnalysisRows(raw: Array<Record<string, unknown>>): MdAnalys
       rg_nm: toFiniteNumber(item.rg_nm),
       temperature_k: toFiniteNumber(item.temperature_k),
       potential_kj_mol: toFiniteNumber(item.potential_kj_mol)
+    })
+  }
+  return rows
+}
+
+/** 从 papaparse 的原始行构造逐残基 RMSF 行（要求 residue_seq 有效）。 */
+export function buildRmsfRows(raw: Array<Record<string, unknown>>): RmsfRow[] {
+  const rows: RmsfRow[] = []
+  for (const item of raw) {
+    const residue = toFiniteNumber(item.residue_seq ?? item.residue ?? item.resid)
+    if (residue === null) continue
+    const name = typeof item.residue_name === 'string' ? item.residue_name.trim() : ''
+    rows.push({
+      residue_seq: residue,
+      residue_name: name === '' ? null : name,
+      rmsf_nm: toFiniteNumber(item.rmsf_nm ?? item.rmsf)
     })
   }
   return rows

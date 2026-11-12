@@ -81,6 +81,38 @@ REQUIRED_TOOL_SLUGS = (
     "gmx-mmpbsa",
 )
 
+# 每个平台工具的单次执行时限（分钟）。**这是唯一真源**：seeding 与迁移
+# ``20261112_01_tool_timeouts`` 都从这里取值，改时限只改这一处。
+#
+# 为什么不再统一 60 分钟：GPU 生成/模拟类任务的耗时与「生成多少分子」「跑多少纳秒」
+# 直接成正比，60 分钟只够跑 20 来个分子（实测 Pocket2Mol 每分子约 30-40 秒），
+# 提交 100 个必然在 1 小时处被 K8s 的 activeDeadlineSeconds 杀掉——任务本身没出错，
+# 却报「Kubernetes Job 执行超时」。时限过短和算错一样有害：它把「慢」变成「失败」。
+TOOL_TIMEOUT_MINUTES: dict[str, int] = {
+    # 分子生成：Pocket2Mol 逐分子串行采样，100 分子实测需要 40 分钟以上。
+    "pocket2mol-pocket-ligand-generation": 720,
+    # MD：轨迹长度由用户决定，长轨迹跑几小时到几天都正常。
+    "gromacs-md": 4320,
+    "gmx-mmpbsa": 1440,
+    # 结构/亲和力预测：单体 Boltz-2 实测 4-12 分钟，留足大体系的余量。
+    "boltz2-structure-prediction": 360,
+    "boltz2-affinity-prediction": 360,
+    "lvpocket-pocket-prediction": 240,
+    "msign-affinity-prediction": 240,
+    "molp-pc-property-prediction": 240,
+    "therapainter-peptide-prediction": 240,
+    # 虚拟筛选：对接是 CPU 任务，分子数上千时要几十分钟。
+    "autodock-vina-docking": 240,
+}
+
+DEFAULT_TOOL_TIMEOUT_MINUTES = 60
+
+
+def timeout_minutes_for(slug: str) -> int:
+    """返回某个平台工具的时限（分钟），未登记的工具用默认值。"""
+    return TOOL_TIMEOUT_MINUTES.get(slug, DEFAULT_TOOL_TIMEOUT_MINUTES)
+
+
 # boltz2 两个镜像的 digest 显式常量表。值逐个核对自原始迁移（运行时不再解析
 # 迁移模块的字节码常量）：
 #   - boltz2-structure-prediction：
@@ -146,6 +178,7 @@ def _apply_manifest_overrides(
     image_digest: str | None = None,
     cuda: str | None = None,
     parameters_schema: dict | None = None,
+    timeout_minutes: int | None = None,
 ) -> dict:
     """在工具 config 上折叠后续迁移的原地改写，返回新 dict（不改入参）。
 
@@ -162,9 +195,12 @@ def _apply_manifest_overrides(
             "memory_gb": 16 if gpu else 8,
             "gpu_required": gpu,
             "gpu_memory_gb": 8 if gpu else 0,
-            "timeout_minutes": 60,
+            "timeout_minutes": DEFAULT_TOOL_TIMEOUT_MINUTES,
             "parallelism": 1,
         }
+    if timeout_minutes is not None and isinstance(cfg.get("resource_profile"), dict):
+        cfg["resource_profile"]["timeout_minutes"] = timeout_minutes
+        cfg["timeout_sec"] = timeout_minutes * 60
     image: str | None = None
     if image_digest:
         base_image = str(cfg.get("image") or "")
@@ -269,6 +305,18 @@ def _load_head_models() -> dict[str, dict]:
         cuda=molp_v11_mod.NEW_CUDA,
     )
 
+    # Pocket2Mol 1.0.1：参数补 batch_size（并行采样批数）、镜像随之换 digest。
+    # 不折叠的话，启动期同步会把迁移刚写好的新契约覆盖回 1.0.0。
+    pocket2mol_mod = _load_migration_module("20261112_01_pocket2mol_batch_and_tool_timeouts.py")
+    pocket2mol = models[pocket2mol_mod.SLUG]
+    pocket2mol["config"] = _apply_manifest_overrides(
+        pocket2mol["config"],
+        image_digest=pocket2mol_mod.NEW_DIGEST,
+        parameters_schema=pocket2mol_mod.NEW_SCHEMA,
+    )
+    pocket2mol["version"] = pocket2mol_mod.NEW_VERSION
+    pocket2mol["changelog"] = pocket2mol_mod.NEW_CHANGELOG
+
     # 单工具 / 多工具迁移：直接调用各自的 model 工厂，不复制任何 manifest。
     for filename, factory_name in (
         ("20261031_12_vina_tool.py", "_model"),
@@ -283,6 +331,18 @@ def _load_head_models() -> dict[str, dict]:
             module, factory_name, image_digest=image_digest
         ):
             models[model["slug"]] = model
+
+    # GROMACS / gmx_MMPBSA 镜像 1.0.1（`docs/26` H-1 / H-3）：自由能改逐帧 7 列、
+    # MD 补 Rg 与逐残基 RMSF。digest 钉在 config 里，所以种数据也必须跟着换，
+    # 否则启动期同步会把迁移刚改好的新 digest 覆盖回旧的。
+    gromacs_image_mod = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    for slug, (_old_digest, new_digest) in gromacs_image_mod.NEW_DIGESTS.items():
+        model = models[slug]
+        model["config"] = _apply_manifest_overrides(
+            model["config"], image_digest=new_digest
+        )
+        model["version"] = gromacs_image_mod.NEW_VERSION
+        model["changelog"] = gromacs_image_mod.NEW_CHANGELOG
 
     # Vina 1.1.0：真实筛选漏斗参数 + CSV/SDF 双配体输入 + 工具版本原地升级。
     # 必须在上面单工具工厂循环之后折叠，否则 models 里还没有 Vina。
@@ -307,6 +367,8 @@ def _spec_from_model(model: dict) -> PlatformToolSpec:
     的重复；新增工具只要产出一个同构 model dict 即可走同一路径。
     """
     config = copy.deepcopy(model["config"])
+    slug = model["slug"]
+    timeout_minutes = timeout_minutes_for(slug)
     if isinstance(config, dict) and config.get("type") == "k8s_job" and not config.get("resource_profile"):
         gpu = bool(model.get("gpu_required", True))
         config["resource_profile"] = {
@@ -315,11 +377,19 @@ def _spec_from_model(model: dict) -> PlatformToolSpec:
             "memory_gb": 16 if gpu else 8,
             "gpu_required": gpu,
             "gpu_memory_gb": 8 if gpu else 0,
-            "timeout_minutes": 60,
+            "timeout_minutes": timeout_minutes,
             "parallelism": 1,
         }
+    if isinstance(config, dict) and isinstance(config.get("resource_profile"), dict):
+        config["resource_profile"]["timeout_minutes"] = timeout_minutes
+        config["timeout_sec"] = timeout_minutes * 60
+    # 时限以 TOOL_TIMEOUT_MINUTES 为准；只有未登记的工具才回退到迁移里的原值。
+    if slug in TOOL_TIMEOUT_MINUTES:
+        timeout_sec = timeout_minutes * 60
+    else:
+        timeout_sec = model.get("timeout_sec") or config.get("timeout_sec") or DEFAULT_TOOL_TIMEOUT_MINUTES * 60
     return PlatformToolSpec(
-        slug=model["slug"],
+        slug=slug,
         name=model["name"],
         description=model.get("description"),
         version=model["version"],
@@ -329,7 +399,7 @@ def _spec_from_model(model: dict) -> PlatformToolSpec:
         provider=model.get("provider", "platform"),
         gpu_required=model.get("gpu_required", True),
         gpu_memory_mb=model.get("gpu_memory_mb", 0),
-        timeout_sec=model.get("timeout_sec") or config.get("timeout_sec") or 3600,
+        timeout_sec=timeout_sec,
     )
 
 

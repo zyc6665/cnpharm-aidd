@@ -24,5 +24,5 @@ export type AuditAction = (typeof AUDIT_ACTION)[number]
 export const AUDIT_RESULT = ["success", "failure", "denied", "error"] as const
 export type AuditResult = (typeof AUDIT_RESULT)[number]
 
-export const RESOURCE_TYPE = ["user", "task", "tool", "file", "config", "session", "system", "decision_record"] as const
+export const RESOURCE_TYPE = ["user", "task", "tool", "file", "config", "session", "system", "decision_record", "candidate_set", "structure", "target", "project"] as const
 export type ResourceType = (typeof RESOURCE_TYPE)[number]

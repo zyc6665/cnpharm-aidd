@@ -59,6 +59,8 @@ def upgrade() -> None:
     group_id = _ensure_workbench_group(bind, now)
     for item in TOOLS:
         tool_id = _ensure_builtin_tool(bind, now, owner_id=owner_id, item=item)
+        if tool_id is None:
+            continue
         _ensure_group_mapping(bind, now, group_id=group_id, tool_id=tool_id, sort_order=item["sort_order"])
 
 
@@ -156,9 +158,15 @@ def _ensure_workbench_group(bind, now: datetime) -> str:
     return group_id
 
 
-def _ensure_builtin_tool(bind, now: datetime, *, owner_id: str, item: dict[str, object]) -> str:
+def _ensure_builtin_tool(bind, now: datetime, *, owner_id: str, item: dict[str, object]) -> str | None:
     slug = str(item["slug"])
-    config = json.dumps(_capability_config(slug))
+    # 交付线把外部数据获取工具整体移除了（``docs/17`` 步骤 4），``_capability_config``
+    # 对未知 slug 会抛 ``ValidationException``。历史迁移不能因此把整条升级链打断——
+    # 空库从零升级时这些工具本来就不该存在，跳过即可（已存在的库由后续迁移清理）。
+    try:
+        config = json.dumps(_capability_config(slug))
+    except Exception:
+        return None
     row = bind.execute(sa.text("SELECT id, current_version_id FROM tools WHERE slug = :slug"), {"slug": slug}).first()
     if row:
         tool_id = str(row[0])

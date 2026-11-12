@@ -171,6 +171,7 @@
       {{ t('compounds.errors.loadCompound') }}
     </p>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -187,6 +188,7 @@
   import { getCompound, searchCompounds } from '@/api/compounds'
   import { PROPERTY_COLUMNS, formatPropertyValue, type PropertyKey } from '@/domain/compounds'
   import type { Compound, CompoundSimilarityHit } from '@/types/compounds'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -310,7 +312,7 @@
   @import '@/assets/styles/variables.less';
 
   .compound-detail-page {
-    max-width: 1240px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

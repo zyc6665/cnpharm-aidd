@@ -19,6 +19,7 @@ from app.execution.records import finish_task_execution_record_best_effort
 from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import ToolType
 from app.services.standard_artifacts import StandardArtifactPersistenceError
+from app.services.domain_results import write_back_domain_results
 from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
 from app.tasks.direct_runner import direct_task_runner
@@ -120,7 +121,11 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         is_workflow_task = is_workflow_node_task(task)
 
         try:
-            prepared_output, output_result = await prepare_recovered_task_output(
+            (
+                prepared_output,
+                output_result,
+                standard_persistence,
+            ) = await prepare_recovered_task_output(
                 db,
                 task=task,
                 tool_version=tool_version,
@@ -198,6 +203,15 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
             await finish_task_execution_record_best_effort(
                 task=task,
                 status="succeeded",
+            )
+            # 与 worker 主路径同一套领域回写（docs/26 H-16）：补回的成功结果也要
+            # 落 protein_structures / pockets，否则「补回」与「正常跑完」两条路径
+            # 产出不同形状的数据。
+            await write_back_domain_results(
+                db,
+                task=task,
+                persistence_result=standard_persistence,
+                tool_version=tool_version,
             )
 
         db.add(

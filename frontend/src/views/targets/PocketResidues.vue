@@ -1,8 +1,9 @@
 <template>
   <main class="pocket-residues-page" data-testid="pocket-residues-page">
-    <router-link :to="backLink" class="back-link">
-      {{ t('targets.residues.backToPockets') }}
-    </router-link>
+    <AppBackLink
+      :fallback="backLink"
+      :parent-label="t('targets.residues.backToPockets')"
+    />
 
     <AppPageHeader
       :title="t('targets.residues.title')"
@@ -33,12 +34,16 @@
     <SkeletonList v-else-if="loading && residues.length === 0" :count="6" />
 
     <template v-else>
+      <p v-if="residues.length" class="residue-hint" data-testid="residues-ranking-hint">
+        按口袋内评分从高到低排列。
+      </p>
+
       <AppEmptyState
         v-if="residues.length === 0"
         class="residue-empty"
         data-testid="residues-empty"
         :title="t('targets.residues.empty')"
-        description="口袋残基来自口袋预测的输出，预测完成后会按贡献度标注关键残基。"
+        description="口袋残基是距口袋点 8 Å 内的整份清单；预测完成后会按几何与理化打分排序，标注核心 / 关键 / 外围。"
       />
 
       <a-table
@@ -62,11 +67,13 @@
           <template v-else-if="column.key === 'residue_name'">
             <span class="residue-mono">{{ formatOptionalText(record.residue_name) }}</span>
           </template>
-          <template v-else-if="column.key === 'is_key'">
-            <a-tag v-if="record.is_key" color="blue" data-testid="residue-key-tag">
-              {{ t('targets.residues.isKey') }}
+          <template v-else-if="column.key === 'tier'">
+            <a-tag
+              :color="tierTagColor(record.score_tier)"
+              :data-testid="record.is_key ? 'residue-key-tag' : 'residue-tier-tag'"
+            >
+              {{ tierLabel(record.score_tier) }}
             </a-tag>
-            <span v-else class="residue-muted">-</span>
           </template>
           <template v-else-if="column.key === 'contribution'">
             {{ formatResidueContribution(record.contribution) }}
@@ -75,6 +82,7 @@
       </a-table>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -87,7 +95,9 @@
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { getPocket, listPocketResidues } from '@/api/targets'
   import { formatOptionalText, formatResidueContribution } from '@/domain/targets'
-  import type { PocketResidue } from '@/types/targets'
+  import type { PocketResidue, PocketResidueTier } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -107,9 +117,22 @@
     { title: t('targets.residues.chain'), key: 'chain', width: 90 },
     { title: t('targets.residues.residueSeq'), key: 'residue_seq', width: 120 },
     { title: t('targets.residues.residueName'), key: 'residue_name', width: 120 },
-    { title: t('targets.residues.isKey'), key: 'is_key', width: 130 },
+    { title: t('targets.residues.isKey'), key: 'tier', width: 130 },
     { title: t('targets.residues.contribution'), key: 'contribution' }
   ])
+
+  function tierLabel(tier: PocketResidueTier | null | undefined): string {
+    if (tier === 'core') return '核心残基'
+    if (tier === 'key') return '关键残基'
+    if (tier === 'peripheral') return '外围残基'
+    return '未评分'
+  }
+
+  function tierTagColor(tier: PocketResidueTier | null | undefined): string {
+    if (tier === 'core') return 'orange'
+    if (tier === 'key') return 'gold'
+    return 'default'
+  }
 
   async function loadPocketContext(id: string) {
     try {
@@ -151,7 +174,7 @@
   @import '@/assets/styles/variables.less';
 
   .pocket-residues-page {
-    max-width: 860px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }
@@ -168,6 +191,13 @@
 
   .residue-empty {
     padding: @spacing-xxl 0;
+  }
+
+  .residue-hint {
+    margin: 0 0 @spacing-sm;
+    font-size: 12px;
+    line-height: 1.6;
+    color: @text-tertiary;
   }
 
   .residue-mono {

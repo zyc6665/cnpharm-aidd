@@ -4,6 +4,12 @@ import { openTaskEventStream, type TaskEventPayload, type TaskLogEventPayload } 
 import type { Task, TaskLog, TaskStatus } from '@/types/models'
 import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus, terminalStatuses } from '@/domain/tasks'
 
+/** 每次拉取的日志条数（后端上限 200）。 */
+const LOG_PAGE_SIZE = 200
+
+/** 内存里保留的最大日志条数，防止一次超长任务把页面拖慢。 */
+const LOG_MAX_ITEMS = 500
+
 export interface TaskDetailLiveUpdatesOptions {
   taskId: Ref<string>
   task: Ref<Task | null>
@@ -11,7 +17,6 @@ export interface TaskDetailLiveUpdatesOptions {
   updateTaskProgress: (taskId: string, progress: number, status?: TaskStatus) => void
   /** SSE 不可用（EventSource 缺失）时的兜底轮询间隔。 */
   intervalMs?: number
-  now?: () => number
   timestamp?: () => string
 }
 
@@ -23,10 +28,10 @@ export interface TaskDetailLiveUpdatesOptions {
  */
 export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) {
   const logs = ref<TaskLog[]>([])
+  const logsTotal = ref(0)
   const logsLoading = ref(false)
   const streamConnected = ref(false)
   const intervalMs = options.intervalMs ?? 5000
-  const now = options.now ?? (() => Date.now())
   const timestamp = options.timestamp ?? (() => new Date().toISOString())
   const taskStatus = computed(() => normalizeTaskStatus(options.task.value?.status))
   let refreshTimer: number | null = null
@@ -37,12 +42,24 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   async function fetchLogs(taskId = options.taskId.value) {
     logsLoading.value = true
     try {
-      const response = await getTaskLogs(taskId)
+      // 从**最新**一段开始取（order=desc），而不是从任务开头那一页。
+      // 长任务日志上千行，取第 1 页升序等于把界面钉死在「刚开始」，
+      // 看上去就是「日志不再更新」（docs/17 §5.64）。
+      const response = await getTaskLogs(taskId, {
+        page_size: LOG_PAGE_SIZE,
+        order: 'desc',
+      })
       if (taskId !== options.taskId.value) {
         return
       }
 
       logs.value = mergeTaskLogs(extractTaskLogs(response.data), logs.value)
+      // 后端总共写了多少行。面板只保留最近一段，界面上要能说清
+      // 「共 N 条，这里显示最近 M 条」，否则用户会以为日志被截断了。
+      const total = Number(response.data?.total ?? 0)
+      if (Number.isFinite(total) && total > logsTotal.value) {
+        logsTotal.value = total
+      }
     } catch {
       // Request errors are surfaced by the shared API layer.
     } finally {
@@ -114,6 +131,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   function openCurrentTaskChannel() {
     const currentTaskId = options.taskId.value
     logs.value = []
+    logsTotal.value = 0
     logSequence = 0
     void refreshTaskAndLogs(currentTaskId)
 
@@ -186,6 +204,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 
   return {
     logs,
+    logsTotal,
     logsLoading,
     streamConnected,
     fetchLogs,
@@ -195,8 +214,22 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 }
 
 function mergeTaskLogs(primaryLogs: TaskLog[], fallbackLogs: TaskLog[]): TaskLog[] {
-  const seen = new Set(primaryLogs.map(taskLogKey))
-  return [...primaryLogs, ...fallbackLogs.filter((log) => !seen.has(taskLogKey(log)))]
+  const byKey = new Map<string, TaskLog>()
+  for (const log of [...fallbackLogs, ...primaryLogs]) {
+    byKey.set(taskLogKey(log), log)
+  }
+  const merged = [...byKey.values()].sort(compareTaskLogOrder)
+  // 只保留最近的一段：日志面板是「看现在在干什么」的地方，不是归档。
+  return merged.slice(-LOG_MAX_ITEMS)
+}
+
+function compareTaskLogOrder(left: TaskLog, right: TaskLog): number {
+  const leftTime = Date.parse(left.timestamp)
+  const rightTime = Date.parse(right.timestamp)
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime
+  }
+  return String(left.id).localeCompare(String(right.id))
 }
 
 function taskLogKey(log: TaskLog): string {

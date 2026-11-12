@@ -99,13 +99,42 @@
           </a-empty>
 
           <template v-else>
+            <!-- 一个蛋白经常有多个结构（重复预测 / 导入 / 准备后各一条），
+                 而口袋与残基挂在结构 id 上。没有这个选择器，用户只能看最新的那个，
+                 早先结构上的口袋与残基就再也点不到。 -->
+            <div class="structure-bar">
+              <span class="structure-bar__label">蛋白结构</span>
+              <a-select
+                v-model:value="structureId"
+                class="structure-bar__select"
+                :options="structureOptions"
+                data-testid="structure-select"
+                @change="handleStructureChange"
+              />
+              <span class="structure-bar__hint">
+                共 {{ structures.length }} 个结构 · 切换后口袋与残基跟随所选结构
+              </span>
+            </div>
+
             <div class="pocket-layout">
               <div class="pocket-list">
                 <div class="section-title">
                   候选结合口袋
                   <span class="section-hint">按预测评分排序 · 点击行切换口袋</span>
                 </div>
+                <div
+                  v-if="!pocketLoading && !pocketRows.length"
+                  class="pocket-empty"
+                  data-testid="pocket-empty-state"
+                >
+                  <a-empty description="该结构还没有口袋记录" />
+                  <p class="pocket-empty-hint">
+                    口袋是按结构预测的：如果口袋是在另一个结构上跑的，请在上方切换结构查看；
+                    否则可以到工作流发起一次口袋预测。
+                  </p>
+                </div>
                 <a-table
+                  v-else
                   size="small"
                   :columns="pocketColumns"
                   :data-source="pocketRows"
@@ -120,7 +149,7 @@
                   v-if="pdbUrl"
                   :pdb-url="pdbUrl"
                   :res-ids="pocketResIds"
-                  :selected-res-id="selectedResId"
+                  :selected-res-ids="selectedResIds"
                   :pocket-center="pocketCenter"
                   :chain="pocketChain"
                 />
@@ -141,45 +170,10 @@
             </div>
 
             <div v-if="selectedPocket" class="pocket-detail">
-              <div class="residue-panel">
-                <div class="section-title">
-                  关键残基
-                  <span class="section-hint">点击残基在 3D 中高亮</span>
-                </div>
-                <div v-if="pocketResidues.length" class="residue-chips">
-                  <span
-                    v-for="residue in pocketResidues"
-                    :key="residue.id"
-                    class="residue-chip"
-                    :class="{
-                      'residue-chip--key': residue.is_key,
-                      'residue-chip--active': residue.residue_seq === selectedResId
-                    }"
-                    @click="selectResidue(residue.residue_seq)"
-                  >
-                    {{ residue.residue_name }}{{ residue.residue_seq }}
-                    <em v-if="residue.contribution !== null">
-                      {{ (residue.contribution * 100).toFixed(0) }}%
-                    </em>
-                  </span>
-                </div>
-                <div v-else class="residue-empty">
-                  该口袋暂未存储残基注释数据，仍可在 3D 中查看整个蛋白结构。
-                </div>
-                <div v-if="selectedResidue" class="residue-detail">
-                  <span class="rd-name">{{ selectedResidue.residue_name }}{{ selectedResidue.residue_seq }}</span>
-                  <a-tag v-if="selectedResidue.is_key" color="orange">关键残基</a-tag>
-                  <span class="rd-item">链 {{ selectedResidue.chain || '-' }}</span>
-                  <span class="rd-item">
-                    贡献度
-                    {{
-                      selectedResidue.contribution !== null
-                        ? (selectedResidue.contribution * 100).toFixed(1) + '%'
-                        : '-'
-                    }}
-                  </span>
-                </div>
-              </div>
+              <PocketResiduePanel
+                v-model:selected="selectedResIds"
+                :residues="rankedResidues"
+              />
               <div class="pocket-meta">
                 <a-descriptions :column="1" size="small" bordered>
                   <a-descriptions-item label="口袋位点">{{ selectedPocket.id }}</a-descriptions-item>
@@ -303,6 +297,11 @@ import PocketViewer from '@/components/tasks/PocketViewer.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 
 import { listProjects } from '@/api/projects'
+import PocketResiduePanel from '@/components/pockets/PocketResiduePanel.vue'
+import {
+  sortStructuresByNewest,
+  structureOptionLabel
+} from '@/domain/targets/structure-option'
 import {
   getStructurePdbManifest,
   getTarget,
@@ -356,10 +355,17 @@ const targetDetail = ref<TargetSummary | null>(null)
 const structures = ref<ProteinStructureDetail[]>([])
 const structureId = ref('')
 
+const structureOptions = computed(() =>
+  structures.value.map((structure) => ({
+    value: structure.id,
+    label: structureOptionLabel(structure)
+  }))
+)
+
 const pockets = ref<PocketSummary[]>([])
 const selectedPocketId = ref('')
 const pocketResidues = ref<PocketResidue[]>([])
-const selectedResId = ref<number | null>(null)
+const selectedResIds = ref<number[]>([])
 
 const pdbUrl = ref('')
 const pdbFallback = ref(false)
@@ -478,8 +484,20 @@ const pocketCenter = computed<[number, number, number] | null>(() => {
 
 const pocketChain = computed(() => pocketResidues.value[0]?.chain || 'A')
 
-const selectedResidue = computed(
-  () => pocketResidues.value.find((residue) => residue.residue_seq === selectedResId.value) ?? null
+/**
+ * 按口袋内评分排序。
+ *
+ * 口袋残基是「距口袋点 8 Å 内」的整份清单，按残基序号排等于把「先看哪几个」
+ * 这个问题丢回用户。没有分数的历史行排在最后，不当作 0 分混进末尾——那会让
+ * 「没算过」和「算了很低」长得一样。
+ */
+const rankedResidues = computed(() =>
+  [...pocketResidues.value].sort((left, right) => {
+    const a = left.contribution ?? Number.NEGATIVE_INFINITY
+    const b = right.contribution ?? Number.NEGATIVE_INFINITY
+    if (a !== b) return b - a
+    return (left.residue_seq ?? 0) - (right.residue_seq ?? 0)
+  })
 )
 
 const structureFileHint = computed(() => {
@@ -608,7 +626,7 @@ async function loadTargetContext() {
   pockets.value = []
   pocketResidues.value = []
   selectedPocketId.value = ''
-  selectedResId.value = null
+  selectedResIds.value = []
   clearPdb()
 
   if (!targetId.value) {
@@ -622,7 +640,7 @@ async function loadTargetContext() {
     const protein = response.data.proteins?.[0]
     if (!protein) return
     const structureResponse = await listStructures(protein.id)
-    structures.value = structureResponse.data.items ?? []
+    structures.value = sortStructuresByNewest(structureResponse.data.items ?? [])
     structureId.value = structures.value[0]?.id ?? ''
   } catch {
     targetDetail.value = null
@@ -635,8 +653,26 @@ async function loadTargetContext() {
   }
 }
 
-async function loadPockets(id: string) {
-  pocketLoading.value = true
+/**
+ * 切换蛋白结构。
+ *
+ * 口袋与残基都挂在**结构** id 上，不是挂在蛋白或项目上：同一个蛋白重新预测一次，
+ * 新的结构没有任何口袋，旧结构上的口袋与残基也不会跟过来。所以切换时必须把
+ * 上一个结构的口袋、选中口袋与选中残基全部清掉，再用新 id 重新拉取。
+ */
+async function handleStructureChange(value: unknown) {
+  const nextId = String(value || '')
+  if (!nextId) return
+  structureId.value = nextId
+  pockets.value = []
+  pocketResidues.value = []
+  selectedPocketId.value = ''
+  selectedResIds.value = []
+  clearPdb()
+  await Promise.all([loadPockets(nextId), loadPdb(nextId)])
+}
+
+async function loadPockets(id: string) {  pocketLoading.value = true
   try {
     const response = await listPockets(id)
     pockets.value = [...(response.data.items ?? [])].sort(
@@ -656,20 +692,15 @@ async function loadPockets(id: string) {
 async function selectPocket(id: string) {
   selectedPocketId.value = id
   pocketResidues.value = []
-  selectedResId.value = null
+  selectedResIds.value = []
   try {
     const response = await listPocketResidues(id)
     pocketResidues.value = response.data.items ?? []
-    const keyResidue = pocketResidues.value.find((residue) => residue.is_key)
-    selectedResId.value = keyResidue?.residue_seq ?? pocketResidues.value[0]?.residue_seq ?? null
+    // 默认选中排名第一的残基：「清单第一个」和「最值得先看的那个」不是同一件事
+    const top = rankedResidues.value[0]?.residue_seq
+    selectedResIds.value = typeof top === 'number' ? [top] : []
   } catch {
     pocketResidues.value = []
-  }
-}
-
-function selectResidue(seq: number | null) {
-  if (typeof seq === 'number') {
-    selectedResId.value = seq
   }
 }
 
@@ -983,6 +1014,36 @@ onBeforeUnmount(() => {
   color: var(--color-text-tertiary);
 }
 
+.structure-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.structure-bar__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.structure-bar__select {
+  width: 420px;
+  max-width: 100%;
+}
+.structure-bar__hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.pocket-empty {
+  padding: 12px 0;
+}
+.pocket-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-tertiary);
+}
+
 .pocket-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
@@ -1026,10 +1087,67 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 16px;
 }
-.residue-chips {
+.residue-actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 10px;
+}
+.residue-selected-count {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.key-residue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.key-residue {
+  display: grid;
+  grid-template-columns: 28px minmax(72px, auto) minmax(64px, auto) auto minmax(48px, auto) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--color-bg-layout);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.key-residue:hover {
+  border-color: var(--color-border-secondary);
+}
+.key-residue--core .kr-name {
+  color: #cf1322;
+  font-weight: 600;
+}
+.key-residue--key .kr-name {
+  color: #ad6800;
+  font-weight: 600;
+}
+.key-residue--active {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.14);
+}
+.kr-rank {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kr-name {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.kr-chinese {
+  color: var(--color-text-secondary);
+}
+.kr-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
 }
 .residue-empty {
   padding: 10px 12px;
@@ -1037,36 +1155,6 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   font-size: 12px;
   color: var(--color-text-tertiary);
-}
-.residue-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-container);
-  transition: all 0.15s ease;
-}
-.residue-chip em {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-}
-.residue-chip--key {
-  border-color: #ff7a45;
-  color: #d4561c;
-}
-.residue-chip--active {
-  background: #22d3ee;
-  border-color: #22d3ee;
-  color: #06232b;
-}
-.residue-chip--active em {
-  color: #06232b;
 }
 .residue-detail {
   display: flex;
@@ -1078,10 +1166,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--color-text-secondary);
 }
-.rd-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+.all-residues-title {
+  margin-top: 18px;
+}
+.all-residues-table :deep(tr.all-residues-row--active > td) {
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .candidate-substance {

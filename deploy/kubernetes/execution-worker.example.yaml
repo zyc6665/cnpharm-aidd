@@ -55,7 +55,9 @@ metadata:
     app.kubernetes.io/part-of: sciminer
     app.kubernetes.io/component: execution-worker
 spec:
-  replicas: 1
+  # 两个副本 ≈ 32 个执行位：任务执行期间线程只是在等 K8s Job，
+  # 单个 Pod 跑不满，横向扩比调大内存更划算。
+  replicas: 2
   strategy:
     type: Recreate
   selector:
@@ -87,7 +89,10 @@ spec:
             - app.worker.celery_app
             - worker
             - --loglevel=info
-            - --concurrency=1
+            # 任务是「提交 Job 后轮询等结果」，全程 I/O 等待，线程池比 prefork 省内存；
+            # 并发数就是同时能有多少个任务在跑（10 人同时提交的最低要求是 >= 10）。
+            - --pool=threads
+            - --concurrency=16
             - --queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,gpu_queue,maintenance,monitoring
           envFrom:
             - configMapRef:
@@ -101,7 +106,7 @@ spec:
                   fieldPath: metadata.name
             - name: WORKER_CAPABILITY_JSON
               value: >-
-                {"worker_id":"sciminer-k8s-$(HOSTNAME)","queue":"tool_tasks","executor_types":["k8s_job","ssh_job"],"tiers":["cpu","standard","gpu"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":1,"parallelism":1}
+                {"worker_id":"sciminer-k8s-$(HOSTNAME)","queue":"tool_tasks","executor_types":["k8s_job","ssh_job"],"tiers":["cpu","standard","gpu"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":1,"parallelism":16}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -149,11 +154,11 @@ spec:
                   key: SSH_PASSWORD_REF_SSH_4090_ZHOUYC
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: "1"
+              memory: 2Gi
             limits:
-              cpu: "2"
-              memory: 4Gi
+              cpu: "4"
+              memory: 8Gi
           volumeMounts:
             - name: k8s-artifacts
               mountPath: /tmp/sciminer-k8s-artifacts

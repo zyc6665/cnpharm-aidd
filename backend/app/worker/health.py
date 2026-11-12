@@ -21,7 +21,7 @@
   （`CELERY_WORKER_PROBE_CACHE_SECONDS`），避免每次提交任务都付一次。
 * **`--pool=solo` 下探测会失真**：单线程 Worker 在执行长任务时无法回应控制通道，
   会被判成「没有 Worker」。本地/生产都应当用 `prefork`（Linux）或 `threads`
-  （Windows）池。这一条已写进 `docs/17` 的部署前置条件。
+  （Windows）池。这一条已写进 `docs/internal/17` 的部署前置条件。
 """
 
 from __future__ import annotations

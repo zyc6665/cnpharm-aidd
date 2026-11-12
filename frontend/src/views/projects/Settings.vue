@@ -215,7 +215,7 @@
   @import '@/assets/styles/variables.less';
 
   .project-settings-page {
-    max-width: 980px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

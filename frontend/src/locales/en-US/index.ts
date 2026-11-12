@@ -35,6 +35,7 @@ export default {
     reset: 'Reset',
     submit: 'Submit',
     back: 'Back',
+    backToPrevious: 'Back to previous page',
     loading: 'Loading...',
     success: 'Operation successful',
     error: 'Operation failed',
@@ -65,6 +66,9 @@ export default {
     seconds: 'seconds',
     sort: 'Sort',
     memberUsername: 'Member username',
+    disclaimer: {
+      resultNotice: 'Predictions and computed results are for research reference only and must not be treated as experimental conclusions.'
+    },
     // Shared list four-state copy (load error / empty)
     listStates: {
       errorTitle: 'Failed to load',
@@ -77,12 +81,31 @@ export default {
   },
 
   // Navigation
+  projectNav: {
+    title: 'Current project',
+    placeholder: 'Select a project',
+    allProjects: 'All projects',
+    hint: 'Pick a project to jump straight to its overview, targets, tasks and results.',
+    overview: 'Overview',
+    targets: 'Targets & structures',
+    workflow: 'Custom workflow',
+    designFlow: 'Design flow',
+    tasks: 'Tasks',
+    assets: 'Data assets',
+    candidates: 'Candidates',
+    results: 'Results',
+    decisions: 'Decisions',
+    lineage: 'Artifact lineage',
+    settings: 'Project settings'
+  },
+
   nav: {
     home: 'Home',
     workspace: 'Workspace',
     tools: 'Tools',
     tasks: 'Tasks',
     workflow: 'Workflow',
+    designFlow: 'Design flow',
     achievements: 'Achievements',
     admin: 'Admin',
     login: 'Login',
@@ -123,6 +146,9 @@ export default {
     createProject: 'New Project',
     recentProjects: 'Recent Projects',
     projectCount: '{count} accessible projects',
+    archivedProjects: 'Archived Projects',
+    archivedProjectsHint: 'Archiving keeps all data — use "Restore" to move a project back',
+    noActiveProjects: 'No active projects right now — archived projects are listed below',
     continueResearch: 'Continue',
     openProject: 'Overview',
     emptyProjects: 'No research projects yet',
@@ -178,6 +204,9 @@ export default {
       archive: 'Archive',
       archiveSuccess: 'Research project archived',
       archiveFailed: 'Project archive failed. Please retry.',
+      unarchive: 'Restore',
+      unarchiveSuccess: 'Archive undone — the project is back in your list',
+      unarchiveFailed: 'Could not undo the archive. Please retry.',
       deleteConfirm:
         'Delete this research project? Linked workflows and project records cannot be recovered.',
       deleteSuccess: 'Research project deleted',
@@ -455,6 +484,14 @@ export default {
         ligandToAdmet: {
           name: 'Ligand Structure to Basic ADMET',
           description: 'Start from an uploaded ligand structure and chain ligand preparation, SMILES conversion, RDKit properties, and MolP-PC Basic ADMET.'
+        },
+        targetPreparation: {
+          name: 'Target Structure Preparation',
+          description: 'Upload a target structure, fill missing chains, add hydrogens and minimise energy to produce a docking-ready structure.'
+        },
+        mdFreeEnergy: {
+          name: 'Molecular Dynamics and Binding Free Energy',
+          description: 'Run short GROMACS MD and gmx_MMPBSA binding free energy on the prepared structure, with results on one page.'
         }
       }
     },
@@ -666,6 +703,15 @@ export default {
       toolSelector: 'Tool Selector',
       selectTool: 'Select tool',
       noToolRequired: 'This node does not require a tool.',
+      inputBindingTitle: 'Input source',
+      inputBindingPlaceholder: 'Pick an artifact from the project',
+      inputBindingUpload: 'Upload file',
+      inputBindingUploading: 'Uploading',
+      inputBindingHint:
+        'This is the same value as the input of the same name under Run configuration: ' +
+        'the input node takes its file from here at run time, and editing either place applies.',
+      inputBindingNoArtifact: 'The project has no artifact compatible with this input yet. Upload one, or produce one in the project first.',
+      inputBindingUnresolved: 'No workflow input requirement matches this input node — check its edge to the downstream tool.',
       nodeParameters: 'Node Parameters',
       runWorkflow: 'Run Workflow',
       configureNode: 'Configure Node',
@@ -890,6 +936,30 @@ export default {
       resultAdmet: {
         title: 'Basic ADMET Result',
         description: 'Review MolP-PC prediction tables, model version, and scientific attachments.'
+      },
+      proteinPreparation: {
+        title: 'Target Structure Preparation',
+        description: 'Fill missing side chains and loops, add hydrogens, remove water, and minimise energy to produce a docking-ready structure.'
+      },
+      mdSimulation: {
+        title: 'Molecular Dynamics Simulation',
+        description: 'Solvate, minimise, equilibrate (NVT/NPT) and run short production MD, producing trajectories and analysis curves.'
+      },
+      freeEnergy: {
+        title: 'Binding Free Energy',
+        description: 'Evaluate binding free energy with gmx_MMPBSA (MM/GBSA), including per-frame decomposition.'
+      },
+      resultStructure: {
+        title: 'Target Structure Result',
+        description: 'Review the prepared target structure, chain composition, and downloadable structure files.'
+      },
+      resultMd: {
+        title: 'Dynamics Result',
+        description: 'Review RMSD, RMSF, radius of gyration, and trajectory files.'
+      },
+      resultFreeEnergy: {
+        title: 'Free Energy Result',
+        description: 'Review per-frame binding free energy, component decomposition, and convergence.'
       }
     },
     columns: {
@@ -961,7 +1031,12 @@ export default {
       gene: 'Gene name',
       description: 'Description',
       descriptionPlaceholder: 'Optional background notes for this target',
-      total: '{total} targets in total'
+      total: '{total} targets in total',
+      deleteConfirm: 'Delete target "{name}"?',
+      deleteConfirmContent:
+        'Its proteins, structures and pockets are deleted with it and cannot be recovered. Task results and artifacts already produced are kept.',
+      deleteSuccess: 'Target "{name}" deleted',
+      deleteFailed: 'Failed to delete target, please retry',
     },
     detail: {
       title: 'Target details',
@@ -989,6 +1064,9 @@ export default {
       structuresEmpty: 'This protein has no structures yet, predict or import one',
       predict: 'Predict structure',
       importStructure: 'Import structure',
+      prepareAfterImport: 'Run structure preparation right after import',
+      prepareAfterImportHint: 'Preparation adds hydrogens, drops waters and writes the receptor file used by docking and pocket prediction. Without obabel it degrades to prepared.pdb only.',
+      importAndPrepareSuccess: 'Structure imported and preparation submitted',
       importTitle: 'Import structure',
       importHint: 'Choose a local PDB/mmCIF file; it becomes available on the structure page.',
       importSuccess: 'Structure imported',
@@ -1228,6 +1306,8 @@ export default {
     fileSourceArtifact: 'My Artifacts',
     selectArtifact: 'Select Artifact',
     selectProjectArtifact: 'Select a project file',
+    noCompatibleArtifact:
+      'The project has no artifact compatible with this input yet: upload a file, or produce one in the project first.',
     noArtifacts: 'No reusable artifacts yet',
     selectCompatibleArtifact: 'Select Compatible Artifact by Hierarchy',
     selectArtifactGroup: 'Select Group First',
@@ -1503,7 +1583,16 @@ export default {
       attrsHint: 'Extra fields written during design; raw keys differ per tool',
       relatedTask: 'Related task',
       relatedResult: 'View result detail',
-      noRelatedTask: 'No related task'
+      noRelatedTask: 'No related task',
+      relatedResults: 'Related results',
+      noRelatedResults:
+        'No task has used this candidate yet — pick it when submitting a task from a design page'
+    },
+    resultColumns: {
+      name: 'Task',
+      tool: 'Tool',
+      status: 'Status',
+      finishedAt: 'Finished at'
     },
     errors: {
       load: 'Failed to load the candidate'
@@ -1875,6 +1964,17 @@ export default {
       pocketBox: 'Pocket box',
       pocketMissingFile: 'This structure has no usable structure file. Re-run structure prediction and try again.',
       pocketMissingCenter: 'This pocket has no center coordinates. Re-run pocket prediction and try again.',
+      sourceProject: 'Pick from project',
+      sourceUpload: 'Upload files',
+      project: 'Project',
+      projectPlaceholder: 'Choose a project (results are filed there)',
+      needProject: 'Choose a project first — results must be filed somewhere',
+      structureFile: 'Protein structure',
+      pocketFile: 'Pocket file',
+      pocketFileHint: 'Used to derive the pocket center and radius, e.g. pocket0.pdb or a protein-pocket complex',
+      structureFileHint: 'Receptor structure; .pdb / .cif / .ent are accepted. A raw PDB is better prepared on the target page first.',
+      pocketFileUnreadable: 'No coordinates found in that file. Try another PDB.',
+      chooseFile: 'Choose file',
       numMolecules: 'Number of molecules',
       seed: 'Random seed',
       mwMin: 'MW lower bound (Da)',
@@ -1901,6 +2001,15 @@ export default {
       sequence: 'Peptide sequence',
       sequenceHint: 'Single-line or multi-line FASTA is supported; length 4 to 20,000.',
       sequencePlaceholder: 'e.g. MKTAYIAKQRQISFVKSHFSRQDILDLWIYHTQGYFP',
+      sequenceSource: 'Sequence source',
+      sourceManual: 'Type the sequence in parameters',
+      sourceTarget: 'Import from a project target',
+      targetPlaceholder: 'Select a target',
+      proteinPlaceholder: 'Select a protein',
+      noTargets: 'This project has no targets yet',
+      noProteins: 'This target has no protein sequence',
+      targetSequenceHint: 'Picking a protein fills the sequence parameter with its current sequence; you can still edit it.',
+      sequenceFilled: 'Target protein sequence filled in',
       predictionMode: 'Prediction mode',
       modeJoint: 'Activity + toxicity',
       modeActivity: 'Activity only',
@@ -1992,6 +2101,27 @@ export default {
       ligandSmiles: 'Ligand SMILES (CSV)',
       affinityHint: 'Affinity prediction belongs to Evaluation → Property prediction; upload protein and ligands as required by the selected model contract.',
       chooseInputFile: 'Choose file',
+      project: 'Project',
+      projectPlaceholder: 'Select a project',
+      projectCurrent: 'Current project',
+      projectHint: 'A task must belong to a project: targets, structures and candidate sets are loaded per project, and submission fails without one (input materialization needs the project).',
+      affinitySourceUpload: 'Upload files',
+      affinitySourceProject: 'Select from project',
+      target: 'Target',
+      targetPlaceholder: 'Select a target',
+      noTargets: 'No targets in this project',
+      protein: 'Protein',
+      proteinPlaceholder: 'Select a protein',
+      noProteins: 'No proteins for this target',
+      structure: 'Protein structure',
+      structurePlaceholder: 'Select a structure',
+      noStructures: 'No usable structure for this protein',
+      structureSelected: 'Selected structure file',
+      structurePrepared: 'prepared',
+      needStructure: 'Select a protein structure first',
+      needCandidateSet: 'Select a candidate set first',
+      needProjectSubmit: 'Select a project first: a task must belong to a project',
+      candidateSetExportHint: 'The candidate set is exported as a SMILES table and used as ligand input.',
       submit: 'Submit prediction task',
       submitting: 'Submitting…',
       success: 'Task submitted, redirecting to predictions…',
@@ -2148,6 +2278,25 @@ export default {
       subtitle: 'Upload a protein and ligand library, then screen with real pharmacophore, docking-score and top-N rules.',
       inputs: 'Input structures',
       receptor: 'Receptor structure (PDB)',
+      project: 'Project',
+      projectPlaceholder: 'Pick a project (it decides which structures and candidate sets are available)',
+      projectHint: 'The project decides what “from project” can offer; you can always upload files directly instead.',
+      sourceUpload: 'Upload',
+      sourceProject: 'From project',
+      sourceCandidate: 'From candidate set',
+      target: 'Target',
+      protein: 'Protein',
+      structure: 'Structure',
+      noTargets: 'This project has no targets yet — create one on the Targets page, or upload a structure file.',
+      noStructures: 'This protein has no usable structure yet — run a structure prediction or import one first.',
+      structureSelected: 'Structure selected; its coordinate file will be used as the receptor.',
+      needProject: 'Pick a project first to use its structures and candidate sets.',
+      needStructure: 'Select a structure that has a coordinate file.',
+      needCandidateSet: 'Select a candidate set as the ligand library.',
+      candidateSet: 'Candidate set',
+      candidateSetHint: 'Molecules in the candidate set go straight into screening — no export/upload round trip.',
+      noCandidateSets: 'This project has no candidate sets yet — run molecule generation, or upload ligands.',
+      candidateSetExportFailed: 'Exporting the candidate set failed. Retry later or upload ligands instead.',
       ligandLibrary: 'Ligand library (SDF / MOL / CSV, multiple files)',
       ligands: 'Ligand library',
       pocket: 'Binding pocket (optional)',
@@ -2343,7 +2492,8 @@ export default {
         rg: 'Radius of gyration (Rg)',
         temperature: 'Temperature'
       },
-      chartXAxis: 'Time (ps)'
+      chartXAxis: 'Time (ps)',
+      chartResidueAxis: 'Residue index'
     },
     freeEnergy: {
       title: 'Free Energy Result',
@@ -2352,7 +2502,7 @@ export default {
       standardError: 'standard error',
       stdDev: 'Std. deviation',
       frameCount: 'Valid frames',
-      unit: 'kJ/mol',
+      unit: 'kcal/mol',
       decompositionTitle: 'Energy decomposition (component means)',
       convergenceTitle: 'Per-frame ΔG convergence',
       vdw: 'van der Waals',
@@ -2361,7 +2511,7 @@ export default {
       nonpolarSolvation: 'Nonpolar solvation',
       sasa: 'SASA',
       axisFrame: 'Frame',
-      axisY: 'ΔG (kJ/mol)',
+      axisY: 'ΔG (kcal/mol)',
       exportCsv: 'Export CSV',
       noData: 'No free energy data available',
       sourceNote: 'When the source has no standard-error column, the standard error is computed as the sample standard deviation of per-frame ΔG divided by √n.'
@@ -2380,7 +2530,8 @@ export default {
       pocketTitle: 'Pocket prediction results',
       pocketSubtitle: 'Review candidate pockets, pocket files and 3D structure preview',
       pocketComplexTitle: 'Protein · pocket · voxel overlay',
-      pocketComplexHint: 'The full protein is shown as a cartoon, pocket residues as ball-and-stick, and pocket voxels as a cyan wireframe grid.',
+      pocketComplexHint: 'The full protein is shown as a cartoon, pocket residues are highlighted as an orange cartoon, and pocket voxels as a cyan wireframe grid.',
+      pocketComplexLoading: 'Loading the protein structure and pocket data…',
       legendProtein: 'Protein',
       legendPocket: 'Pocket residues',
       legendVoxel: 'Voxel grid',
@@ -2394,6 +2545,9 @@ export default {
       pocketCount: 'Pockets',
       selectedModel: 'Model used',
       pocketList: 'Candidate pockets',
+      keyResidues: 'Key residues',
+      keyResiduesHint: 'Sorted by in-pocket score · multi-select to review the key site',
+      viewInAchievements: 'Open 3D highlight in project results',
       pocketId: 'Pocket',
       pocketFiles: 'Pocket files',
       noOutput: 'The task succeeded but produced no displayable artifacts',
@@ -2445,6 +2599,7 @@ export default {
     taskDetail: 'Task Detail',
     taskWorkspace: {
       backToCenter: 'Back to Task Center',
+      backToProject: 'Back to project',
       views: 'Switch task view',
       detail: 'Task Detail',
       result: 'Run Results',
@@ -2530,6 +2685,7 @@ export default {
     // Actions
     progress: 'Progress',
     logCount: '{count} entries',
+    logCountPartial: '{total} entries · showing latest {shown}',
     logs: 'Logs',
     result: 'Result',
     inputParams: 'Input Parameters',

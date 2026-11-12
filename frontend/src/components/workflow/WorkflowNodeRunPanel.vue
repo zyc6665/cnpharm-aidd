@@ -25,6 +25,7 @@
             :current-project-id="projectId ?? undefined"
             :project-artifacts="standardProjectArtifacts"
             :standard-artifacts-loading="standardArtifactsLoading"
+            :project-artifact-placeholder="t('tools.selectProjectArtifact')"
             :selected-standard-artifacts="selectedStandardArtifacts"
             :standard-input-file-list="standardInputFileList"
             :hidden-field-keys="autoBoundFieldKeys"

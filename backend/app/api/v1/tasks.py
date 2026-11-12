@@ -36,7 +36,7 @@ from app.tasks.naming import (
     _dedupe_file_ids,
     _extract_file_ids_from_result,
 )
-from app.services.traceability import load_task_snapshots, serialize_snapshot
+from app.services.traceability import load_task_snapshots, serialize_snapshots
 from app.auth.dependencies import get_current_user, get_current_user_optional, get_admin_user
 from app.config import settings, use_direct_task_execution
 from app.schemas.tasks import (
@@ -616,9 +616,9 @@ async def get_task(
         },
         "output_data": _extract_primary_output_data(task.outputs.result) if task.outputs else None,
         "input_files": await _load_files(db, input_file_ids),
-        "input_snapshots": [
-            serialize_snapshot(row) for row in await load_task_snapshots(db, task_id=task_id)
-        ],
+        "input_snapshots": await serialize_snapshots(
+            db, await load_task_snapshots(db, task_id=task_id)
+        ),
         "output_files": await _load_files(db, output_file_ids),
     }
 
@@ -818,16 +818,72 @@ async def retry_task(
     return success_response(message="任务已重新提交")
 
 
+@router.get("/{task_id}/pockets", response_model=dict)
+async def list_task_pockets(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """这次任务写进领域表的候选口袋。
+
+    结果页要展示「关键残基」，而残基挂在领域口袋上（`pockets.task_id` 就是
+    写回它的那次任务）。让前端自己去拼「任务 → 结构 → 口袋」既要跨三个接口，
+    也容易在结构换版本后对不上，所以这里直接按任务查。
+    """
+    from app.models.targets import Pocket
+    from app.services import domain_targets
+
+    result = await db.execute(
+        select(Pocket)
+        # `rank` 可能为空（模型没给名次），空值排最后且不受方言 NULLS 排序差异影响。
+        .where(Pocket.task_id == task_id)
+        .order_by(Pocket.rank.is_(None), Pocket.rank.asc(), Pocket.id.asc())
+    )
+    pockets = list(result.scalars().all())
+
+    items: list[dict[str, Any]] = []
+    for pocket in pockets:
+        structure = await domain_targets.pocket_structure(db, pocket)
+        target = await domain_targets.structure_target(db, structure)
+        try:
+            await domain_targets.require_target_read_access(
+                db, target=target, user=current_user
+            )
+        except Exception:
+            # 同一个任务的口袋只可能属于一个项目；鉴权失败就当看不到，不整单 403。
+            continue
+        payload = domain_targets.serialize_pocket(pocket)
+        payload["project_id"] = str(target.project_id)
+        payload["target_id"] = str(target.id)
+        items.append(payload)
+
+    return success_response(data={"items": items})
+
+
 @router.get("/{task_id}/logs", response_model=dict)
 async def get_task_logs(
     task_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     level: Optional[str] = None,
+    order: str = Query(
+        "asc",
+        pattern="^(asc|desc)$",
+        description=(
+            "asc=从最早一条开始翻页（默认，兼容既有调用）；"
+            "desc=从最新一条开始翻页——长任务的日志有上千行，"
+            "想看「现在在干什么」必须能从尾部取。"
+            "无论哪种顺序，返回的 items 内部始终按时间升序，前端直接渲染即可。"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取任务日志"""
+    """获取任务日志
+
+    `order=desc` 时先按时间倒序取第 `page` 页，再在内存里翻转成升序返回：
+    调用方拿到的永远是「一段连续的、按时间正序的日志」，而 `page=1` 就是最新的那一段。
+    """
     # 检查任务是否存在和权限
     result = await db.execute(
         select(Task).where(Task.id == task_id)
@@ -852,10 +908,15 @@ async def get_task_logs(
 
     # 分页
     query = query.offset((page - 1) * page_size).limit(page_size)
-    query = query.order_by(TaskLog.timestamp.asc())
+    if order == "desc":
+        query = query.order_by(TaskLog.timestamp.desc())
+    else:
+        query = query.order_by(TaskLog.timestamp.asc())
 
     result = await db.execute(query)
-    logs = result.scalars().all()
+    logs = list(result.scalars().all())
+    if order == "desc":
+        logs.reverse()
 
     return paginated_response(
         items=[_serialize_task_log(log) for log in logs],

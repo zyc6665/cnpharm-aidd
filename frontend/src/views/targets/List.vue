@@ -87,6 +87,25 @@
                   {{ t('targets.viewDetail') }}
                 </a-button>
               </router-link>
+              <a-popconfirm
+                :title="t('targets.list.deleteConfirm', { name: record.name })"
+                :description="t('targets.list.deleteConfirmContent')"
+                :ok-text="t('common.delete')"
+                :cancel-text="t('common.cancel')"
+                :ok-button-props="{ danger: true }"
+                :disabled="deletingId !== null"
+                @confirm="handleDelete(record)"
+              >
+                <a-button
+                  type="link"
+                  size="small"
+                  danger
+                  :loading="deletingId === record.id"
+                  data-testid="target-delete-button"
+                >
+                  {{ t('common.delete') }}
+                </a-button>
+              </a-popconfirm>
             </template>
           </template>
         </a-table>
@@ -152,7 +171,7 @@
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
-  import { createTarget, listTargets } from '@/api/targets'
+  import { createTarget, deleteTarget, listTargets } from '@/api/targets'
   import {
     formatOptionalText,
     formatTargetDateTime,
@@ -177,6 +196,7 @@
   const loadError = ref(false)
   const createModalOpen = ref(false)
   const creating = ref(false)
+  const deletingId = ref<string | null>(null)
 
   const form = reactive({
     name: '',
@@ -257,6 +277,28 @@
     }
   }
 
+  async function handleDelete(record: TargetSummary) {
+    // 删除会连带蛋白、结构、口袋与残基（后端 delete_target_cascade），
+    // 已经点过一次就不再放第二个请求进来：连点会把「删掉了」变成一个 404 报错。
+    if (deletingId.value !== null) {
+      return
+    }
+    deletingId.value = record.id
+    try {
+      await deleteTarget(record.id)
+      message.success(t('targets.list.deleteSuccess', { name: record.name }))
+      // 删掉当前页最后一条时要回退一页，否则用户看到的是「空表格 + 还有总数」
+      if (targets.value.length === 1 && page.value > 1) {
+        page.value -= 1
+      }
+      await load()
+    } catch (cause) {
+      message.error(resolveTargetErrorMessage(cause, t('targets.list.deleteFailed')))
+    } finally {
+      deletingId.value = null
+    }
+  }
+
   onMounted(() => {
     void load()
   })
@@ -266,7 +308,7 @@
   @import '@/assets/styles/variables.less';
 
   .targets-list-page {
-    max-width: 1080px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

@@ -253,7 +253,7 @@ async def test_standard_persist_path_enforces_invariant(db: AsyncSession) -> Non
     def resolve_file(_artifact, _role, _parsed_file):
         return file_record
 
-    _ref_key, artifact_id, _version_id, _file_ids = await _persist_artifact(
+    _ref_key, artifact_id, _version_id, _file_ids, _role_file_ids = await _persist_artifact(
         db,
         task=task,
         project_id="project-1",

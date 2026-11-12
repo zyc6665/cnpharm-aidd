@@ -25,7 +25,11 @@ function hasWorkflowRoute(source: string): boolean {
 }
 
 function hasWorkflowNavigationEntry(source: string): boolean {
+  // 画布编排现在的入口是设计流程页（`/design`），高级形态仍在 `/workflow`：
+  // 两个都算「有流程入口」。
   return (
+    /router\.push\(\s*['"]\/design['"]\s*\)/.test(source) ||
+    /to\s*=\s*['"]\/design['"]/.test(source) ||
     /router\.push\(\s*['"]\/workflow['"]\s*\)/.test(source) ||
     /router\.(push|replace)\(\s*\{[\s\S]*?name\s*:\s*['"]Workflow['"][\s\S]*?\}\s*\)/.test(source) ||
     /router\.push\(\s*\{[\s\S]*?path\s*:\s*['"]\/workflow['"][\s\S]*?\}\s*\)/.test(source) ||

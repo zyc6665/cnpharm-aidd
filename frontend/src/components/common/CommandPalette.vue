@@ -112,6 +112,14 @@ const items = computed<PaletteItem[]>(() => {
       group: t('command.group.navigate'),
     },
     {
+      id: 'nav-design-flow',
+      label: t('nav.designFlow'),
+      icon: DeploymentUnitOutlined,
+      action: () => router.push('/design'),
+      group: t('command.group.navigate'),
+    },
+    {
+      // 画布编排是设计流程的高级形态，保留给熟练用户直接进入。
       id: 'nav-workflow',
       label: t('nav.workflow'),
       icon: ApartmentOutlined,

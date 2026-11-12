@@ -9,7 +9,6 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -270,6 +269,20 @@ def test_placeholder_scientific_capabilities_are_not_executable() -> None:
     assert not (placeholder_slugs & set(AIDD_TOOL_CAPABILITIES))
 
 
+def test_headerless_smiles_table_is_tolerated(tmp_path: Path) -> None:
+    """Pocket2Mol 产出的 ``SMILES.txt`` 没有表头，平台自己的工具不该拒绝它。"""
+    table = tmp_path / "SMILES.txt"
+    table.write_text("CCO\nNC(N)=O\n", encoding="utf-8")
+
+    assert builtin_tools._read_smiles_from_csv(table) == ["CCO", "NC(N)=O"]
+    # 行尾带分子名时只取第一列（.smi 的常见写法）。
+    normalized = builtin_tools._normalize_smiles_list("CCO ligand-1\nNC(N)=O\n")
+    assert normalized.splitlines() == ["smiles", "CCO", "NC(N)=O"]
+    # 已有表头的 CSV 必须原样返回，不能被二次加表头。
+    csv_text = "molecule_id,SMILES\nx,CCO\n"
+    assert builtin_tools._normalize_smiles_list(csv_text) == csv_text
+
+
 def test_rdkit_properties_builtin_emits_property_table_and_standard_result(
     tmp_path: Path,
     monkeypatch,
@@ -424,6 +437,12 @@ def test_builtin_protein_preparation_emits_standard_result_v2(
         assert "HOH" not in prepared_pdb.read_text(encoding="utf-8")
         receptor_pdbqt.write_text("REMARK receptor pdbqt\n", encoding="utf-8")
 
+    # 引擎只在环境里真的有 obabel 时才试图产出 receptor.pdbqt；CI 镜像没装 openbabel，
+    # 所以这里要显式伪装「obabel 可用」，否则 fake_convert 根本不会被调用。
+    monkeypatch.setattr(
+        "app.protein_preparation.engine.shutil.which",
+        lambda name: "/usr/bin/obabel" if name == "obabel" else None,
+    )
     monkeypatch.setattr(
         "app.protein_preparation.engine.convert_prepared_pdb_to_pdbqt",
         fake_convert,

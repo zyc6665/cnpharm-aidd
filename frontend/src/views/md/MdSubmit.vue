@@ -361,7 +361,7 @@
   @import '@/assets/styles/variables.less';
 
   .md-submit {
-    max-width: @container-xl;
+    max-width: @page-max-width;
     margin: 0 auto;
   }
 

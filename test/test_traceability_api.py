@@ -31,7 +31,13 @@ from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.files.writer import store_file_bytes  # noqa: E402
-from app.logging.audit import AuditAction, AuditEvent, AuditResult, ResourceType  # noqa: E402
+from app.logging.audit import (  # noqa: E402
+    AuditAction,
+    AuditEvent,
+    AuditResult,
+    ResourceType,
+    get_audit_logger,
+)
 from app.main import app  # noqa: E402
 from app.models.artifacts import Artifact, ArtifactVersion  # noqa: E402
 from app.models.compounds import Candidate  # noqa: E402
@@ -55,6 +61,7 @@ from app.services.traceability import (  # noqa: E402
     build_traceability_package,
     record_task_inputs,
     role_for_semantic_type,
+    serialize_snapshots,
 )
 from app.tasks.service import create_and_schedule_tool_task  # noqa: E402
 
@@ -449,6 +456,220 @@ async def test_snapshot_records_artifact_binding_and_domain_entity(
     assert artifact_row.data_version == 3
 
 
+@pytest.mark.asyncio
+async def test_snapshot_pins_downloadable_file_for_artifact_binding(
+    db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """快照要能落到具体文件，否则结果页没法按快照还原输入。
+
+    口袋结果页要把「受体 + 口袋残基 + 体素格」叠在一起；受体只能从快照取。历史快照里
+    只有 ``artifact:<version_id>`` 而没有文件 id，前端就只能退化成只画口袋残基——用户
+    看到的现象是「完整蛋白不见了」。
+    """
+    owner = users[OWNER]
+    tool = await _create_tool(db_session, owner)
+    task = Task(
+        id="task-domain-2",
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="pocket prediction",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id)},
+    )
+    db_session.add(task)
+
+    record = await store_file_bytes(
+        db_session,
+        content=b"ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\nEND\n",
+        filename="prepared.pdb",
+        content_type="chemical/x-pdb",
+        source_type=FileSourceType.USER_INPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        name="EGFR prepared",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="prepared.pdb",
+        size_bytes=record.size_bytes,
+        sha256=record.sha256,
+        storage_key="artifacts/prepared.pdb",
+    )
+    metadata = await store_file_bytes(
+        db_session,
+        content=b'{"residue_count": 327}',
+        filename="metadata.json",
+        content_type="application/json",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    db_session.add(version)
+    await db_session.flush()
+    from app.models.artifacts import ArtifactVersionFile
+
+    # 版本里既有坐标文件也有元数据 sidecar。只按 role 字典序取首个会拿到 metadata_json
+    # （"metadata_json" < "structure_file"），快照就记成那个 268 字节的 JSON，
+    # 结果页拿它当结构下载、解析不出原子，于是退化成「只有口袋残基」。
+    db_session.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="metadata_json",
+                file_id=metadata.id,
+                is_primary=False,
+                sort_order=0,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="structure_file",
+                file_id=record.id,
+                is_primary=True,
+                sort_order=1,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    prepared = SimpleNamespace(
+        file_ids=[],
+        input_bindings={"protein": version.id},
+        standard_input_uploads={},
+    )
+    rows = await record_task_inputs(
+        db_session,
+        task=task,
+        tool_version=None,
+        prepared=prepared,
+        extra_data=task.extra_data,
+    )
+    await db_session.commit()
+
+    artifact_row = next(row for row in rows if row.entity_type == "artifact_version")
+    assert artifact_row.file_id == record.id
+    assert artifact_row.detail["file_id"] == record.id
+
+
+@pytest.mark.asyncio
+async def test_historical_snapshot_is_serialized_with_the_version_primary_file(
+    db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """读时纠正：历史快照记错文件 id 也能拿到真正的主文件。
+
+    早期写入按 role 字典序挑主文件，`metadata_json` 排在 `structure_file` 前面，
+    于是快照里存的是 268 字节的 sidecar。快照表只追加、不能改写，所以纠正必须发生在
+    读路径上；同时保留 `snapshotFileId`，让人能看出「记录里原本写的是什么」。
+    渲染端因此只下载一个文件，不需要逐个候选下载再看内容。
+    """
+    owner = users[OWNER]
+    tool = await _create_tool(db_session, owner)
+    task = Task(
+        id="task-domain-3",
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="legacy snapshot",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id)},
+    )
+    db_session.add(task)
+
+    structure = await store_file_bytes(
+        db_session,
+        content=(
+            b"ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+            b"END\n"
+        ),
+        filename="structure.pdb",
+        content_type="chemical/x-pdb",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    metadata = await store_file_bytes(
+        db_session,
+        content=b'{"residue_count": 327}',
+        filename="metadata.json",
+        content_type="application/json",
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=str(owner.id),
+        project_id=str(project.id),
+    )
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        name="EGFR structure",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="structure.pdb",
+        size_bytes=structure.size_bytes,
+        sha256=structure.sha256,
+        storage_key="artifacts/structure.pdb",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    from app.models.artifacts import ArtifactVersionFile
+
+    db_session.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="metadata_json",
+                file_id=metadata.id,
+                is_primary=False,
+                sort_order=0,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="structure_file",
+                file_id=structure.id,
+                is_primary=True,
+                sort_order=1,
+            ),
+        ]
+    )
+    # 模拟历史坏行：快照里的 file_id 指向元数据 sidecar。
+    legacy = TaskInputSnapshot(
+        task_id=task.id,
+        input_role=INPUT_ROLE_RECEPTOR,
+        ordinal=0,
+        entity_type="artifact_version",
+        entity_id=str(version.id),
+        urn=f"artifact:{version.id}",
+        file_id=metadata.id,
+        detail={"filename": "metadata.json"},
+    )
+    db_session.add(legacy)
+    await db_session.commit()
+
+    payloads = await serialize_snapshots(db_session, [legacy])
+    assert payloads[0]["fileId"] == structure.id
+    assert payloads[0]["snapshotFileId"] == metadata.id
+    assert payloads[0]["detail"]["filename"] == "metadata.json"
+
+
 # ---------------------------------------------------------------------------
 # append-only guard (docs/10 DB-09)
 # ---------------------------------------------------------------------------
@@ -643,6 +864,53 @@ async def test_export_writes_downloadable_json(
     assert data["filename"].endswith(".json")
     assert len(data["sha256"]) == 64
     assert data["download_url"].startswith("/api/v1/files/")
+
+
+@pytest.mark.asyncio
+async def test_export_writes_audit_event(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    monkeypatch,
+):
+    """导出必须留痕（V3.0 §6.2「导出下载留痕」/ docs/26 H-9）。
+
+    ``AuditAction.EXPORT`` 建模时就在枚举里，但一直没有调用方；这条用例锁住
+    「导出追溯包 → 恰好多一条 EXPORT 事件，且资源指向被导出的任务」。
+    """
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session, owner=users[OWNER], project=project, filename="egfr.pdb", content=b"ATOM\n"
+    )
+    task = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(f"/api/v1/results/{task.id}:export", headers=_headers(OWNER))
+    assert response.status_code == 200
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.TASK
+    assert event.resource_id == task.id
+    assert event.user_id == str(users[OWNER].id)
+    assert event.extra["kind"] == "traceability_package"
+    assert event.extra["format"] == "json"
+    assert event.extra["sha256"] == response.json()["data"]["sha256"]
+    # 审计来源信息必须带出来，否则「谁、从哪里导出」这件事仍然查不到。
+    assert event.client_ip
+
+    row = event_to_row(event)
+    assert row["action"] == "EXPORT"
+    assert row["resource_type"] == "TASK"
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,9 @@
 
     <a-card class="favorites-card">
 
-      <SkeletonList v-if="loading" :count="5" />
+      <!-- 收藏列表刷新时保持卡片挂载，只用进度条表示「在取数据」。 -->
+      <LoadingBar :active="loading && favorites.length > 0" />
+      <SkeletonList v-if="loading && !favorites.length" :count="5" />
         <template v-else-if="favorites.length > 0">
           <a-row :gutter="[16, 16]">
             <a-col
@@ -118,6 +120,7 @@ import { message, Modal } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import SkeletonList from '@/components/common/SkeletonList.vue'
+import LoadingBar from '@/components/common/LoadingBar.vue'
 import { useToolsStore } from '@/stores'
 import type { Tool } from '@/types/models'
 

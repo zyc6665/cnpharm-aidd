@@ -71,12 +71,12 @@ test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既�
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
-  // targets 由 PR3 加入（锚点：overview 之后、workflow 之前），此处只断言本 PR 新增的两项相对位置。
+  // targets 由 PR3 加入（锚点：overview 之后），design 取代了原来的 workflow 顶级位，此处只断言新增项的相对位置。
   // decisions 由 P-39 决策记录页加入（锚点：results 之后、lineage 之前），因此需补进本清单。
   assert.deepEqual(keys, [
     'overview',
     'targets',
-    'workflow',
+    'design',
     'tasks',
     'assets',
     'candidates',
@@ -214,6 +214,37 @@ test('CandidateSetDetail.vue 支持成员增删与导出', () => {
   assert.ok(source.includes('removeCandidateSetItem'), 'CandidateSetDetail.vue 必须支持移除成员')
   assert.ok(source.includes('currentVersion'), 'CandidateSetDetail.vue 需要展示乐观锁冲突的 currentVersion')
   assert.ok(source.includes('snapshot_score'), 'CandidateSetDetail.vue 需要展示 snapshot_score')
+})
+
+test('CandidateDetail.vue shows the results related to the candidate', () => {
+  // docs/26 H-14: the page used to link a single task id, so users could not
+  // tell how many runs involved the candidate or whether they succeeded.
+  const viewSource = readSource('src/views/compounds/CandidateDetail.vue')
+  assert.ok(
+    viewSource.includes('listCandidateResults'),
+    'CandidateDetail.vue must call listCandidateResults'
+  )
+  assert.ok(
+    viewSource.includes('data-testid="candidate-result-table"'),
+    'CandidateDetail.vue needs a related-result table'
+  )
+  assert.ok(
+    viewSource.includes('data-testid="candidate-no-results"'),
+    'CandidateDetail.vue needs an empty state for candidates without results'
+  )
+
+  const apiSource = readSource('src/api/results.ts')
+  assert.ok(
+    apiSource.includes('/candidates/${candidateId}/results'),
+    'api/results.ts must request /candidates/{id}/results'
+  )
+
+  for (const localePath of ['src/locales/zh-CN/index.ts', 'src/locales/en-US/index.ts']) {
+    const localeSource = readSource(localePath)
+    for (const key of ['relatedResults:', 'noRelatedResults:', 'resultColumns:']) {
+      assert.ok(localeSource.includes(key), `${localePath} is missing ${key}`)
+    }
+  }
 })
 
 test('七个页面源码不含 any 类型逃逸', () => {

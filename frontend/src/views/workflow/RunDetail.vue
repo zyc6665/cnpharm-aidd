@@ -42,6 +42,7 @@
       @retry-node="handleRetryNode"
     />
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -54,6 +55,7 @@
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import { useWorkflowStore } from '@/stores'
   import { isWorkflowRunTerminal } from '@/workflow/workflow-runs'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   const { t } = useI18n()
   const route = useRoute()

@@ -96,6 +96,35 @@ describe('useTaskDetailLiveUpdates', () => {
     mockLogs()
   })
 
+  it('reports the backend total separately from the logs it keeps in memory', async () => {
+    // 长任务动辄几百上千行，面板只保留最近 200 行；「共 N 条」必须说后端总量，
+    // 否则界面会显示「共 200 条」，用户以为日志被截断（docs/17 §5.64）。
+    const items: TaskLog[] = Array.from({ length: 200 }, (_, index) => ({
+      id: index + 102,
+      task_id: 'task-1',
+      level: 'info',
+      message: `line-${String(index + 101).padStart(3, '0')}`,
+      timestamp: `2026-11-12T03:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}Z`,
+    }))
+    vi.mocked(getTaskLogs).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { items, total: 301, page: 1, page_size: 200 },
+    } as never)
+
+    const updates = useTaskDetailLiveUpdates({
+      taskId: ref('task-1'),
+      task: ref<Task | null>(buildTask('success', 100)),
+      fetchTaskDetail: vi.fn(),
+      updateTaskProgress: vi.fn(),
+    })
+
+    await updates.start()
+
+    expect(updates.logs.value).toHaveLength(200)
+    expect(updates.logsTotal.value).toBe(301)
+  })
+
   it('loads detail and logs, opens the SSE stream, and does not double-poll while connected', async () => {
     const task = ref<Task | null>(buildTask('running', 10))
     const fetchTaskDetail = vi.fn()
@@ -110,7 +139,7 @@ describe('useTaskDetailLiveUpdates', () => {
     await updates.start()
 
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
-    expect(getTaskLogs).toHaveBeenCalledWith('task-1')
+    expect(getTaskLogs).toHaveBeenCalledWith('task-1', { page_size: 200, order: 'desc' })
     expect(openTaskEventStream).toHaveBeenCalledTimes(1)
     expect(updates.streamConnected.value).toBe(true)
 
@@ -156,7 +185,7 @@ describe('useTaskDetailLiveUpdates', () => {
       timestamp: '2026-08-20T00:00:01Z',
     })
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
-    expect(getTaskLogs).toHaveBeenCalledWith('task-1')
+    expect(getTaskLogs).toHaveBeenCalledWith('task-1', { page_size: 200, order: 'desc' })
   })
 
   it('ignores events addressed to another task', async () => {
@@ -225,7 +254,7 @@ describe('useTaskDetailLiveUpdates', () => {
 
     expect(stream.close).toHaveBeenCalledTimes(1)
     expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
-    expect(getTaskLogs).toHaveBeenLastCalledWith('task-2')
+    expect(getTaskLogs).toHaveBeenLastCalledWith('task-2', { page_size: 200, order: 'desc' })
     const calls = vi.mocked(openTaskEventStream).mock.calls
     expect(calls[calls.length - 1]?.[0]).toBe('task-2')
     expect(updates.logs.value).toEqual([

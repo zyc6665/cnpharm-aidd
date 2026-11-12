@@ -1,7 +1,7 @@
 # test/test_p2_auth_hardening.py
 """P2 认证与授权加固回归测试。
 
-覆盖 docs/22 P2 的五条：
+覆盖 docs/archive/22 P2 的五条：
 1. 口令策略：最小 12 位 + bcrypt 72 字节上限（超限是 422 业务校验，不是 500）；
 2. refresh jti 存储 / 轮换 / 复用检测；
 3. 登录账户级锁定（阈值 / 清零 / Redis 不可用 fail-closed）；

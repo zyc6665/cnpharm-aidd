@@ -2,7 +2,7 @@
 
 背景
 ----
-``docs/22`` P2 认证授权：此前 refresh token 无状态、logout 不失效。改造后每个
+``docs/archive/22`` P2 认证授权：此前 refresh token 无状态、logout 不失效。改造后每个
 refresh 的 ``jti`` 落库，refresh 时轮换（旧 jti 标记吊销并写 ``replaced_by``），
 已吊销 jti 再次使用视为复用入侵并吊销该用户全部 refresh。
 

@@ -1,8 +1,9 @@
 <template>
   <main class="structure-pockets-page" data-testid="structure-pockets-page">
-    <router-link :to="`/structures/${structureId}`" class="back-link">
-      {{ t('targets.pockets.backToStructure') }}
-    </router-link>
+    <AppBackLink
+      :fallback="`/structures/${structureId}`"
+      :parent-label="t('targets.pockets.backToStructure')"
+    />
 
     <AppPageHeader :title="t('targets.pockets.title')" :subtitle="t('targets.pockets.subtitle')">
       <template #actions>
@@ -99,6 +100,7 @@
       </a-table>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -119,6 +121,8 @@
     resolveTargetErrorMessage
   } from '@/domain/targets'
   import type { PocketSummary } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const router = useRouter()
@@ -181,7 +185,7 @@
   @import '@/assets/styles/variables.less';
 
   .structure-pockets-page {
-    max-width: 1080px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

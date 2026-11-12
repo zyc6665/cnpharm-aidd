@@ -20,7 +20,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,12 +37,15 @@ from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.files.remote_access_tokens import create_browser_file_access_token
 from app.files.writer import store_file_bytes
+from app.logging.audit import ResourceType
 from app.models.compounds import Candidate
 from app.models.files import FileSourceType
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
 from app.services.artifact_outputs import artifact_outputs_for_task
+from app.services.audit_exports import record_export
+from app.services.candidate_results import candidate_result_conditions
 from app.services.domain_compounds import require_candidate_read_access
 from app.services.param_diff import (
     MAX_TASKS,
@@ -63,7 +66,7 @@ from app.services.traceability import (
     build_traceability_package,
     load_task_snapshots,
     package_sha256,
-    serialize_snapshot,
+    serialize_snapshots,
 )
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -274,7 +277,7 @@ async def get_result(
     return success_response(
         data={
             **_serialize_result(task),
-            "inputs": [serialize_snapshot(row) for row in snapshots],
+            "inputs": await serialize_snapshots(db, snapshots),
             "outputs": await _artifact_outputs(db, str(task.id)),
             "output_data": task.outputs.result if task.outputs else None,
         }
@@ -304,6 +307,7 @@ async def get_result_traceability(
 @router.post("/results/{task_id}:export", summary="导出追溯包")
 async def export_result_traceability(
     task_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -339,6 +343,20 @@ async def export_result_traceability(
     )
     await db.commit()
     await db.refresh(record)
+
+    # 导出留痕（V3.0 §6.2）：记「谁按什么范围导出了什么」，而不是等下载那一步。
+    record_export(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.TASK,
+        resource_id=str(task.id),
+        resource_name=task.name,
+        kind="traceability_package",
+        format="json",
+        file_id=str(record.id),
+        sha256=digest,
+        size_bytes=record.size_bytes,
+    )
 
     return success_response(
         data={
@@ -483,6 +501,7 @@ async def get_result_report_pdf(
 @router.post("/results/{task_id}/report:export", summary="导出分析报告（PDF 文件）")
 async def export_result_report_pdf(
     task_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -518,6 +537,22 @@ async def export_result_report_pdf(
     )
     await db.commit()
     await db.refresh(record)
+
+    # 导出留痕（V3.0 §6.2）：PDF 报告的下载 URL 只有 15 分钟，事后想追查
+    # 「谁导出过这份报告」只能靠这条审计。
+    record_export(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.TASK,
+        resource_id=str(task.id),
+        resource_name=task.name,
+        kind="result_report_pdf",
+        format="pdf",
+        file_id=str(record.id),
+        sha256=digest,
+        size_bytes=record.size_bytes,
+        template_version=REPORT_TEMPLATE_VERSION,
+    )
 
     return success_response(
         data={
@@ -600,7 +635,9 @@ async def list_candidate_results(
 
     query = select(Task).where(
         Task.status.in_(RESULT_STATUSES),
-        Task.extra_data["domain"]["candidate_id"].as_string() == candidate_id,
+        candidate_result_conditions(
+            candidate_id=str(candidate.id), producing_task_id=candidate.task_id
+        ),
     )
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))

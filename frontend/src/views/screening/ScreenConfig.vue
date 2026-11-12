@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -14,6 +14,13 @@ import {
   VINA_TOOL_SLUG
 } from '@/types/screening'
 import type { ScreeningParams } from '@/types/screening'
+import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
+import { listProjects } from '@/api/projects'
+import { getTarget, listStructures, listTargets } from '@/api/targets'
+import { structureOptionLabel } from '@/domain/targets/structure-option'
+import type { CandidateSet } from '@/types/compounds'
+import type { ResearchProject } from '@/types/projects'
+import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
 
 const props = withDefaults(defineProps<{ projectIdOverride?: string }>(), {
   projectIdOverride: ''
@@ -39,6 +46,164 @@ const projectId = computed(() => {
   return typeof paramId === 'string' ? paramId : ''
 })
 
+const projects = ref<ResearchProject[]>([])
+const projectOptions = computed(() =>
+  projects.value.map(item => ({ label: item.name, value: item.id }))
+)
+
+/**
+ * 输入来源。项目内的受体结构与候选集已经是落盘资产（`file:<id>`），可以直接当
+ * `standard_input_uploads` 的值——不必让用户先导出再上传一遍，URL 里也不会多出
+ * 一次几百 KB 的往返。
+ */
+const receptorSource = ref<'upload' | 'project'>('upload')
+const ligandSource = ref<'upload' | 'candidate'>('upload')
+
+const targets = ref<TargetSummary[]>([])
+const proteins = ref<ProteinDetail[]>([])
+const structures = ref<ProteinStructureDetail[]>([])
+const selectedTargetId = ref('')
+const selectedProteinId = ref('')
+const selectedStructureId = ref('')
+const candidateSets = ref<CandidateSet[]>([])
+const candidateSetId = ref('')
+
+const targetOptions = computed(() =>
+  targets.value.map(item => ({ label: item.name, value: item.id }))
+)
+const proteinOptions = computed(() =>
+  proteins.value.map(item => ({ label: item.name, value: item.id }))
+)
+/** 只有落过盘的结构才能当输入（物化成 ArtifactVersion 需要真实文件）。 */
+const structureOptions = computed(() =>
+  structures.value
+    .filter(item => Boolean(item.prepared_file_id || item.structure_file_id))
+    .map(item => ({ label: structureOptionLabel(item), value: item.id }))
+)
+const selectedStructure = computed(
+  () => structures.value.find(item => item.id === selectedStructureId.value) ?? null
+)
+const selectedStructureFileId = computed(
+  () =>
+    selectedStructure.value?.prepared_file_id ||
+    selectedStructure.value?.structure_file_id ||
+    ''
+)
+const candidateSetOptions = computed(() =>
+  candidateSets.value.map(item => ({
+    label: `${item.name}（${item.item_count} 个候选物）`,
+    value: item.id
+  }))
+)
+const selectedCandidateSet = computed(
+  () => candidateSets.value.find(item => item.id === candidateSetId.value) ?? null
+)
+
+function handleProjectChange(value: unknown): void {
+  const next = typeof value === 'string' ? value : ''
+  void router.replace({ query: { ...route.query, project_id: next || undefined } })
+}
+
+async function loadProjects(): Promise<void> {
+  try {
+    projects.value = (await listProjects()).data.items
+  } catch {
+    projects.value = []
+  }
+}
+
+async function loadTargets(): Promise<void> {
+  if (!projectId.value) {
+    targets.value = []
+    return
+  }
+  try {
+    const response = await listTargets(projectId.value, { page: 1, page_size: 100 })
+    targets.value = response.data.items ?? []
+  } catch {
+    targets.value = []
+  }
+}
+
+async function loadCandidateSets(): Promise<void> {
+  if (!projectId.value) {
+    candidateSets.value = []
+    return
+  }
+  try {
+    const response = await listCandidateSets(projectId.value, { page: 1, page_size: 100 })
+    candidateSets.value = response.data.items ?? []
+  } catch {
+    candidateSets.value = []
+  }
+}
+
+watch(
+  projectId,
+  () => {
+    selectedTargetId.value = ''
+    selectedProteinId.value = ''
+    selectedStructureId.value = ''
+    candidateSetId.value = ''
+    proteins.value = []
+    structures.value = []
+    void loadTargets()
+    void loadCandidateSets()
+  },
+  { immediate: true }
+)
+
+watch(selectedTargetId, async id => {
+  selectedProteinId.value = ''
+  selectedStructureId.value = ''
+  structures.value = []
+  if (!id) {
+    proteins.value = []
+    return
+  }
+  try {
+    const response = await getTarget(id)
+    proteins.value = response.data.proteins ?? []
+  } catch {
+    proteins.value = []
+  }
+})
+
+watch(selectedProteinId, async id => {
+  selectedStructureId.value = ''
+  if (!id) {
+    structures.value = []
+    return
+  }
+  try {
+    const response = await listStructures(id)
+    structures.value = response.data.items ?? []
+  } catch {
+    structures.value = []
+  }
+})
+
+/** 候选集是「已经算好的分子」，选中它就把分子数直接显示到规则卡上。 */
+watch(candidateSetId, id => {
+  if (ligandSource.value !== 'candidate') return
+  const set = candidateSets.value.find(item => item.id === id)
+  ligandCount.value = set?.item_count ?? 0
+})
+
+watch(ligandSource, source => {
+  if (source === 'candidate') {
+    clearLigands()
+    ligandCount.value = selectedCandidateSet.value?.item_count ?? 0
+    return
+  }
+  candidateSetId.value = ''
+  ligandCount.value = 0
+})
+
+onMounted(() => {
+  void loadProjects()
+})
+
 const receptorFile = ref<File | null>(null)
 const receptorName = ref('')
 const ligandFiles = ref<File[]>([])
@@ -52,14 +217,19 @@ const params = reactive<ScreeningParams>({ ...SCREENING_PARAM_DEFAULTS })
 const submitting = ref(false)
 const formError = ref('')
 
-const canSubmit = computed(
-  () =>
-    !submitting.value &&
-    Boolean(receptorFile.value) &&
-    ligandFiles.value.length > 0 &&
-    !ligandError.value &&
-    ligandCount.value > 0
-)
+const canSubmit = computed(() => {
+  if (submitting.value) return false
+  const usesProjectAssets =
+    receptorSource.value === 'project' || ligandSource.value === 'candidate'
+  if (usesProjectAssets && !projectId.value) return false
+  const receptorReady =
+    receptorSource.value === 'project'
+      ? Boolean(selectedStructureFileId.value)
+      : Boolean(receptorFile.value)
+  if (!receptorReady) return false
+  if (ligandSource.value === 'candidate') return Boolean(candidateSetId.value)
+  return ligandFiles.value.length > 0 && !ligandError.value && ligandCount.value > 0
+})
 
 function fileStem(name: string): string {
   return name.replace(/\.[^.]+$/, '')
@@ -220,26 +390,57 @@ async function buildCsvPayload(): Promise<File> {
 
 async function handleSubmit(): Promise<void> {
   formError.value = ''
-  if (!receptorFile.value) {
+  if (receptorSource.value === 'project') {
+    if (!projectId.value) {
+      formError.value = t('screening.config.needProject')
+      return
+    }
+    if (!selectedStructureFileId.value) {
+      formError.value = t('screening.config.needStructure')
+      return
+    }
+  } else if (!receptorFile.value) {
     formError.value = t('screening.config.needReceptor')
     return
   }
-  if (!ligandFiles.value.length) {
-    formError.value = t('screening.config.needLigands')
-    return
-  }
-  if (ligandError.value || ligandCount.value <= 0) {
-    formError.value = ligandError.value || t('screening.config.needLigands')
-    return
+  if (ligandSource.value === 'candidate') {
+    if (!projectId.value) {
+      formError.value = t('screening.config.needProject')
+      return
+    }
+    if (!candidateSetId.value) {
+      formError.value = t('screening.config.needCandidateSet')
+      return
+    }
+  } else {
+    if (!ligandFiles.value.length) {
+      formError.value = t('screening.config.needLigands')
+      return
+    }
+    if (ligandError.value || ligandCount.value <= 0) {
+      formError.value = ligandError.value || t('screening.config.needLigands')
+      return
+    }
   }
 
   submitting.value = true
   try {
-    const receptor = await uploadFile(receptorFile.value)
-    const standardInputUploads: Record<string, string> = {
-      protein_pdb: receptor.data.id
+    const standardInputUploads: Record<string, string> = {}
+    if (receptorSource.value === 'project') {
+      standardInputUploads.protein_pdb = selectedStructureFileId.value
+    } else {
+      const receptor = await uploadFile(receptorFile.value as File)
+      standardInputUploads.protein_pdb = receptor.data.id
     }
-    if (ligandFormat.value === 'csv') {
+    if (ligandSource.value === 'candidate') {
+      // 候选集导出直接落盘，拿 file_id 当输入：不再「下载一次再上传一次」。
+      const exported = await exportCandidateSet(candidateSetId.value)
+      const exportedFileId = exported.data.file_id
+      if (!exportedFileId) {
+        throw new Error(t('screening.config.candidateSetExportFailed'))
+      }
+      standardInputUploads.ligand_smiles = exportedFileId
+    } else if (ligandFormat.value === 'csv') {
       const payload = await buildCsvPayload()
       const uploaded = await uploadFile(payload)
       standardInputUploads.ligand_smiles = uploaded.data.id
@@ -291,6 +492,24 @@ const paramFields = computed(() => [
   <main class="screen-config" data-testid="screen-config-page">
     <AppPageHeader :title="t('screening.config.title')" :subtitle="t('screening.config.subtitle')" />
 
+    <a-card
+      v-if="!projectIdOverride"
+      :title="t('screening.config.project')"
+      data-testid="screen-config-project"
+    >
+      <a-select
+        :value="projectId"
+        :options="projectOptions"
+        show-search
+        option-filter-prop="label"
+        :placeholder="t('screening.config.projectPlaceholder')"
+        style="width: 100%"
+        data-testid="screen-config-project-select"
+        @change="handleProjectChange"
+      />
+      <p class="screen-config__hint">{{ t('screening.config.projectHint') }}</p>
+    </a-card>
+
     <a-card :title="t('design.modelSelect.label')">
       <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
     </a-card>
@@ -298,13 +517,109 @@ const paramFields = computed(() => [
     <a-card :title="t('screening.config.inputs')">
       <a-form layout="vertical">
         <a-form-item :label="t('screening.config.receptor')" required>
-          <a-upload :before-upload="handleReceptorUpload" :max-count="1" accept=".pdb,.cif,.ent" :file-list="[]">
-            <a-button>{{ t('screening.config.chooseFile') }}</a-button>
-          </a-upload>
-          <span v-if="receptorName" class="screen-config__file">{{ receptorName }}</span>
+          <a-radio-group
+            v-model:value="receptorSource"
+            button-style="solid"
+            data-testid="screen-config-receptor-source"
+          >
+            <a-radio-button value="upload">
+              {{ t('screening.config.sourceUpload') }}
+            </a-radio-button>
+            <a-radio-button value="project">
+              {{ t('screening.config.sourceProject') }}
+            </a-radio-button>
+          </a-radio-group>
+
+          <template v-if="receptorSource === 'upload'">
+            <a-upload
+              :before-upload="handleReceptorUpload"
+              :max-count="1"
+              accept=".pdb,.cif,.ent"
+              :file-list="[]"
+            >
+              <a-button>{{ t('screening.config.chooseFile') }}</a-button>
+            </a-upload>
+            <span v-if="receptorName" class="screen-config__file">{{ receptorName }}</span>
+          </template>
+
+          <template v-else>
+            <div class="screen-config__project-picker">
+              <a-select
+                v-model:value="selectedTargetId"
+                :options="targetOptions"
+                :placeholder="t('screening.config.target')"
+                show-search
+                option-filter-prop="label"
+                style="min-width: 200px"
+                data-testid="screen-config-target"
+              />
+              <a-select
+                v-model:value="selectedProteinId"
+                :options="proteinOptions"
+                :placeholder="t('screening.config.protein')"
+                :disabled="!selectedTargetId"
+                show-search
+                option-filter-prop="label"
+                style="min-width: 200px"
+                data-testid="screen-config-protein"
+              />
+              <a-select
+                v-model:value="selectedStructureId"
+                :options="structureOptions"
+                :placeholder="t('screening.config.structure')"
+                :disabled="!selectedProteinId"
+                show-search
+                option-filter-prop="label"
+                style="min-width: 280px"
+                data-testid="screen-config-structure"
+              />
+            </div>
+            <p v-if="!targets.length" class="screen-config__hint">
+              {{ t('screening.config.noTargets') }}
+            </p>
+            <p v-else-if="selectedTargetId && !structures.length" class="screen-config__hint">
+              {{ t('screening.config.noStructures') }}
+            </p>
+            <p v-else-if="selectedStructureFileId" class="screen-config__hint">
+              {{ t('screening.config.structureSelected') }}
+            </p>
+          </template>
         </a-form-item>
 
         <a-form-item :label="t('screening.config.ligandLibrary')" required>
+          <a-radio-group
+            v-model:value="ligandSource"
+            button-style="solid"
+            data-testid="screen-config-ligand-source"
+          >
+            <a-radio-button value="upload">
+              {{ t('screening.config.sourceUpload') }}
+            </a-radio-button>
+            <a-radio-button value="candidate">
+              {{ t('screening.config.sourceCandidate') }}
+            </a-radio-button>
+          </a-radio-group>
+
+          <template v-if="ligandSource === 'candidate'">
+            <a-select
+              v-model:value="candidateSetId"
+              :options="candidateSetOptions"
+              :placeholder="t('screening.config.candidateSet')"
+              :disabled="!projectId"
+              show-search
+              option-filter-prop="label"
+              style="width: 100%; margin-top: 12px"
+              data-testid="screen-config-candidate-set"
+            />
+            <p class="screen-config__hint">
+              {{ t('screening.config.candidateSetHint') }}
+            </p>
+            <p v-if="!candidateSets.length" class="screen-config__hint">
+              {{ t('screening.config.noCandidateSets') }}
+            </p>
+          </template>
+
+          <template v-else>
           <a-upload
             :before-upload="handleLigandUpload"
             multiple
@@ -323,6 +638,7 @@ const paramFields = computed(() => [
             <span class="screen-config__hint">{{ t('screening.config.ligandCountValue', { count: ligandCount }) }}</span>
           </div>
           <a-alert v-if="ligandError" type="warning" show-icon :message="ligandError" />
+          </template>
         </a-form-item>
 
         <a-form-item :label="t('screening.config.pocket')">
@@ -413,6 +729,13 @@ const paramFields = computed(() => [
 .screen-config__file {
   margin-left: 12px;
   font-weight: 600;
+}
+
+.screen-config__project-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .screen-config__files {

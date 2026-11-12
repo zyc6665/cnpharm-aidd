@@ -265,6 +265,29 @@ async def touch_task_execution_record_best_effort(
         )
 
 
+def running_records_query(*, batch_size: int = 100):
+    """巡检要认领的「执行记录仍在 running，但任务已经不是 RUNNING」的行。
+
+    单独抽成函数是为了让测试能把语句编译到 PostgreSQL 方言上——这条语句只有在
+    PG 上才会暴露 `FOR UPDATE` 与外连接的问题，SQLite 一律忽略 `FOR UPDATE`。
+    """
+    return (
+        select(ExecutionRecord)
+        .outerjoin(Task, Task.id == ExecutionRecord.task_id)
+        .where(
+            ExecutionRecord.status == "running",
+            or_(Task.id.is_(None), Task.status != "RUNNING"),
+        )
+        .order_by(ExecutionRecord.started_at.asc())
+        # `of=ExecutionRecord` 不是可选项：这里带 LEFT OUTER JOIN，
+        # PostgreSQL 会以 `FOR UPDATE cannot be applied to the nullable side
+        # of an outer join` 直接拒绝整条语句（SQLite 只会忽略 FOR UPDATE，
+        # 所以单测全绿、生产每轮巡检都失败）。锁只加在执行记录上就够用了。
+        .with_for_update(skip_locked=True, of=ExecutionRecord)
+        .limit(batch_size)
+    )
+
+
 async def reconcile_running_execution_records(
     db: AsyncSession,
     *,
@@ -280,17 +303,7 @@ async def reconcile_running_execution_records(
     # 条件会让 PostgreSQL 放弃 `tasks.id` 的索引走哈希连接，而这里是 worker
     # 恢复与对账巡检的热点。历史行若列为 NULL，下方 `_record_task_id()` 仍从
     # JSON 兜底读取，行为不变。
-    result = await db.execute(
-        select(ExecutionRecord)
-        .outerjoin(Task, Task.id == ExecutionRecord.task_id)
-        .where(
-            ExecutionRecord.status == "running",
-            or_(Task.id.is_(None), Task.status != "RUNNING"),
-        )
-        .order_by(ExecutionRecord.started_at.asc())
-        .with_for_update(skip_locked=True)
-        .limit(batch_size)
-    )
+    result = await db.execute(running_records_query(batch_size=batch_size))
     records = result.scalars().all()
     reconciled_count = 0
 

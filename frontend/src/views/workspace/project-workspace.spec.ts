@@ -2,13 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/locales'
 import WorkspaceView from './index.vue'
-import { archiveProject, deleteProject, listProjects } from '@/api/projects'
+import { archiveProject, deleteProject, listProjects, unarchiveProject } from '@/api/projects'
 import { getWorkspaceOverview } from '@/api/workspace'
 
 vi.mock('@/api/projects', () => ({
   listProjects: vi.fn(),
   createProject: vi.fn(),
   archiveProject: vi.fn(),
+  unarchiveProject: vi.fn(),
   deleteProject: vi.fn()
 }))
 vi.mock('@/api/tasks', () => ({ getTaskCounts: vi.fn() }))
@@ -122,6 +123,9 @@ describe('Project workspace', () => {
     vi.mocked(archiveProject).mockResolvedValue({
       data: { ...projects[0]!, status: 'archived' }
     } as never)
+    vi.mocked(unarchiveProject).mockResolvedValue({
+      data: { ...projects[0]!, status: 'active' }
+    } as never)
     vi.mocked(deleteProject).mockResolvedValue({ data: { id: projects[0]!.id } } as never)
   })
 
@@ -181,9 +185,11 @@ describe('Project workspace', () => {
     expect(wrapper.text()).toContain('EGFR 口袋研究')
   })
 
-  it('归档项目后无需刷新即可从最近项目列表移除', async () => {
+  it('归档项目后从最近项目移到「已归档项目」，仍然可见也能撤销归档', async () => {
     const wrapper = renderWorkspace()
     await flushPromises()
+    // 工作台要自己拿到归档项目，否则归档后它就彻底从界面上消失了。
+    expect(listProjects).toHaveBeenCalledWith({ includeArchived: true })
 
     const archive = wrapper.findAll('button').find(button => button.text() === '归档')
     expect(archive).toBeDefined()
@@ -191,8 +197,24 @@ describe('Project workspace', () => {
     await flushPromises()
 
     expect(archiveProject).toHaveBeenCalledWith('project-1')
-    expect(wrapper.text()).not.toContain('EGFR 口袋研究')
-    expect(wrapper.text()).toContain('还没有研究项目')
+    const archived = wrapper.find('[data-testid="workspace-archived-projects"]')
+    expect(archived.exists()).toBe(true)
+    // 归档不是删除：项目名还在，只是挪到了归档段里。
+    expect(archived.text()).toContain('EGFR 口袋研究')
+    expect(archived.text()).toContain('已归档项目')
+    // 全部项目都被归档时，用的不是「还没有研究项目」那句空状态——
+    // 项目明明在下面的归档段里躺着，那句话会让人以为数据没了。
+    expect(wrapper.text()).toContain('当前没有进行中的项目')
+    expect(wrapper.text()).not.toContain('还没有研究项目')
+
+    const unarchive = wrapper.findAll('button').find(button => button.text() === '撤销归档')
+    expect(unarchive).toBeDefined()
+    await unarchive!.trigger('click')
+    await flushPromises()
+
+    expect(unarchiveProject).toHaveBeenCalledWith('project-1')
+    expect(wrapper.find('[data-testid="workspace-archived-projects"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('EGFR 口袋研究')
   })
 
   it('删除项目后无需刷新即可从最近项目列表移除', async () => {

@@ -27,6 +27,7 @@ from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.files.writer import store_file_bytes  # noqa: E402
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
@@ -284,7 +285,11 @@ async def test_outsider_cannot_read_target(api_client: httpx.AsyncClient, projec
 
 @pytest.mark.asyncio
 async def test_target_update_and_delete_cascade(
-    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, users: dict[str, User]
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+    monkeypatch,
 ):
     target = await _create_target(api_client, project.id)
     protein = await _create_protein(api_client, target["id"])
@@ -306,10 +311,25 @@ async def test_target_update_and_delete_cascade(
     assert updated.status_code == 200
     assert updated.json()["data"]["gene_name"] == "ERBB1"
 
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
     deleted = await api_client.delete(
         f"/api/v1/targets/{target['id']}", headers=_headers(OWNER)
     )
     assert deleted.status_code == 200
+    removed = deleted.json()["data"]["removed"]
+    # 删掉多少行要能回答：用户点一次「删除」，实际消失的是 1 个靶点 + 1 个蛋白
+    # + 1 个结构 + 1 个口袋 + 2 条残基，事后追查时靠这条计数。
+    assert removed == {
+        "proteins": 1,
+        "structures": 1,
+        "pockets": 1,
+        "pocketResidues": 2,
+    }
 
     for model, lookup in (
         (Target, "target"),
@@ -320,6 +340,17 @@ async def test_target_update_and_delete_cascade(
         remaining = (await db_session.execute(select(model))).scalars().all()
         assert remaining == [], f"{lookup} should be deleted with its target"
     assert (await db_session.execute(select(PocketResidue))).scalars().all() == []
+
+    delete_events = [event for event in events if event.action is AuditAction.DELETE]
+    assert len(delete_events) == 1
+    event = delete_events[0]
+    assert event.resource_type is ResourceType.TARGET
+    assert event.resource_id == target["id"]
+    # 名字快照必须落在 resource_name 列：靶点行已经删了，detail 里的名字也救不了
+    # 按资源名检索
+    assert event.resource_name == target["name"]
+    assert event.extra["removed"]["pocketResidues"] == 2
+    assert event.extra["project_id"] == project.id
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +505,41 @@ async def test_structure_pdb_endpoint_returns_download_entries(
     )
     assert exported.status_code == 200
     assert exported.json()["data"]["files"][0]["role"] == "structure"
+
+
+@pytest.mark.asyncio
+async def test_structure_export_writes_audit_event(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+    monkeypatch,
+):
+    """导出结构包必须留痕（V3.0 §6.2 / docs/26 H-9）。"""
+    target = await _create_target(api_client, project.id)
+    protein = await _create_protein(api_client, target["id"])
+    structure = await _create_structure(
+        api_client, db_session, protein["id"], project.id, users[OWNER].id
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(
+        f"/api/v1/structures/{structure['id']}:export", headers=_headers(VIEWER)
+    )
+    assert response.status_code == 200
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.STRUCTURE
+    assert event.resource_id == structure["id"]
+    assert event.extra["kind"] == "structure_bundle"
+    assert event.extra["file_roles"] == ["structure"]
 
 
 @pytest.mark.asyncio
@@ -659,6 +725,8 @@ async def submitted_tasks(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespa
             tool_id=task_data.tool_id,
             params=task_data.params,
             file_ids=task_data.file_ids,
+            standard_input_uploads=task_data.standard_input_uploads,
+            input_bindings=task_data.input_bindings,
             name=task_data.name,
             extra_data=extra_data,
             created_at=utcnow(),
@@ -775,7 +843,10 @@ async def test_pocket_prediction_uses_registered_lvpocket_tool(
     assert len(submitted_tasks) == 1
     submitted = submitted_tasks[0]
     assert submitted.params["top_k"] == 5
-    assert submitted.file_ids == [structure["structure_file_id"]]
+    # 口袋预测的输入不是「挂几个文件」，而是按工具形态二选一：
+    # 这里注册的是没有 tool_package_manifest 的工具，所以走标准输入上传槽。
+    assert submitted.file_ids == []
+    assert submitted.standard_input_uploads == {"protein": structure["structure_file_id"]}
     assert submitted.extra_data["domain"]["kind"] == "pocket_prediction"
 
 

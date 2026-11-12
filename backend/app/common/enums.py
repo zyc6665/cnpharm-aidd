@@ -175,6 +175,17 @@ class RESOURCE_TYPE(_StringEnum):
     SESSION = "session"
     SYSTEM = "system"
     DECISION_RECORD = "decision_record"
+    #: 领域对象也要能被审计定位：导出候选集、导出结构包都不是「文件」，
+    #: 记成 ``file`` 会让审计员按资源维度排查时找不到那次导出。
+    CANDIDATE_SET = "candidate_set"
+    STRUCTURE = "structure"
+    #: 靶点删除会连带蛋白、结构、口袋与残基（领域表没有 ON DELETE CASCADE，
+    #: 由 ``delete_target_cascade`` 按序显式删）。记成 ``structure`` 或 ``file``
+    #: 都会让审计员按资源维度查「谁把 EGFR 删了」时找不到那条记录。
+    TARGET = "target"
+    #: 项目的归档/撤销归档也要能被单独筛选出来：它是「项目级状态变更」，
+    #: 记成 ``config`` 会让审计员按资源维度查「谁把项目归档了」时找不到。
+    PROJECT = "project"
 
 
 #: 供 schema 类型注解使用的 Literal 别名（值集合来自上面的枚举）。

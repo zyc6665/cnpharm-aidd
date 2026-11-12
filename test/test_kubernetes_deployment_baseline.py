@@ -210,10 +210,14 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "worker",
         "--loglevel=info",
     ]
-    assert container["args"][5] == (
+    # 任务执行是「提交 Job 后轮询等结果」，全程 I/O 等待，所以用线程池而不是 prefork；
+    # 并发数要覆盖「10 人同时提交」，否则长任务会把后面的任务全堵在队列里。
+    assert "--pool=threads" in container["args"]
+    assert "--concurrency=16" in container["args"]
+    assert (
         "--queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,"
         "gpu_queue,maintenance,monitoring"
-    )
+    ) in container["args"]
     assert container["envFrom"] == [
         {"configMapRef": {"name": "sciminer-execution-worker-config"}}
     ]

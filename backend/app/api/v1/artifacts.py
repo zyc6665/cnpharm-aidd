@@ -574,6 +574,68 @@ async def download_artifact_version(
     )
 
 
+@router.get("/artifacts/versions/{version_id}/download")
+async def download_artifact_version_by_id(
+    version_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage=Depends(get_artifact_storage),
+):
+    """按版本 id 下载主文件（不需要先知道 artifact id）。
+
+    ``task_input_snapshots`` 里的 ``artifact:<version_id>`` 只带版本 id，而结果页要按快照
+    还原「输入 + 口袋 + 体素」的三维叠加；没有这条路由，前端就只能退化成只画口袋里那几
+    个残基——用户看到的现象是「完整蛋白不见了」。
+    """
+    version = await db.get(ArtifactVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Artifact 版本不存在")
+    artifact = await load_artifact(db, version.artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact 不存在")
+    try:
+        await load_project_membership(
+            db, project_id=artifact.project_id, user_id=current_user.id
+        )
+    except HTTPException:
+        _audit_artifact_download(
+            current_user=current_user,
+            artifact=artifact,
+            version=version,
+            file_id=version.id,
+            file_name=version.filename,
+            file_size=version.size_bytes,
+            role="primary",
+            result=AuditResult.DENIED,
+            reason="project_access_denied",
+        )
+        raise
+    if version.status != "available" or (
+        version.expires_at is not None and version.expires_at <= utcnow()
+    ):
+        raise HTTPException(status_code=404, detail="Artifact 版本不存在")
+
+    _audit_artifact_download(
+        current_user=current_user,
+        artifact=artifact,
+        version=version,
+        file_id=version.id,
+        file_name=version.filename,
+        file_size=version.size_bytes,
+        role="primary",
+    )
+    if _should_presign(version.filename, version.size_bytes):
+        url = await storage.get_url(
+            version.storage_key, expires_in=PRESIGN_EXPIRES_SECONDS
+        )
+        return RedirectResponse(url=url, status_code=302)
+    return StreamingResponse(
+        storage.open_stream(version.storage_key),
+        media_type=version.content_type or "application/octet-stream",
+        headers={"Content-Disposition": content_disposition(version.filename)},
+    )
+
+
 @router.get("/artifacts/{artifact_id}/versions/{version_id}/files/{role}/download")
 async def download_artifact_version_file(
     artifact_id: str,

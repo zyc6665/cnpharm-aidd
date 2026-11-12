@@ -35,6 +35,7 @@ export default {
     reset: '重置',
     submit: '提交',
     back: '返回',
+    backToPrevious: '返回上一页',
     loading: '加载中...',
     success: '操作成功',
     error: '操作失败',
@@ -65,6 +66,10 @@ export default {
     seconds: '秒',
     sort: '排序',
     memberUsername: '成员用户名',
+    // 结果类页面的统一免责说明（V3.0 各需求用例表的业务规则原文口径）
+    disclaimer: {
+      resultNotice: '预测与计算结果仅作为研发辅助参考，不作为实验验证结论。'
+    },
     // 列表四态通用文案（加载失败 / 空状态）
     listStates: {
       errorTitle: '加载失败',
@@ -76,12 +81,31 @@ export default {
   },
 
   // 导航
+  projectNav: {
+    title: '当前项目',
+    placeholder: '选择项目',
+    allProjects: '全部项目',
+    hint: '选了项目之后，这里会列出它的总览、靶点、任务与结果入口。',
+    overview: '项目总览',
+    targets: '靶点与结构',
+    workflow: '自定义编排',
+    designFlow: '设计流程',
+    tasks: '任务中心',
+    assets: '数据资产',
+    candidates: '候选物',
+    results: '结果中心',
+    decisions: '决策记录',
+    lineage: 'Artifact 谱系',
+    settings: '项目设置'
+  },
+
   nav: {
     home: '首页',
     workspace: '工作台',
     tools: '工具',
     tasks: '任务',
     workflow: '工作流',
+    designFlow: '设计流程',
     achievements: '项目成果',
     admin: '管理',
     login: '登录',
@@ -122,6 +146,9 @@ export default {
     createProject: '新建项目',
     recentProjects: '最近项目',
     projectCount: '共 {count} 个可访问项目',
+    archivedProjects: '已归档项目',
+    archivedProjectsHint: '归档不会删除数据；点「撤销归档」可放回常用列表',
+    noActiveProjects: '当前没有进行中的项目，已归档项目列在下方',
     continueResearch: '继续研究',
     openProject: '项目总览',
     emptyProjects: '还没有研究项目',
@@ -177,6 +204,9 @@ export default {
       archive: '归档',
       archiveSuccess: '研究项目已归档',
       archiveFailed: '项目归档失败，请重试',
+      unarchive: '撤销归档',
+      unarchiveSuccess: '已撤销归档，项目已回到常用列表',
+      unarchiveFailed: '撤销归档失败，请重试',
       deleteConfirm: '确认删除该研究项目？删除后关联工作流和项目记录将不可恢复。',
       deleteSuccess: '研究项目已删除',
       deleteFailed: '项目删除失败，请重试',
@@ -453,6 +483,14 @@ export default {
         ligandToAdmet: {
           name: '配体结构到基础 ADMET',
           description: '从上传的配体结构开始，串联配体处理、SMILES 转换、RDKit 属性和 MolP-PC 基础 ADMET。'
+        },
+        targetPreparation: {
+          name: '靶点结构准备',
+          description: '上传靶点结构后先做补链、加氢与能量最小化，产出可对接的制备结构。'
+        },
+        mdFreeEnergy: {
+          name: '分子动力学与结合自由能',
+          description: '制备结构后并行跑 GROMACS 短程 MD 与 gmx_MMPBSA 结合自由能评估，结果一页可看。'
         }
       }
     },
@@ -664,6 +702,14 @@ export default {
       toolSelector: '工具选择',
       selectTool: '选择工具',
       noToolRequired: '当前节点无需工具。',
+      inputBindingTitle: '输入来源',
+      inputBindingPlaceholder: '选择项目里的产物',
+      inputBindingUpload: '上传文件',
+      inputBindingUploading: '上传中',
+      inputBindingHint:
+        '这里的取值与「运行配置」里的同名输入是同一个：输入节点在运行时就是从这里取文件，两处改一处即生效。',
+      inputBindingNoArtifact: '项目里还没有与该输入兼容的产物，可以先上传一个，或先在项目里产出。',
+      inputBindingUnresolved: '没有找到该输入节点对应的工作流输入需求，请检查它与下游工具的连线。',
       nodeParameters: '节点参数',
       runWorkflow: '运行工作流',
       configureNode: '配置节点',
@@ -888,6 +934,30 @@ export default {
       resultAdmet: {
         title: '基础 ADMET 结果',
         description: '查看 MolP-PC 输出的预测表格、模型版本和科学说明附件。'
+      },
+      proteinPreparation: {
+        title: '靶点结构准备',
+        description: '补全缺失侧链与环、加氢、去水并做能量最小化，产出可对接的制备结构。'
+      },
+      mdSimulation: {
+        title: '分子动力学模拟',
+        description: '对制备结构做溶剂化、能量最小化、NVT/NPT 平衡与短程生产 MD，产出轨迹与分析曲线。'
+      },
+      freeEnergy: {
+        title: '结合自由能评估',
+        description: '用 gmx_MMPBSA（MM/GBSA）评估复合物结合自由能，给出逐帧分解。'
+      },
+      resultStructure: {
+        title: '靶点结构结果',
+        description: '查看制备后的靶点结构、链组成与结构文件下载。'
+      },
+      resultMd: {
+        title: '动力学结果',
+        description: '查看 RMSD、RMSF、回转半径与轨迹文件。'
+      },
+      resultFreeEnergy: {
+        title: '自由能结果',
+        description: '查看结合自由能逐帧数值、组分分解与收敛情况。'
       }
     },
     columns: {
@@ -959,7 +1029,12 @@ export default {
       gene: '基因名',
       description: '描述',
       descriptionPlaceholder: '补充靶点背景说明（可选）',
-      total: '共 {total} 个靶点'
+      total: '共 {total} 个靶点',
+      deleteConfirm: '删除靶点「{name}」？',
+      deleteConfirmContent:
+        '该靶点下的蛋白、结构与口袋记录会一并删除且不可恢复；已产出的任务结果与产物保留。',
+      deleteSuccess: '靶点「{name}」已删除',
+      deleteFailed: '靶点删除失败，请重试',
     },
     detail: {
       title: '靶点详情',
@@ -987,6 +1062,9 @@ export default {
       structuresEmpty: '该蛋白还没有结构，先发起预测或导入结构',
       predict: '结构预测',
       importStructure: '导入结构',
+      prepareAfterImport: '导入后立即执行结构准备',
+      prepareAfterImportHint: '结构准备会补氢、去水、生成受体文件，对接与口袋预测都用得着；本机缺 obabel 时会降级为只产出 prepared.pdb。',
+      importAndPrepareSuccess: '已导入结构并提交结构准备任务',
       importTitle: '导入结构',
       importHint: '选择本地 PDB/mmCIF 文件，导入后可在结构详情查看。',
       importSuccess: '结构已导入',
@@ -1225,6 +1303,7 @@ export default {
     fileSourceArtifact: '我的产物',
     selectArtifact: '选择历史产物',
     selectProjectArtifact: '选择项目中的文件',
+    noCompatibleArtifact: '项目里还没有与该输入兼容的产物：可以直接上传文件，或先在项目里产出该类型产物。',
     noArtifacts: '暂无可复用产物',
     selectCompatibleArtifact: '按层级选择兼容产物',
     selectArtifactGroup: '先选择工具分组',
@@ -1498,7 +1577,15 @@ export default {
       attrsHint: '设计过程写入的附加字段，原始键名随工具不同而不同',
       relatedTask: '关联任务',
       relatedResult: '查看结果详情',
-      noRelatedTask: '未关联任务'
+      noRelatedTask: '未关联任务',
+      relatedResults: '相关计算结果',
+      noRelatedResults: '还没有用过这个候选物的任务——从设计页提交任务时选中它即可'
+    },
+    resultColumns: {
+      name: '任务',
+      tool: '工具',
+      status: '状态',
+      finishedAt: '完成时间'
     },
     errors: {
       load: '候选物详情加载失败'
@@ -1867,6 +1954,17 @@ export default {
       pocketBox: '口袋包围盒',
       pocketMissingFile: '该结构缺少可用的结构文件，请重新预测结构后再试',
       pocketMissingCenter: '该口袋缺少中心坐标，请重新预测口袋后再试',
+      sourceProject: '从项目选择',
+      sourceUpload: '直接上传文件',
+      project: '项目',
+      projectPlaceholder: '请选择项目（结果会归档到这个项目）',
+      needProject: '请先选择项目，生成结果需要归档到项目里',
+      structureFile: '蛋白结构',
+      pocketFile: '口袋文件',
+      pocketFileHint: '用于取口袋中心与半径，如口袋预测产出的 pocket0.pdb 或蛋白-口袋残基复合物',
+      structureFileHint: '作为受体结构，支持 .pdb / .cif / .ent；未做过结构准备的 PDB 建议先在靶点页准备一次。',
+      pocketFileUnreadable: '没从口袋文件里读到坐标，请换一个 PDB 文件',
+      chooseFile: '选择文件',
       numMolecules: '生成数量',
       seed: '随机种子',
       mwMin: '分子量下限 (Da)',
@@ -1893,6 +1991,15 @@ export default {
       sequence: '多肽序列',
       sequenceHint: '支持单行或多行 FASTA 序列，长度 4 ~ 20000。',
       sequencePlaceholder: '例如：MKTAYIAKQRQISFVKSHFSRQDILDLWIYHTQGYFP',
+      sequenceSource: '序列来源',
+      sourceManual: '直接编辑参数中的序列',
+      sourceTarget: '从项目靶点导入',
+      targetPlaceholder: '选择靶点',
+      proteinPlaceholder: '选择蛋白',
+      noTargets: '该项目还没有靶点',
+      noProteins: '该靶点还没有蛋白序列',
+      targetSequenceHint: '选中蛋白后会把它当前的序列填进参数，仍可继续编辑。',
+      sequenceFilled: '已填入靶点蛋白序列',
       predictionMode: '预测模式',
       modeJoint: '活性 + 毒性联合预测',
       modeActivity: '仅活性预测',
@@ -1982,6 +2089,27 @@ export default {
       ligandSmiles: '配体 SMILES（CSV）',
       affinityHint: '亲和力预测属于「评估验证 → 性质预测」环节；按所选模型契约要求上传蛋白与配体。',
       chooseInputFile: '选择文件',
+      project: '所属项目',
+      projectPlaceholder: '选择项目',
+      projectCurrent: '当前项目',
+      projectHint: '任务必须归属到项目：未选择项目时无法读取项目内的靶点、结构与候选集，提交也会失败（输入物化依赖项目）。',
+      affinitySourceUpload: '上传文件',
+      affinitySourceProject: '从项目选择',
+      target: '靶点',
+      targetPlaceholder: '选择靶点',
+      noTargets: '当前项目暂无靶点',
+      protein: '蛋白',
+      proteinPlaceholder: '选择蛋白',
+      noProteins: '该靶点暂无蛋白',
+      structure: '蛋白结构',
+      structurePlaceholder: '选择结构',
+      noStructures: '该蛋白暂无可用结构',
+      structureSelected: '已选结构文件',
+      structurePrepared: '已准备',
+      needStructure: '请先选择蛋白结构',
+      needCandidateSet: '请先选择候选集',
+      needProjectSubmit: '请先选择项目：任务需要归属到项目才能提交',
+      candidateSetExportHint: '提交时会把候选集导出为 SMILES 表，作为配体输入。',
       submit: '提交预测任务',
       submitting: '提交中…',
       success: '任务已提交，正在跳转到预测结果…',
@@ -2137,6 +2265,25 @@ export default {
       subtitle: '上传蛋白与配体库，按药效团、对接打分与 top-N 规则做真实筛选。',
       inputs: '输入结构',
       receptor: '受体结构（PDB）',
+      project: '项目',
+      projectPlaceholder: '选择项目（决定可选的结构与候选集）',
+      projectHint: '项目决定「从项目选择」里能挑到哪些受体结构与候选集；也可以直接上传文件。',
+      sourceUpload: '本地上传',
+      sourceProject: '从项目选择',
+      sourceCandidate: '从项目候选集',
+      target: '靶点',
+      protein: '蛋白',
+      structure: '结构',
+      noTargets: '该项目还没有靶点；可以先到「靶点」页新建，或直接上传结构文件。',
+      noStructures: '这个蛋白还没有可用的结构；先做一次结构预测或导入结构。',
+      structureSelected: '已选定结构，将以它的坐标文件作为受体。',
+      needProject: '请先选择项目，才能使用项目内的结构与候选集。',
+      needStructure: '请选择一个有坐标文件的结构作为受体。',
+      needCandidateSet: '请选择一个候选集作为配体库。',
+      candidateSet: '候选集',
+      candidateSetHint: '候选集里的分子会作为配体库直接送入筛选，不需要再导出、再上传。',
+      noCandidateSets: '该项目还没有候选集；可以先跑一次分子生成，或改用本地上传。',
+      candidateSetExportFailed: '候选集导出失败，请稍后重试或改用本地上传。',
       ligandLibrary: '配体库（SDF / MOL / CSV，可多文件）',
       ligands: '配体库',
       pocket: '结合口袋（可选）',
@@ -2332,7 +2479,8 @@ export default {
         rg: '回转半径 Rg',
         temperature: '温度'
       },
-      chartXAxis: '时间 (ps)'
+      chartXAxis: '时间 (ps)',
+      chartResidueAxis: '残基序号'
     },
     freeEnergy: {
       title: '自由能结果',
@@ -2341,7 +2489,7 @@ export default {
       standardError: '标准误',
       stdDev: '标准差',
       frameCount: '有效帧数',
-      unit: 'kJ/mol',
+      unit: 'kcal/mol',
       decompositionTitle: '能量分解（各组分均值）',
       convergenceTitle: '逐帧 ΔG 收敛曲线',
       vdw: '范德华 (vdW)',
@@ -2350,7 +2498,7 @@ export default {
       nonpolarSolvation: '非极性溶剂化',
       sasa: 'SASA',
       axisFrame: '帧',
-      axisY: 'ΔG (kJ/mol)',
+      axisY: 'ΔG (kcal/mol)',
       exportCsv: '导出 CSV',
       noData: '暂无可用的自由能数据',
       sourceNote: '若数据源未提供标准误列，标准误按逐帧 ΔG 的样本标准差除以 √n 真实计算。'
@@ -2369,7 +2517,8 @@ export default {
       pocketTitle: '口袋预测结果',
       pocketSubtitle: '查看候选口袋、口袋文件与三维结构预览',
       pocketComplexTitle: '蛋白 · 口袋 · 体素格叠加视图',
-      pocketComplexHint: '灰色卡通显示完整蛋白，橙色球棍显示口袋残基，青色线框显示口袋体素占位，三者叠加查看结合位点。',
+      pocketComplexHint: '灰色卡通显示完整蛋白，橙色卡通高亮口袋残基，青色线框显示口袋体素占位，三者叠加查看结合位点。',
+      pocketComplexLoading: '正在装载蛋白结构与口袋数据…',
       legendProtein: '蛋白结构',
       legendPocket: '口袋残基',
       legendVoxel: '体素格',
@@ -2383,6 +2532,9 @@ export default {
       pocketCount: '口袋数量',
       selectedModel: '使用模型',
       pocketList: '候选口袋',
+      keyResidues: '关键残基',
+      keyResiduesHint: '按口袋内评分从高到低 · 可多选，用于核对关键位点',
+      viewInAchievements: '在项目成果页查看 3D 高亮',
       pocketId: '口袋',
       pocketFiles: '口袋文件',
       noOutput: '该任务已成功，但没有可展示的产物',
@@ -2434,6 +2586,7 @@ export default {
     taskDetail: '任务详情',
     taskWorkspace: {
       backToCenter: '返回任务中心',
+      backToProject: '返回项目总览',
       views: '任务视图切换',
       detail: '任务详情',
       result: '运行结果',
@@ -2519,6 +2672,7 @@ export default {
     // 操作
     progress: '进度',
     logCount: '共 {count} 条',
+    logCountPartial: '共 {total} 条 · 显示最近 {shown} 条',
     logs: '日志',
     result: '结果',
     inputParams: '输入参数',

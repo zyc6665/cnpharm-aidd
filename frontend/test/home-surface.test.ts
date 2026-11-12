@@ -132,5 +132,5 @@ test('首页页脚应提供产品导航', () => {
 
   assert.equal(homeSource.includes('footer-brand'), true)
   assert.equal(homeSource.includes('footer-nav'), true)
-  assert.equal(homeSource.includes('to="/workflow"'), true)
+  assert.equal(homeSource.includes('to="/design"'), true)
 })

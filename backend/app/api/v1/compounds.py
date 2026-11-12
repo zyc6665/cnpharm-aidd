@@ -15,7 +15,7 @@ import csv
 import io
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,7 @@ from app.feature_flags import require_feature_flag
 from app.files.content import read_file_bytes
 from app.files.file_records import is_file_usable, user_can_access_file
 from app.files.remote_access_tokens import create_browser_file_access_token
+from app.logging.audit import ResourceType
 from app.models.compounds import (
     CANDIDATE_TYPE_SMALL_MOLECULE,
     Candidate,
@@ -50,6 +51,7 @@ from app.schemas.compounds import (
     CompoundImportRequest,
 )
 from app.services import domain_compounds
+from app.services.audit_exports import record_export
 from app.services.project_access import load_project_membership, require_project_role
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -661,6 +663,7 @@ async def remove_candidate_set_item(
 @router.post("/candidate-sets/{set_id}:export", response_model=dict)
 async def export_candidate_set(
     set_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -756,6 +759,18 @@ async def export_candidate_set(
         await db.rollback()
         file_id = None
 
+    record_export(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.CANDIDATE_SET,
+        resource_id=str(candidate_set.id),
+        resource_name=candidate_set.name,
+        kind="candidate_set_csv",
+        format="csv",
+        row_count=len(rows),
+        file_id=str(file_id) if file_id else None,
+    )
+
     return success_response(
         data={
             "candidate_set_id": candidate_set.id,
@@ -767,6 +782,5 @@ async def export_candidate_set(
         },
         message=f"已导出 {len(rows)} 行",
     )
-
 
 __all__ = ["project_router", "router"]

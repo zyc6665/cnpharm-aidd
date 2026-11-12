@@ -12,7 +12,7 @@
 
     <div class="pocket-legend">
       <span class="legend-item"><i class="dot dot--pocket" />口袋残基</span>
-      <span class="legend-item"><i class="dot dot--focus" />选中残基</span>
+      <span class="legend-item"><i class="dot dot--focus" />选中残基（球棍）</span>
       <span class="legend-item"><i class="dot dot--ligand" />共晶配体</span>
     </div>
   </div>
@@ -25,19 +25,21 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { Asset } from 'molstar/lib/mol-util/assets'
 import { Color } from 'molstar/lib/mol-util/color'
+import { Sphere3D } from 'molstar/lib/mol-math/geometry'
+import { Vec3 } from 'molstar/lib/mol-math/linear-algebra'
 
 const props = withDefaults(
   defineProps<{
     pdbUrl: string
     /** auth_seq_id 列表：需要高亮的口袋残基 */
     resIds: number[]
-    /** 当前选中的残基（auth_seq_id），单独高亮 */
-    selectedResId?: number | null
+    /** 当前选中的残基（auth_seq_id），可多选，以球棍模型显示 */
+    selectedResIds?: number[]
     /** 口袋中心坐标，用于把镜头对焦到口袋 */
     pocketCenter?: [number, number, number] | null
     chain?: string
   }>(),
-  { selectedResId: null, pocketCenter: null, chain: 'A' }
+  { selectedResIds: () => [], pocketCenter: null, chain: 'A' }
 )
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -54,6 +56,9 @@ let resizeObserver: ResizeObserver | null = null
 
 let creating: Promise<void> | null = null
 
+/** 只改选中集时重建高亮，但保留用户当前的视角。 */
+let keepCamera = false
+
 async function ensureViewer() {
   if (viewer || !containerRef.value) {
     return
@@ -64,29 +69,29 @@ async function ensureViewer() {
   }
 
   creating = (async () => {
-  const host = containerRef.value
-  if (!host) return
-  const { Viewer } = await import('molstar/lib/apps/viewer/app')
-  viewer = await Viewer.create(host, {
-    layoutIsExpanded: false,
-    layoutShowControls: false,
-    collapseLeftPanel: true,
-    collapseRightPanel: true,
-    viewportShowControls: false,
-    viewportShowExpand: false,
-    viewportShowToggleFullscreen: false,
-    viewportShowSettings: false,
-    viewportShowSelectionMode: false,
-    viewportShowAnimation: false,
-    viewportShowTrajectoryControls: false,
-    viewportShowScreenshotControls: false
-  })
-  plugin = viewer.plugin
-  try {
-    plugin.canvas3d?.setProps({ renderer: { backgroundColor: Color(0x0b1a2e) } })
-  } catch {
-    /* 背景色设置失败不影响渲染 */
-  }
+    const host = containerRef.value
+    if (!host) return
+    const { Viewer } = await import('molstar/lib/apps/viewer/app')
+    viewer = await Viewer.create(host, {
+      layoutIsExpanded: false,
+      layoutShowControls: false,
+      collapseLeftPanel: true,
+      collapseRightPanel: true,
+      viewportShowControls: false,
+      viewportShowExpand: false,
+      viewportShowToggleFullscreen: false,
+      viewportShowSettings: false,
+      viewportShowSelectionMode: false,
+      viewportShowAnimation: false,
+      viewportShowTrajectoryControls: false,
+      viewportShowScreenshotControls: false
+    })
+    plugin = viewer.plugin
+    try {
+      plugin.canvas3d?.setProps({ renderer: { backgroundColor: Color(0x0b1a2e) } })
+    } catch {
+      /* 背景色设置失败不影响渲染 */
+    }
   })()
   await creating
   creating = null
@@ -118,27 +123,43 @@ async function buildHighlights() {
   const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
   const chainTest = MS.core.rel.eq([MS.ammp('auth_asym_id'), props.chain])
 
-  // 1) 口袋残基 —— 橙色球棍模型
-  if (props.resIds.length) {
-    const pocketExpr = MS.struct.generator.atomGroups({
+  const selected = new Set(props.selectedResIds)
+  const residueExpr = (ids: number[]) =>
+    MS.struct.generator.atomGroups({
       'chain-test': chainTest,
-      'residue-test': MS.core.set.has([MS.set(...props.resIds), MS.ammp('auth_seq_id')])
+      'residue-test': MS.core.set.has([MS.set(...ids), MS.ammp('auth_seq_id')])
     })
-    const comp = await addComponent(MS, pocketExpr, 'pocket-residues', '口袋残基', {
-      type: 'spacefill',
+
+  // 1) 口袋残基 —— 橙色卡通。选中的残基从中抽出来单独画，否则同一个原子
+  // 会被卡通与球棍画两遍，球棍正好埋在丝带里，看起来只是「颜色变了」。
+  const peripheral = props.resIds.filter((id) => !selected.has(id))
+  if (peripheral.length) {
+    const comp = await addComponent(MS, residueExpr(peripheral), 'pocket-residues', '口袋残基', {
+      type: 'cartoon',
       color: 'uniform',
-      colorParams: { value: 0xff7a45 },
-      size: 'uniform',
-      sizeParams: { value: 0.85 }
+      colorParams: { value: 0xff7a45 }
     })
     if (comp?.cell) focusCells.push(comp.cell)
   }
 
-  // 2) 共晶配体（AN2, 601）—— 按元素着色
-  const ligandExpr = MS.struct.generator.atomGroups({
-    'chain-test': chainTest,
-    'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), 601])
-  })
+  // 2) 选中残基 —— 球棍模型，点哪个显示哪个；没有选中就一个球棍都不画
+  if (props.selectedResIds.length) {
+    const comp = await addComponent(
+      MS,
+      residueExpr(props.selectedResIds),
+      'focus-residue',
+      '选中残基',
+      {
+        type: 'ball-and-stick',
+        color: 'uniform',
+        colorParams: { value: 0x22d3ee }
+      }
+    )
+    if (comp?.cell) focusCells.push(comp.cell)
+  }
+
+  // 3) 共晶配体（AN2, 601）—— 按元素着色
+  const ligandExpr = residueExpr([601])
   const lig = await addComponent(MS, ligandExpr, 'co-ligand', '共晶配体', {
     type: 'spacefill',
     color: 'element-symbol',
@@ -146,22 +167,6 @@ async function buildHighlights() {
     sizeParams: { value: 0.5 }
   })
   if (lig?.cell) focusCells.push(lig.cell)
-
-  // 3) 选中残基 —— 青色大球突出显示
-  if (props.selectedResId != null) {
-    const focusExpr = MS.struct.generator.atomGroups({
-      'chain-test': chainTest,
-      'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), props.selectedResId])
-    })
-    const foc = await addComponent(MS, focusExpr, 'focus-residue', '选中残基', {
-      type: 'spacefill',
-      color: 'uniform',
-      colorParams: { value: 0x22d3ee },
-      size: 'uniform',
-      sizeParams: { value: 1.1 }
-    })
-    if (foc?.cell) focusCells.push(foc.cell)
-  }
 }
 
 function cellBoundingSphere(cells: any[]) {
@@ -232,11 +237,16 @@ function focusPocket() {
   if (!plugin) return
   try {
     const sphere = localSphere ?? cellBoundingSphere(focusCells)
-    if (sphere) {
-      plugin.managers.camera.focusSphere(sphere, { durationMs: 0 })
-    } else {
+    if (!sphere) {
       plugin.managers.camera.reset(undefined, 0)
+      return
     }
+    // 必须包成 Sphere3D：直接传 { center, radius } 会把相机状态写成 NaN，
+    // 之后拖拽与滚轮都不再生效（NaN 参与任何运算仍是 NaN）。
+    plugin.managers.camera.focusSphere(
+      Sphere3D.create(Vec3.create(sphere.center.x, sphere.center.y, sphere.center.z), sphere.radius),
+      { durationMs: 0 }
+    )
   } catch (cause) {
     console.warn('focusPocket failed', cause)
   }
@@ -278,14 +288,19 @@ async function fadeCartoon() {
 let renderRunning = false
 let renderQueued = false
 
-async function render() {
+async function render(options: { keepCamera?: boolean } = {}) {
+  keepCamera = Boolean(options.keepCamera)
   if (renderRunning) {
     renderQueued = true
     return
   }
   renderRunning = true
-  loading.value = true
+  const silent = keepCamera
+  if (!silent) {
+    loading.value = true
+  }
   error.value = ''
+  const savedCamera = silent ? plugin?.canvas3d?.camera.state : null
   try {
     if (!props.pdbUrl) {
       loading.value = false
@@ -311,8 +326,13 @@ async function render() {
     await buildHighlights()
     await fadeCartoon()
     viewer?.handleResize()
-    window.setTimeout(focusPocket, 400)
-    window.setTimeout(focusPocket, 1500)
+    if (savedCamera) {
+      // 选中集变化时相机原样恢复：用户刚拖到的角度不该被一次高亮刷新夺走
+      plugin.canvas3d?.camera.setState(savedCamera, 0)
+    } else {
+      window.setTimeout(focusPocket, 400)
+      window.setTimeout(focusPocket, 1500)
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -320,7 +340,7 @@ async function render() {
     renderRunning = false
     if (renderQueued) {
       renderQueued = false
-      void render()
+      void render({ keepCamera })
     }
   }
 }
@@ -333,10 +353,20 @@ onMounted(async () => {
   await render()
 })
 
+// 结构或口袋残基集合变了才重建场景；只改选中集时重建高亮并保留视角
 watch(
-  () => [props.pdbUrl, props.resIds, props.selectedResId],
+  () => [props.pdbUrl, props.resIds, props.chain],
   () => {
     void render()
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.selectedResIds,
+  () => {
+    if (!plugin) return
+    void render({ keepCamera: true })
   },
   { deep: true }
 )

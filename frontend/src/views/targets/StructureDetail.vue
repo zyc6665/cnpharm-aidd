@@ -1,8 +1,9 @@
 <template>
   <main class="structure-detail-page" data-testid="structure-detail-page">
-    <router-link :to="backLink" class="back-link">
-      {{ t('targets.structure.backToTarget') }}
-    </router-link>
+    <AppBackLink
+      :fallback="backLink"
+      :parent-label="t('targets.structure.backToTarget')"
+    />
 
     <AppPageHeader :title="t('targets.structure.title')" :subtitle="t('targets.structure.subtitle')">
       <template #actions>
@@ -143,6 +144,7 @@
       </div>
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -169,6 +171,8 @@
     ProteinStructureDetail,
     StructureFileLink
   } from '@/types/targets'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -283,7 +287,7 @@
   @import '@/assets/styles/variables.less';
 
   .structure-detail-page {
-    max-width: 1180px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

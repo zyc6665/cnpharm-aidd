@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   buildAnalysisRows,
   buildFreeEnergyRows,
+  buildRmsfRows,
   cumulativeMean,
   downsampleSeries,
   energyComponentMeans,
@@ -170,8 +171,22 @@ test('CSV 行解析：缺失 time_ps 的分析行被跳过，frame 缺失按行�
   assert.equal(energyRows[1]?.frame, 5)
 })
 
-test('findOutputByStandardType 支持精确与版本前缀匹配', () => {
-  const outputs = [
+test('逐残基 RMSF 表按 residue_seq 解析，容错缺列与旧列名', () => {
+  const rows = buildRmsfRows([
+    { residue_seq: '1', residue_name: 'MET', rmsf_nm: '0.12' },
+    { residue: '745', residue_name: '', rmsf: '0.31' },
+    { residue_seq: '', residue_name: 'GLY', rmsf_nm: '0.5' }
+  ])
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0]?.residue_seq, 1)
+  assert.equal(rows[0]?.residue_name, 'MET')
+  assert.equal(rows[0]?.rmsf_nm, 0.12)
+  assert.equal(rows[1]?.residue_seq, 745)
+  assert.equal(rows[1]?.residue_name, null)
+  assert.equal(rows[1]?.rmsf_nm, 0.31)
+})
+
+test('findOutputByStandardType 支持精确与版本前缀匹配', () => {  const outputs = [
     { id: 'a', semantic_type: 'trajectory', standard_type: 'md_trajectory@1' },
     { id: 'b', semantic_type: 'energies', standard_type: null }
   ] as unknown as ResultOutputArtifact[]

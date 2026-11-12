@@ -89,9 +89,40 @@ export const retryTask = (id: string): Promise<ApiResponse<Task>> => {
 }
 
 // 获取任务日志
+// `order: 'desc'` 表示"从最新一条开始翻页"——长任务动辄上千行，取第 1 页升序
+// 只会拿到任务刚开始那几行，界面看起来就是"日志不动了"。
+export interface TaskLogQuery extends Record<string, unknown> {
+  page?: number
+  page_size?: number
+  level?: string
+  order?: 'asc' | 'desc'
+}
+
 export const getTaskLogs = (
   id: string,
+  params?: TaskLogQuery,
   options?: RequestOptions
 ): Promise<ApiResponse<PaginatedResponse<TaskLog>>> => {
-  return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`, undefined, options)
+  return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`, params, options)
+}
+
+/** 这次任务写进领域表的候选口袋（结果页据此展示关键残基）。 */
+export interface TaskPocketItem {
+  id: string
+  structure_id: string
+  rank: number | null
+  score: number | null
+  volume: number | null
+  residue_count: number | null
+  selected: boolean | null
+  task_id: string | null
+  project_id: string
+  target_id: string
+}
+
+export const listTaskPockets = (
+  id: string,
+  options?: RequestOptions
+): Promise<ApiResponse<{ items: TaskPocketItem[] }>> => {
+  return get<{ items: TaskPocketItem[] }>(`/tasks/${id}/pockets`, undefined, options)
 }

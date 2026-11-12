@@ -5,6 +5,7 @@ import asyncio
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
+from app.common.exceptions import ValidationException
 from app.models.tasks import TaskStatus
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import (
@@ -448,6 +449,10 @@ class TaskExecutor:
             raise
         except (GPUAllocationFailed, TaskExecutionError):
             raise
+        except ValidationException as exc:
+            # 内置工具的输入/环境校验失败是「有原因」的失败（缺 obabel、缺槽位文件…），
+            # 不能包成「未知错误」——那会把用户可自行解决的提示变成看不出所以然的报错。
+            raise TaskExecutionError(f"任务无法执行：{exc}") from exc
         except Exception as exc:
             logger.exception("Task %s unexpected error", self.task.id)
             raise TaskExecutionError(f"未知错误：{exc}") from exc
@@ -524,6 +529,11 @@ class TaskExecutor:
             if self._is_running():
                 TaskStateMachine.mark_timeout(self.task, error_message=exc.message)
             raise
+        except ValidationException as exc:
+            message = f"任务无法执行：{exc}"
+            if self._is_running():
+                TaskStateMachine.complete(self.task, success=False, error_message=message)
+            raise TaskExecutionError(message) from exc
         except TaskExecutionError as exc:
             if self._is_running():
                 TaskStateMachine.complete(self.task, success=False, error_message=exc.message)

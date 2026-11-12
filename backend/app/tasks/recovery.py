@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from app.services.standard_artifacts import (
+    StandardArtifactPersistenceResult,
     attach_standard_artifact_summary,
     persist_standard_artifacts_from_task_output,
 )
@@ -27,8 +28,12 @@ async def prepare_recovered_task_output(
     task,
     tool_version,
     output_result: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Normalize and persist standard artifacts for a recovered result."""
+) -> tuple[dict[str, Any], dict[str, Any], StandardArtifactPersistenceResult | None]:
+    """Normalize and persist standard artifacts for a recovered result.
+
+    第三个返回值是标准产物持久化结果，调用方用它做领域回写（docs/26 H-16）——
+    补回的结果和正常跑完的结果必须走同一套投影逻辑。
+    """
     try:
         output_result = await append_molecule_scoring_artifacts(
             db,
@@ -64,4 +69,4 @@ async def prepare_recovered_task_output(
             prepared_output["result"],
             standard_persistence,
         )
-    return prepared_output, output_result
+    return prepared_output, output_result, standard_persistence

@@ -1,6 +1,10 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getTaskCounts as apiGetTaskCounts, prepareTaskRun as apiPrepareTaskRun } from '@/api/tasks'
+import {
+  getTaskCounts as apiGetTaskCounts,
+  getTaskDetail as apiGetTaskDetail,
+  prepareTaskRun as apiPrepareTaskRun,
+} from '@/api/tasks'
 import { useTasksStore } from '../tasks'
 
 vi.mock('@/api/tasks', () => ({
@@ -103,5 +107,35 @@ describe('useTasksStore', () => {
     expect(store.tasks).toHaveLength(1)
     expect(store.total).toBe(1)
     expect(store.loading).toBe(false)
+  })
+
+  it('刷新任务详情不影响列表的加载态', async () => {
+    // 详情页在任务运行时会反复刷新；如果详情和列表共用一个 loading，
+    // 每来一条进度事件，列表页（以及详情页自己）都会被切成骨架屏。
+    let resolveDetail: (value: unknown) => void = () => undefined
+    vi.mocked(apiGetTaskDetail).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveDetail = resolve
+        }) as never
+    )
+
+    const store = useTasksStore()
+    store.loading = true // 模拟列表正在加载
+    const pending = store.fetchTaskDetail('task-1')
+
+    expect(store.detailLoading).toBe(true)
+    expect(store.loading).toBe(true) // 列表的加载态不被详情的请求改写
+
+    resolveDetail({
+      code: 200,
+      message: 'ok',
+      data: { id: 'task-1', status: 'running', progress: 42 },
+    })
+    await pending
+
+    expect(store.detailLoading).toBe(false)
+    expect(store.loading).toBe(true)
+    expect(store.currentTask?.id).toBe('task-1')
   })
 })

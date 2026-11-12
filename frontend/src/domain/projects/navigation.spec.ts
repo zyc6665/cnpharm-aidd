@@ -2,6 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   buildProjectDecisionsPath,
+  buildProjectDesignPath,
   buildProjectTaskPath,
   buildProjectWorkflowPath,
   buildProjectWorkspaceNavItems,
@@ -16,7 +17,7 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
     [
       '项目总览',
       '靶点与结构',
-      '高级编排',
+      '设计流程',
       '任务中心',
       '数据资产',
       '候选物',
@@ -31,7 +32,7 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
     [
       '/projects/project-1',
       '/projects/project-1/targets',
-      '/projects/project-1/workflow',
+      '/design?project_id=project-1',
       '/tasks?project_id=project-1',
       '/projects/project-1/assets',
       '/projects/project-1/candidates',
@@ -56,13 +57,15 @@ test('决策记录导航项排在结果中心之后、Artifact 谱系之前', ()
   assert.equal(buildProjectDecisionsPath('project-1'), '/projects/project-1/decisions')
 })
 
-test('项目任务路径编码 project_id，项目工作流路径保持项目路由', () => {
+test('项目任务路径编码 project_id，画布编排仍保留项目路由', () => {
   assert.equal(buildProjectTaskPath('project 1'), '/tasks?project_id=project%201')
+  assert.equal(buildProjectDesignPath('project 1'), '/design?project_id=project%201')
+  // 画布编排不再是顶级导航，但路由与构造函数保留：它是设计流程的高级形态。
   assert.equal(buildProjectWorkflowPath('project-1'), '/projects/project-1/workflow')
 })
 
 test('项目工作台导航 active 规则支持普通项目路径和任务中心 query', () => {
-  const [overview, targets, workflow, tasks] = buildProjectWorkspaceNavItems('project-1')
+  const [overview, targets, design, tasks] = buildProjectWorkspaceNavItems('project-1')
 
   assert.equal(
     isProjectWorkspaceNavItemActive(overview!, {
@@ -87,11 +90,29 @@ test('项目工作台导航 active 规则支持普通项目路径和任务中心
     true
   )
   assert.equal(
-    isProjectWorkspaceNavItemActive(workflow!, {
-      currentPath: '/projects/project-1/workflow/runs',
+    isProjectWorkspaceNavItemActive(design!, {
+      currentPath: '/design',
+      currentProjectId: 'project-1',
+      queryProjectId: 'project-1'
+    }),
+    true
+  )
+  // 画布编排是设计流程的高级形态：进画布时这一项仍然亮着。
+  assert.equal(
+    isProjectWorkspaceNavItemActive(design!, {
+      currentPath: '/projects/project-1/workflow',
       currentProjectId: 'project-1'
     }),
     true
+  )
+  // 别的项目在设计流程页时，本项目的这一项不能亮。
+  assert.equal(
+    isProjectWorkspaceNavItemActive(design!, {
+      currentPath: '/design',
+      currentProjectId: 'project-1',
+      queryProjectId: 'project-2'
+    }),
+    false
   )
   assert.equal(
     isProjectWorkspaceNavItemActive(tasks!, {

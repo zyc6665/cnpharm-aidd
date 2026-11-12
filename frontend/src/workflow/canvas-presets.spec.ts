@@ -3,11 +3,74 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
+import { WORKFLOW_CANVAS_PRESETS } from './canvas-presets'
+
 const workflowDir = dirname(fileURLToPath(import.meta.url))
 
 function readWorkflowFile(filename: string): string {
   return readFileSync(resolve(workflowDir, filename), 'utf8')
 }
+
+/**
+ * 直接读后端两处来源：
+ * - `platform_tool_seeding.py` 的 `REQUIRED_TOOL_SLUGS`：部署时一定会被 seed 的模型工具；
+ * - `capabilities.py` 里 `builtin-*` 的内置工具。
+ * 画布预置里出现的每个 slug 都必须落在这两个集合里，否则用户点「使用该模板」
+ * 会得到一个「未找到工具」的空节点——这类问题在类型层面完全看不出来。
+ */
+function readDeployedToolSlugs(): Set<string> {
+  const root = resolve(process.cwd(), '..', 'backend', 'app')
+  const seeding = readFileSync(resolve(root, 'services', 'platform_tool_seeding.py'), 'utf8')
+  const block = /REQUIRED_TOOL_SLUGS[^=]*=\s*\(([\s\S]*?)\)/.exec(seeding)?.[1] ?? ''
+  const slugs = new Set<string>()
+  for (const match of block.matchAll(/"([a-z0-9-]+)"/g)) {
+    slugs.add(match[1] ?? '')
+  }
+  const capabilities = readFileSync(resolve(root, 'tools', 'capabilities.py'), 'utf8')
+  for (const match of capabilities.matchAll(/^\s{4}"(builtin-[a-z0-9-]+)":\s*ToolCapability\(/gm)) {
+    slugs.add(match[1] ?? '')
+  }
+  return slugs
+}
+
+describe('workflow canvas presets reference deployed tools', () => {
+  it('预置模板里的每个工具 slug 都是后端真实部署的', () => {
+    const deployed = readDeployedToolSlugs()
+    expect(deployed.size).toBeGreaterThan(5)
+
+    const unknown: string[] = []
+    for (const preset of WORKFLOW_CANVAS_PRESETS) {
+      for (const node of preset.nodes) {
+        for (const slug of node.toolSlugs ?? []) {
+          if (!deployed.has(slug)) {
+            unknown.push(`${preset.id}/${node.id}: ${slug}`)
+          }
+        }
+      }
+    }
+
+    expect(unknown).toEqual([])
+  })
+
+  it('每个预置模板的边都指向模板内的节点', () => {
+    const dangling: string[] = []
+    for (const preset of WORKFLOW_CANVAS_PRESETS) {
+      const ids = new Set(preset.nodes.map((node) => node.id))
+      for (const edge of preset.edges) {
+        if (!ids.has(edge.source) || !ids.has(edge.target)) {
+          dangling.push(`${preset.id}: ${edge.id} (${edge.source} -> ${edge.target})`)
+        }
+      }
+    }
+    expect(dangling).toEqual([])
+  })
+
+  it('靶点制备与 MD/自由能模板已登记', () => {
+    const ids = WORKFLOW_CANVAS_PRESETS.map((preset) => preset.id)
+    expect(ids).toContain('target-preparation-template')
+    expect(ids).toContain('md-free-energy-template')
+  })
+})
 
 function readSrcFile(pathFromWorkflowDir: string): string {
   return readFileSync(resolve(workflowDir, pathFromWorkflowDir), 'utf8')

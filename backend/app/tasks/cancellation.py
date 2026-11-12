@@ -8,7 +8,7 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
-from app.config import settings, use_direct_task_execution
+from app.config import use_direct_task_execution
 from app.execution.records import (
     finish_task_execution_record_best_effort,
     task_external_execution_id,
@@ -29,6 +29,12 @@ from app.tasks.attempts import (
 
 
 logger = logging.getLogger(__name__)
+
+# 远端取消失败后的重试间隔。远程 API 执行器下线后，这里引用过
+# ``settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS``，而该配置项早已删除，
+# 于是取消运行中任务的请求会在 except 分支抛 AttributeError → 接口 500，
+# 且数据库里那次取消根本没有提交（任务还在跑）。改成模块常量，语义不变。
+REMOTE_CANCEL_RETRY_SECONDS = 300
 
 
 async def cancel_platform_task(
@@ -72,7 +78,7 @@ async def cancel_platform_task(
         extra_data["remote_cancel_error"] = str(exc)
         extra_data["remote_cancel_next_retry_at"] = (
             utcnow()
-            + timedelta(seconds=max(int(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS), 1))
+            + timedelta(seconds=max(int(REMOTE_CANCEL_RETRY_SECONDS), 1))
         ).isoformat()
         task.extra_data = extra_data
 

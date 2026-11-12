@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,6 +28,7 @@ from app.feature_flags import require_feature_flag
 from app.files.content import read_file_bytes
 from app.files.remote_access_tokens import create_browser_file_access_token
 from app.files.writer import store_file_bytes
+from app.logging.audit import ResourceType
 from app.models.files import File as FileModel, FileSourceType
 from app.models.targets import PROTEIN_SOURCE_IMPORT, Protein, ProteinStructure, Target
 from app.models.users import User
@@ -48,6 +49,8 @@ from app.schemas.targets import (
     TargetUpdate,
 )
 from app.services import data_versions, domain_targets
+from app.services.audit_exports import record_export
+from app.services.audit_mutations import record_domain_delete
 from app.services.project_access import load_project_membership, require_project_role
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -272,6 +275,7 @@ async def update_target(
 @router.delete("/targets/{target_id}", response_model=dict)
 async def delete_target(
     target_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -280,9 +284,20 @@ async def delete_target(
         db, target=target, user=current_user
     )
     project_id = str(target.project_id)
-    await domain_targets.delete_target_cascade(db, target_id=target_id)
+    target_name = str(target.name)
+    removed = await domain_targets.delete_target_cascade(db, target_id=target_id)
+    record_domain_delete(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.TARGET,
+        resource_id=target_id,
+        resource_name=target_name,
+        project_id=project_id,
+        removed=removed,
+    )
     return success_response(
-        data={"id": target_id, "project_id": project_id}, message="靶点已删除"
+        data={"id": target_id, "project_id": project_id, "removed": removed},
+        message="靶点已删除",
     )
 
 
@@ -586,6 +601,7 @@ async def get_structure_pdb(
 @router.post("/structures/{structure_id}:export", response_model=dict)
 async def export_structure(
     structure_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -605,6 +621,16 @@ async def export_structure(
     ]
     if not files:
         raise NotFoundException("该结构尚无可用文件")
+    record_export(
+        request=request,
+        current_user=current_user,
+        resource_type=ResourceType.STRUCTURE,
+        resource_id=str(structure.id),
+        resource_name=structure.source_type,
+        kind="structure_bundle",
+        file_roles=[entry["role"] for entry in files],
+        sha256=structure.sha256,
+    )
     return success_response(
         data={
             "structure_id": structure.id,
@@ -722,6 +748,7 @@ async def select_pocket(
 async def list_pocket_residues(
     pocket_id: str,
     key_only: bool = Query(False),
+    order: str = Query("score", pattern="^(score|position)$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -732,7 +759,18 @@ async def list_pocket_residues(
     residues = list(domain_targets.loaded_relationship(pocket, "residues") or [])
     if key_only:
         residues = [item for item in residues if item.is_key]
-    residues.sort(key=lambda item: (item.chain, item.residue_seq))
+    if order == "position":
+        residues.sort(key=lambda item: (item.chain, item.residue_seq))
+    else:
+        # 默认按打分从高到低：口袋残基是 8 Å 内的整份清单，按序号排等于把「哪个更
+        # 值得看」这个问题丢回给用户。没有分数的历史行排在最后，而不是当作 0 分。
+        residues.sort(
+            key=lambda item: (
+                -(float(item.contribution) if item.contribution is not None else -1.0),
+                item.chain,
+                item.residue_seq,
+            )
+        )
     return success_response(
         data={
             "pocket_id": pocket.id,

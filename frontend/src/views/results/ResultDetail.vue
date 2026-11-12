@@ -1,13 +1,11 @@
 <template>
   <main class="result-detail-page">
-    <router-link
+    <AppBackLink
       v-if="projectId"
-      :to="`/projects/${projectId}/results`"
-      class="back-link"
-      data-testid="result-back"
-    >
-      {{ t('results.detail.backToResults') }}
-    </router-link>
+      :fallback="`/projects/${projectId}/results`"
+      test-id="result-back"
+      :parent-label="t('results.detail.backToResults')"
+    />
 
     <AppPageHeader :title="resultTitle" :subtitle="t('results.detail.summary')">
       <template #actions>
@@ -345,6 +343,7 @@
       {{ t('results.errors.loadResult') }}
     </p>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -368,6 +367,8 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     TraceabilityOutput,
     TraceabilityPackage
   } from '@/types/compounds'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -529,7 +530,7 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   @import '@/assets/styles/variables.less';
 
   .result-detail-page {
-    max-width: 1240px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

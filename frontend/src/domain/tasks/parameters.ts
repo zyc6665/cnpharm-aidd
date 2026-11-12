@@ -55,6 +55,9 @@ export interface ParameterGroup {
 export const PARAMETER_LABELS: Record<string, { zh: string; en: string }> = {
   n_samples: { zh: '生成数量', en: 'Sample count' },
   num_samples: { zh: '生成数量', en: 'Sample count' },
+  // Pocket2Mol 的「一批生成多少」：并行采样进程数，不是一个 batch 内的分子数
+  // （上游采样是逐分子串行的，没有 batch 张量概念）。
+  batch_size: { zh: '并行采样批数', en: 'Parallel batches' },
   timesteps: { zh: '采样步数', en: 'Timesteps' },
   resamplings: { zh: '重采样次数', en: 'Resamplings' },
   jump_length: { zh: '跳跃步长', en: 'Jump length' },

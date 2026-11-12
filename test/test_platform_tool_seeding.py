@@ -153,7 +153,8 @@ async def test_outdated_tool_is_updated_not_duplicated(seed_db, monkeypatch):
     ("slug", "expected_version"),
     [
         ("autodock-vina-docking", "1.1.0"),
-        ("gromacs-md", "1.0.0"),
+        # 20261110_01：镜像 1.0.1（逐帧自由能 + RMSF/Rg）
+        ("gromacs-md", "1.0.1"),
         ("boltz2-affinity-prediction", "1.0.0"),
     ],
 )

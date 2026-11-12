@@ -20,17 +20,19 @@ export interface MdSubmitParams {
   device: 'auto' | 'cpu' | 'gpu'
 }
 
-/** P-27 `md_trajectory@1` 产物四个 file role（顺序无关）。 */
+/** P-27 `md_trajectory@1` 产物的 file role（`rmsf_csv` 自 v1.1 起由真镜像产出）。 */
 export type MdTrajectoryRole =
   | 'topology_pdb'
   | 'trajectory_dcd'
   | 'analysis_csv'
+  | 'rmsf_csv'
   | 'metadata_json'
 
 export const MD_TRAJECTORY_ROLES: readonly MdTrajectoryRole[] = [
   'topology_pdb',
   'trajectory_dcd',
   'analysis_csv',
+  'rmsf_csv',
   'metadata_json'
 ]
 
@@ -47,8 +49,17 @@ export interface MdAnalysisRow {
   potential_kj_mol: number | null
 }
 
-/** P-27 metadata_json 期望字段（全部可选，缺失时页面降级显示）。 */
-export interface MdTrajectoryMetadata {
+/**
+ * P-27 `rmsf_csv` 的标准列名。RMSF 是「时间平均后的逐残基涨落」，
+ * 不是逐帧量——它不随时间变化，所以单独一张表，横轴是残基序号。
+ */
+export interface RmsfRow {
+  residue_seq: number
+  residue_name: string | null
+  rmsf_nm: number | null
+}
+
+/** P-27 metadata_json 期望字段（全部可选，缺失时页面降级显示）。 */export interface MdTrajectoryMetadata {
   total_frames?: number
   duration_ns?: number
   force_field?: string
@@ -59,7 +70,7 @@ export interface MdTrajectoryMetadata {
 
 /**
  * P-28 `molecule_table@1`（semantic_type `energies`）的标准列名。
- * ΔG 单位按 kJ·mol⁻¹。CSV 若无标准误列，用逐帧标准差真实计算。
+ * ΔG 单位按 kcal·mol⁻¹（gmx_MMPBSA 原始单位）。CSV 若无标准误列，用逐帧标准差真实计算。
  */
 export interface FreeEnergyRow {
   frame: number

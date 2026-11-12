@@ -12,7 +12,7 @@
         <a-breadcrumb-item>{{ task?.name || task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
       </a-breadcrumb>
 
-      <SkeletonDetail v-if="loading" />
+      <SkeletonDetail v-if="loading && !task" />
           <div v-else-if="task" class="detail-content">
             <AppPageHeader :title="detailTitle" :subtitle="detailSubtitle">
               <template #actions>
@@ -292,7 +292,7 @@
                   <a-collapse-panel key="logs" :header="t('tasks.logs')">
                     <template #extra>
                       <a-space :size="4">
-                        <span class="log-count">{{ t('tasks.logCount', { count: logs.length }) }}</span>
+                        <span class="log-count">{{ logCountText }}</span>
                         <a-button type="link" size="small" :loading="logsLoading" @click.stop="fetchLogs">
                           <ReloadOutlined />
                         </a-button>
@@ -394,7 +394,9 @@ const progressStroke = computed(() => ({
 }))
 
 // 计算属性
-const loading = computed(() => tasksStore.loading)
+// 详情页只看详情自己的加载态：任务在跑时 SSE/轮询会反复刷新详情，
+// 若跟着列表的 loading 走，每来一条进度事件整页都会闪成骨架屏。
+const loading = computed(() => tasksStore.detailLoading)
 const task = computed(() => tasksStore.currentTask)
 const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
 const detailTitle = computed(() =>
@@ -507,6 +509,7 @@ const fetchTaskDetail = async () => {
 
 const {
   logs,
+  logsTotal,
   logsLoading,
   fetchLogs,
   start: startLiveUpdates,
@@ -516,6 +519,17 @@ const {
   task,
   fetchTaskDetail,
   updateTaskProgress: tasksStore.updateTaskProgress
+})
+
+// 「共 N 条」里的 N 是后端总量，不是面板里加载的条数：面板只保留最近 500 行，
+// 直接写 logs.length 会让用户以为日志被截断（或任务只写了这么多）。
+const logCountText = computed(() => {
+  const shown = logs.value.length
+  const total = logsTotal.value
+  if (total > shown) {
+    return t('tasks.logCountPartial', { total, shown })
+  }
+  return t('tasks.logCount', { count: shown })
 })
 
 // 日志默认收起。任务处于运行中或失败时自动展开，省一次点击。

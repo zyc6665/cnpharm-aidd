@@ -1,7 +1,7 @@
 <template>
   <div class="tool-detail-page">
     <div class="container">
-      <SkeletonDetail v-if="loading" />
+      <SkeletonDetail v-if="loading && !tool" />
       <div v-else-if="tool" class="tool-detail-shell">
         <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
           <template #actions>
@@ -433,7 +433,7 @@
   .tool-main {
     display: flex;
     width: 100%;
-    max-width: 920px;
+    max-width: @page-max-width;
     min-width: 0;
     flex-direction: column;
     gap: @spacing-xl;

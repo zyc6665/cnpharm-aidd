@@ -101,13 +101,13 @@ services:
   celery-worker:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads --concurrency=${CELERY_WORKER_CONCURRENCY:-16} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
       # Worker 用 null 池：asyncpg 连接绑定事件循环，threads/prefork 池下共享池会跨循环
       DB_POOL_MODE: null
-      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-default-$${HOSTNAME}","queue":"tool_tasks","tiers":["cpu","standard"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":0,"parallelism":4}'
+      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-default-$${HOSTNAME}","queue":"tool_tasks","tiers":["cpu","standard"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":0,"parallelism":16}'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -116,13 +116,13 @@ services:
   celery-worker-heavy:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_HEAVY_WORKER_CONCURRENCY:-1} --queues=heavy_compute
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads --concurrency=${CELERY_HEAVY_WORKER_CONCURRENCY:-2} --queues=heavy_compute
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: heavy_compute
       # Worker 用 null 池：asyncpg 连接绑定事件循环，threads/prefork 池下共享池会跨循环
       DB_POOL_MODE: null
-      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-heavy-$${HOSTNAME}","queue":"heavy_compute","tiers":["heavy"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":0,"parallelism":1}'
+      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-heavy-$${HOSTNAME}","queue":"heavy_compute","tiers":["heavy"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":0,"parallelism":2}'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -132,7 +132,7 @@ services:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
     profiles: ["gpu"]
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_GPU_WORKER_CONCURRENCY:-1} --queues=gpu_queue
+    command: celery -A app.worker.celery_app worker --loglevel=info --pool=threads --concurrency=${CELERY_GPU_WORKER_CONCURRENCY:-1} --queues=gpu_queue
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: gpu_queue

@@ -31,6 +31,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.auth.dependencies import get_current_user, get_current_user_optional  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger  # noqa: E402
 from app.main import app as main_app  # noqa: E402
 from app.models.artifacts import Artifact, ArtifactVersion  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
@@ -551,6 +552,41 @@ async def test_report_export_persists_pdf_with_15min_url(
     assert data["expires_in_seconds"] == 900
     assert data["download_url"].startswith("/api/v1/files/")
     assert "token=" in data["download_url"]
+
+
+@pytest.mark.asyncio
+async def test_report_export_writes_audit_event(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    monkeypatch,
+):
+    """导出 PDF 报告必须留痕（V3.0 §6.2 / docs/26 H-9）。"""
+    tool = await _create_tool(db_session, users[OWNER])
+    task = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, task_id="task-report-audit"
+    )
+
+    events: list = []
+    audit_logger = get_audit_logger()
+    monkeypatch.setattr(audit_logger, "enable_file_logging", False)
+    monkeypatch.setattr(audit_logger, "enable_db_logging", True)
+    monkeypatch.setattr(audit_logger, "_db_writer", events.append)
+
+    response = await api_client.post(
+        f"/api/v1/results/{task.id}/report:export", headers=_headers(OWNER)
+    )
+    assert response.status_code == 200
+
+    export_events = [event for event in events if event.action is AuditAction.EXPORT]
+    assert len(export_events) == 1
+    event = export_events[0]
+    assert event.resource_type is ResourceType.TASK
+    assert event.resource_id == task.id
+    assert event.extra["kind"] == "result_report_pdf"
+    assert event.extra["format"] == "pdf"
+    assert event.extra["sha256"] == response.json()["data"]["sha256"]
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,7 @@ from app.common.exceptions import ConflictException, NotFoundException, Validati
 from app.common.task_status import task_status_to_api
 from app.common.time import isoformat_utc
 from app.files.file_records import is_file_usable, user_can_access_file
+from app.models.artifacts import ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target
 from app.models.tasks import Task, TaskStatus
@@ -37,7 +38,9 @@ from app.models.tools import Tool, ToolStatus
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.schemas.targets import PocketCreate, StructurePredict, StructurePrepareRequest
+from app.services.pocket_residue_scoring import tier_for
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.service import create_and_schedule_tool_task
 
 WRITE_ROLES = ("owner", "editor")
@@ -192,6 +195,7 @@ def _number(value: Any) -> Any:
 
 
 def serialize_residue(residue: PocketResidue) -> dict:
+    contribution = _number(residue.contribution)
     return {
         "id": residue.id,
         "pocket_id": residue.pocket_id,
@@ -199,7 +203,10 @@ def serialize_residue(residue: PocketResidue) -> dict:
         "residue_seq": residue.residue_seq,
         "residue_name": residue.residue_name,
         "is_key": bool(residue.is_key),
-        "contribution": _number(residue.contribution),
+        "contribution": contribution,
+        # 分级由分数派生而不是另存一列：阈值调整后历史数据自动跟着变口径，
+        # 不会出现「分数 0.72 但标签写着外围」这种自相矛盾的行。
+        "score_tier": tier_for(contribution) if contribution is not None else None,
     }
 
 
@@ -329,6 +336,19 @@ async def structure_file_records(
     return record
 
 
+async def structure_input_file_record(
+    db: AsyncSession, *, structure: ProteinStructure, user: User
+) -> FileModel:
+    """下游计算（口袋预测/对接）的输入结构：有准备版本就优先用它。
+
+    任务规格 TGT-04-1 要求口袋预测以「结构准备后的可对接结构」为输入。过去这里
+    固定取 ``structure``（原始结构），准备产物等于白算；结构准备回写
+    ``prepared_urn`` 之后按角色取值才闭环（docs/26 H-16）。
+    """
+    role = "prepared" if _structure_urn(structure, "prepared") else "structure"
+    return await structure_file_records(db, structure=structure, user=user, role=role)
+
+
 # ---------------------------------------------------------------------------
 # Pocket selection & creation
 # ---------------------------------------------------------------------------
@@ -408,16 +428,29 @@ async def create_pocket(
 # ---------------------------------------------------------------------------
 
 
-async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> None:
+async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> dict[str, int]:
     """Delete a target with its proteins, structures, pockets and residues.
 
     显式按序删除而不是依赖 ORM cascade：异步会话下隐式懒加载会抛
     ``MissingGreenlet``，且数据库层没有 ``ON DELETE CASCADE``。
+
+    Returns:
+        删除行数（``proteins`` / ``structures`` / ``pockets`` / ``pocketResidues``），
+        供调用方写进审计详情：「删了一个靶点」和「删了一个靶点连带 4 个蛋白、
+        3 个结构、1 个口袋和 99 条残基」在事后追查时不是一回事。
     """
     structure_ids = select(ProteinStructure.id).join(
         Protein, Protein.id == ProteinStructure.protein_id
     ).where(Protein.target_id == target_id)
     pocket_ids = select(Pocket.id).where(Pocket.structure_id.in_(structure_ids))
+    removed = {
+        "proteins": await _count_rows(db, select(Protein.id).where(Protein.target_id == target_id)),
+        "structures": await _count_rows(db, structure_ids),
+        "pockets": await _count_rows(db, pocket_ids),
+        "pocketResidues": await _count_rows(
+            db, select(PocketResidue.id).where(PocketResidue.pocket_id.in_(pocket_ids))
+        ),
+    }
     await db.execute(sa_delete(PocketResidue).where(PocketResidue.pocket_id.in_(pocket_ids)))
     await db.execute(sa_delete(Pocket).where(Pocket.structure_id.in_(structure_ids)))
     await db.execute(
@@ -430,6 +463,13 @@ async def delete_target_cascade(db: AsyncSession, *, target_id: str) -> None:
     await db.execute(sa_delete(Protein).where(Protein.target_id == target_id))
     await db.execute(sa_delete(Target).where(Target.id == target_id))
     await db.commit()
+    return removed
+
+
+async def _count_rows(db: AsyncSession, statement) -> int:
+    """数一条 ``select(<id>)`` 语句的行数（删除前统计，删除后就数不出来了）。"""
+    count_statement = select(func.count()).select_from(statement.subquery())
+    return int((await db.execute(count_statement)).scalar_one())
 
 
 async def delete_project_domain_rows(db: AsyncSession, *, project_id: str) -> None:
@@ -541,7 +581,10 @@ async def submit_structure_preparation(
             tool_id=str(tool.id),
             tool_version_id=str(tool.current_version_id) if tool.current_version_id else None,
             params=dict(data.params),
-            file_ids=[str(source.id)],
+            # 内置工具的输入不是「随便挂几个文件」：执行器按标准输入槽名取文件
+            # （``builtin_inputs[protein_structure@1]``）。只给 ``file_ids`` 的话，
+            # 任务能提交、能排队，但跑到执行器里必然报「缺少 protein_structure@1 输入」。
+            standard_input_uploads={"protein": str(source.id)},
             priority=data.priority,
         ),
         extra_data={
@@ -552,13 +595,40 @@ async def submit_structure_preparation(
         },
     )
 
+async def structure_task_input(
+    db: AsyncSession, *, tool: Tool, file_id: str
+) -> dict[str, Any]:
+    """按工具形态给出任务的输入取值。
+
+    两种工具对「输入」的要求不一样：
+    - tool-package v2 工具（LVpocket / GROMACS）在 k8s 上执行时，输入必须是已经落盘
+      的标准 ``ArtifactVersion``，给裸文件 id 会在执行前就报「Kubernetes 输入需要
+      已落盘的标准 ArtifactVersion」；
+    - 内置工具（结构准备）由执行器按标准输入槽名取文件，需要 ``standard_input_uploads``。
+
+    所以先按 v2 口径找该文件的产物版本，找不到再退回标准输入上传。
+    """
+    config = getattr(getattr(tool, "current_version", None), "config", None) or {}
+    if tool_accepts_standard_input_bindings(config):
+        version_id = (
+            await db.execute(
+                select(ArtifactVersionFile.artifact_version_id)
+                .where(ArtifactVersionFile.file_id == file_id)
+                .order_by(ArtifactVersionFile.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if version_id:
+            return {"input_bindings": {"protein": str(version_id)}}
+    return {"standard_input_uploads": {"protein": file_id}}
+
 
 async def submit_pocket_prediction(
     db: AsyncSession, *, structure: ProteinStructure, user: User, data: StructurePredict
 ) -> Task:
     target = await structure_target(db, structure)
     await require_target_write_access(db, target=target, user=user)
-    source = await structure_file_records(db, structure=structure, user=user)
+    source = await structure_input_file_record(db, structure=structure, user=user)
     tool = await resolve_tool(
         db,
         slugs=POCKET_PREDICT_TOOL_SLUGS,
@@ -570,6 +640,7 @@ async def submit_pocket_prediction(
             params["top_k"] = int(params["top_k"])
         except (TypeError, ValueError) as exc:
             raise ValidationException("top_k 必须是整数") from exc
+    task_input = await structure_task_input(db, tool=tool, file_id=str(source.id))
     return await create_and_schedule_tool_task(
         db=db,
         current_user=user,
@@ -579,7 +650,7 @@ async def submit_pocket_prediction(
             tool_id=str(tool.id),
             tool_version_id=str(tool.current_version_id) if tool.current_version_id else None,
             params=params,
-            file_ids=[str(source.id)],
+            **task_input,
             priority=data.priority,
         ),
         extra_data={

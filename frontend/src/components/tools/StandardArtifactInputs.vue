@@ -39,6 +39,13 @@
           :current-tool-slug="toolSlug"
           @update:upload-list="(files) => emit('update-upload-list', slot.name, files)"
         />
+        <p
+          v-if="currentProjectId && compatibleArtifacts(slot).length === 0"
+          class="standard-artifact-empty"
+          data-testid="standard-artifact-empty"
+        >
+          {{ t('tools.noCompatibleArtifact') }}
+        </p>
       </div>
     </a-form-item>
   </div>

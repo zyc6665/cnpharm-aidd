@@ -115,6 +115,7 @@
       </a-col>
     </a-row>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
@@ -133,6 +134,7 @@
     candidateLocationLabel
   } from '@/domain/compounds'
   import type { Candidate, ComparisonPropertySource } from '@/types/compounds'
+  import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
   interface MatrixColumn {
     title: string
@@ -324,7 +326,7 @@
   @import '@/assets/styles/variables.less';
 
   .candidate-compare-page {
-    max-width: 1240px;
+    max-width: @page-max-width;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
   }

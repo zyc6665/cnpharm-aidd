@@ -16,6 +16,7 @@ import { resolveModelFamily } from '@/domain/design/modelFamilies'
 import { resolvePredictDetailProfile } from './predictDetailProfiles'
 import { buildPredictDistributionGroups } from './predict-distribution'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
+import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -447,6 +448,7 @@ onMounted(() => {
       />
     </template>
   </main>
+  <ResultDisclaimer />
 </template>
 
 <style scoped lang="less">

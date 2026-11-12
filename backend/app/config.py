@@ -508,16 +508,33 @@ class Settings(BaseSettings):
     # 共享一个进程级池，第二个并发任务会拿到绑在别人循环上的连接，报
     # `Future attached to a different loop` / `another operation is in progress`。
     # 因此 Worker 进程必须用 `null`（任务本身是分钟级，每条任务一条连接的代价可忽略），
-    # API 进程保持 `pooled`。见 docs/17「Celery Worker 部署前置条件」。
+    # API 进程保持 `pooled`。见 docs/internal/17「Celery Worker 部署前置条件」。
     DB_POOL_MODE: Literal["pooled", "null"] = "pooled"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
-    CELERY_TASK_SOFT_TIME_LIMIT: int = 3600  # 1小时软超时
-    CELERY_TASK_TIME_LIMIT: int = 7200  # 2小时硬超时
+    # 任务执行时限的上限（秒）。工具自己的 timeout_minutes 可以很长（MD 轨迹要跑几天），
+    # 但平台必须有一个封顶值，否则一个卡死的 Job 能占着卡位到天荒地老。
+    # 7 天既覆盖长轨迹，又留出「迟早会有人发现」的窗口。
+    TASK_TIMEOUT_MAX_SECONDS: int = 7 * 24 * 60 * 60
+    # Celery 的软/硬超时是**最后一道**兜底，必须大于任何工具的执行时限——
+    # 否则工具侧还没到时限，Celery 先以 SoftTimeLimitExceeded 把 worker 任务掐掉，
+    # 表现为「任务莫名其妙失败、日志里看不到模型错误」。
+    # 因此这里从 TASK_TIMEOUT_MAX_SECONDS 派生，而不是各自写死一个数。
+    CELERY_TASK_SOFT_TIME_LIMIT: int = TASK_TIMEOUT_MAX_SECONDS + 1800
+    CELERY_TASK_TIME_LIMIT: int = TASK_TIMEOUT_MAX_SECONDS + 3600
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     # Worker 可用性探测：派发任务与健康检查都先问一次「有没有 Worker 在消费」。
     # 单次 ping 的等待上限，以及结果缓存时长（避免每次提交任务都付一次广播开销）。
     CELERY_WORKER_PROBE_TIMEOUT_SECONDS: float = 2.0
     CELERY_WORKER_PROBE_CACHE_SECONDS: float = 10.0
+    # Worker 正在执行长任务时**无法应答 ping**（solo 池只有一个执行位，控制命令
+    # 排在任务后面），健康检查若只看 ping 就会把「忙」报成「死」。
+    # 所以 ping 失败时再看「运行日志是否还在写」：窗口内仍有 RUNNING 任务的日志
+    # 落库，就说明 Worker 活着，只是腾不出手回话。
+    CELERY_WORKER_ACTIVITY_WINDOW_SECONDS: float = 120.0
+    # 健康检查的去抖：连续失败这么多次才对外报异常。
+    # Redis 一次超时就把面板翻红（用户看到「缓存 unhealthy」，刷新一下又好了），
+    # 这种抖动比真故障更容易让人对监控失去信任。
+    HEALTH_CHECK_FAILURE_THRESHOLD: int = 2
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
     WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: int = 60
@@ -568,6 +585,17 @@ class Settings(BaseSettings):
     TASK_LOG_HARVEST_ENABLED: bool = True
     # 单任务最多归档多少字节；超出部分截断并标注，避免刷屏模型撑爆日志表。
     TASK_LOG_MAX_BYTES: int = 2_000_000
+    # 运行期日志与进度同步（docs/26 H-2、H-3）：执行侧往 stdout 打
+    # `__DRP_PROGRESS__ {"pct": 45, "message": "..."}`，平台按间隔增量拉日志、
+    # 解析进度写回 task.progress。关掉它长任务在页面上就只剩「运行中」三个字。
+    TASK_RUNTIME_LOG_SYNC_ENABLED: bool = True
+    # 间隔取 10s 是折中：K8s `sinceTime` 拉取本身很轻，但每轮都要为每个运行中
+    # 任务发一次 API 请求；再密对进度条的肉眼观感没有帮助（SSE 也只有 1s 粒度）。
+    TASK_RUNTIME_LOG_SYNC_INTERVAL_SECONDS: float = 10.0
+    # 单任务单轮最多处理多少字符，只保留尾部——进度标记总在最新几行。
+    TASK_RUNTIME_LOG_SYNC_MAX_CHARS: int = 200_000
+    # 单轮最多同步多少个运行中任务，避免某次长尾把一轮拖成分钟级。
+    TASK_RUNTIME_LOG_SYNC_MAX_TASKS: int = 50
     # 卡位调度（docs/09 §5.6、docs/13 §4.1）：卡位由 slots.yaml 静态声明，
     # 状态由 drp-node-agent 维护并上报，平台只消费与展示。
     # 内联 YAML 优先于文件路径；两者都为空时按「无卡位」启动，回退到本机 GPU 探测。

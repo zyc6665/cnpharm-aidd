@@ -171,6 +171,83 @@ const WORKFLOW_NODE_LIBRARY = {
     position: { x: 1080, y: 240 },
     producedOutputTypes: ['optimized_lead']
   },
+  proteinPreparation: {
+    id: 'tool-protein-preparation',
+    type: 'tool',
+    toolSlugs: ['builtin-protein-preparation'],
+    recommendedToolSlug: 'builtin-protein-preparation',
+    titleKey: 'workflow.nodes.proteinPreparation.title',
+    descriptionKey: 'workflow.nodes.proteinPreparation.description',
+    position: { x: 280, y: 160 },
+    requiredInputTypes: ['protein_structure@1'],
+    producedOutputTypes: ['protein_structure@1'],
+    inputArtifactSlots: [
+      { name: 'protein', type: 'protein_structure@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'prepared_protein', type: 'protein_structure@1', cardinality: 'one', required: true }
+    ]
+  },
+  mdSimulation: {
+    id: 'tool-md-simulation',
+    type: 'tool',
+    toolSlugs: ['gromacs-md'],
+    recommendedToolSlug: 'gromacs-md',
+    titleKey: 'workflow.nodes.mdSimulation.title',
+    descriptionKey: 'workflow.nodes.mdSimulation.description',
+    position: { x: 540, y: 80 },
+    requiredInputTypes: ['protein_structure@1'],
+    producedOutputTypes: ['md_trajectory@1', 'run_report@1'],
+    inputArtifactSlots: [
+      { name: 'protein_pdb', type: 'protein_structure@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'trajectory', type: 'md_trajectory@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
+    ]
+  },
+  freeEnergy: {
+    id: 'tool-free-energy',
+    type: 'tool',
+    toolSlugs: ['gmx-mmpbsa'],
+    recommendedToolSlug: 'gmx-mmpbsa',
+    titleKey: 'workflow.nodes.freeEnergy.title',
+    descriptionKey: 'workflow.nodes.freeEnergy.description',
+    position: { x: 540, y: 260 },
+    requiredInputTypes: ['protein_structure@1'],
+    producedOutputTypes: ['molecule_table@1', 'run_report@1'],
+    inputArtifactSlots: [
+      { name: 'protein_pdb', type: 'protein_structure@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'binding_energy', type: 'molecule_table@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
+    ]
+  },
+  resultStructure: {
+    id: 'result-structure',
+    type: 'result',
+    titleKey: 'workflow.nodes.resultStructure.title',
+    descriptionKey: 'workflow.nodes.resultStructure.description',
+    position: { x: 800, y: 160 },
+    requiredInputTypes: ['protein_structure@1']
+  },
+  resultMd: {
+    id: 'result-md',
+    type: 'result',
+    titleKey: 'workflow.nodes.resultMd.title',
+    descriptionKey: 'workflow.nodes.resultMd.description',
+    position: { x: 800, y: 80 },
+    requiredInputTypes: ['md_trajectory@1']
+  },
+  resultFreeEnergy: {
+    id: 'result-free-energy',
+    type: 'result',
+    titleKey: 'workflow.nodes.resultFreeEnergy.title',
+    descriptionKey: 'workflow.nodes.resultFreeEnergy.description',
+    position: { x: 800, y: 260 },
+    requiredInputTypes: ['molecule_table@1']
+  },
   resultSummary: {
     id: 'result-summary',
     type: 'result',
@@ -278,6 +355,8 @@ export const AIDD_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPre
     createEdge('edge-input-docking', 'input-protein', 'tool-docking', 'protein_pdb'),
     createEdge('edge-generation-docking', 'tool-molecule-generation', 'tool-docking', 'generated_ligand'),
     createEdge('edge-generation-property', 'tool-molecule-generation', 'tool-property-prediction', 'generated_ligand'),
+    createEdge('edge-generation-optimization', 'tool-molecule-generation', 'tool-lead-optimization', 'generated_ligand'),
+    createEdge('edge-property-result', 'tool-property-prediction', 'result-summary', 'property_report'),
     createEdge('edge-optimization-result', 'tool-lead-optimization', 'result-summary', 'optimized_lead')
   ]
 })
@@ -353,13 +432,42 @@ export const LIGAND_TO_ADMET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasP
   ]
 })
 
+export const TARGET_PREPARATION_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
+  id: 'target-preparation-template',
+  kind: 'pocket',
+  nameKey: 'workflow.canvasPresets.presets.targetPreparation.name',
+  descriptionKey: 'workflow.canvasPresets.presets.targetPreparation.description',
+  nodeKeys: ['inputProtein', 'proteinPreparation', 'resultStructure'],
+  edges: [
+    createEdge('edge-input-preparation', 'input-protein', 'tool-protein-preparation', 'protein_pdb'),
+    createEdge('edge-preparation-result', 'tool-protein-preparation', 'result-structure', 'protein_pdb')
+  ]
+})
+
+export const MD_FREE_ENERGY_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
+  id: 'md-free-energy-template',
+  kind: 'dynamics',
+  nameKey: 'workflow.canvasPresets.presets.mdFreeEnergy.name',
+  descriptionKey: 'workflow.canvasPresets.presets.mdFreeEnergy.description',
+  nodeKeys: ['inputProtein', 'proteinPreparation', 'mdSimulation', 'freeEnergy', 'resultMd', 'resultFreeEnergy'],
+  edges: [
+    createEdge('edge-input-md-preparation', 'input-protein', 'tool-protein-preparation', 'protein_pdb'),
+    createEdge('edge-preparation-md', 'tool-protein-preparation', 'tool-md-simulation', 'protein_pdb'),
+    createEdge('edge-preparation-free-energy', 'tool-protein-preparation', 'tool-free-energy', 'protein_pdb'),
+    createEdge('edge-md-result', 'tool-md-simulation', 'result-md', 'md_trajectory@1'),
+    createEdge('edge-free-energy-result', 'tool-free-energy', 'result-free-energy', 'molecule_table@1')
+  ]
+})
+
 export const WORKFLOW_CANVAS_PRESETS: readonly WorkflowCanvasPreset[] = [
   AIDD_WORKFLOW_CANVAS_PRESET,
+  TARGET_PREPARATION_CANVAS_PRESET,
   PROTEIN_TO_POCKET_CANVAS_PRESET,
   POCKET_TO_GENERATION_CANVAS_PRESET,
   PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET,
   GENERATION_TO_PROPERTY_CANVAS_PRESET,
-  LIGAND_TO_ADMET_CANVAS_PRESET
+  LIGAND_TO_ADMET_CANVAS_PRESET,
+  MD_FREE_ENERGY_CANVAS_PRESET
 ]
 
 export function getWorkflowCanvasPresetById(presetId: string): WorkflowCanvasPreset | null {
