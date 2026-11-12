@@ -66,31 +66,33 @@ test('六类残基颜色互不相同，便于在表里区分', () => {
 })
 
 test('口袋残基面板按「关键在上、全部在下」组织，且支持多选', () => {
-  const source = readSource('src/views/demo/Achievements.vue')
+  // 面板逻辑已经抽到独立组件，页面只负责持有选中集合并透传
+  const panel = readSource('src/components/pockets/PocketResiduePanel.vue')
+  const page = readSource('src/views/demo/Achievements.vue')
 
   // 多选状态是数组，不是单值
-  assert.match(source, /const selectedResIds = ref<number\[\]>\(\[\]\)/)
-  assert.doesNotMatch(source, /const selectedResId = ref<number \| null>/)
-  assert.match(source, /selectedResIds\.includes\(/)
-  assert.match(source, /function toggleResidue\(/)
-  assert.match(source, /function selectAllKeyResidues\(/)
-  assert.match(source, /function clearResidueSelection\(/)
-  assert.match(source, /:selected-res-ids="selectedResIds"/)
+  assert.match(page, /const selectedResIds = ref<number\[\]>\(\[\]\)/)
+  assert.doesNotMatch(page, /const selectedResId = ref<number \| null>/)
+  assert.match(page, /v-model:selected="selectedResIds"/)
+  assert.match(panel, /props\.selected\.includes\(/)
+  assert.match(panel, /function toggleResidue\(/)
+  assert.match(panel, /function selectAllKeyResidues\(/)
+  assert.match(panel, /function clearSelection\(/)
 
-  // 关键残基只取核心与关键两级
-  assert.match(source, /const keyResidues = computed\(/)
-  assert.match(source, /residue\.score_tier === 'core' \|\| residue\.score_tier === 'key'/)
+  // 关键残基只取核心与关键两级，分级由后端派生
+  assert.match(panel, /const keyResidues = computed\(/)
+  assert.match(panel, /score_tier === 'core' \|\| .*score_tier === 'key'/)
 
   // 关键残基区必须在「全部残基」表之前
-  const keyIndex = source.indexOf('class="key-residue-list"')
-  const allIndex = source.indexOf('data-testid="all-residues-table"')
+  const keyIndex = panel.indexOf('class="key-residue-list"')
+  const allIndex = panel.indexOf('data-testid="all-residues-table"')
   assert.ok(keyIndex > 0, '缺少关键残基列表')
   assert.ok(allIndex > keyIndex, '全部残基表必须排在关键残基之后')
 
   // 全部残基表不列分数列
-  const columnsBlock = source.slice(
-    source.indexOf('const allResidueColumns = ['),
-    source.indexOf('function allResidueRowClass')
+  const columnsBlock = panel.slice(
+    panel.indexOf('const allResidueColumns = ['),
+    panel.indexOf('function allResidueRowClass')
   )
   assert.ok(columnsBlock.length > 0, '缺少全部残基列定义')
   assert.doesNotMatch(columnsBlock, /title: '评分'|title: '分数'/)

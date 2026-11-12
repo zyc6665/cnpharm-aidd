@@ -79,6 +79,15 @@ function goResult(): void {
 <template>
   <div class="task-context-bar" :class="{ 'task-context-bar--compact': !showMeta }" data-testid="task-context-bar">
     <div v-if="showMeta" class="task-context-bar__meta">
+      <router-link
+        v-if="taskRecord?.project_id"
+        class="task-context-bar__back"
+        :to="`/projects/${taskRecord.project_id}`"
+        data-testid="task-context-project"
+      >
+        <span aria-hidden="true">←</span>
+        {{ t('tasks.taskWorkspace.backToProject') }}
+      </router-link>
       <router-link class="task-context-bar__back" to="/tasks" data-testid="task-context-back">
         <span aria-hidden="true">←</span>
         {{ t('tasks.taskWorkspace.backToCenter') }}

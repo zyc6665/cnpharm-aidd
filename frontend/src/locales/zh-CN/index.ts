@@ -80,6 +80,23 @@ export default {
   },
 
   // 导航
+  projectNav: {
+    title: '当前项目',
+    placeholder: '选择项目',
+    allProjects: '全部项目',
+    hint: '选了项目之后，这里会列出它的总览、靶点、任务与结果入口。',
+    overview: '项目总览',
+    targets: '靶点与结构',
+    workflow: '高级编排',
+    tasks: '任务中心',
+    assets: '数据资产',
+    candidates: '候选物',
+    results: '结果中心',
+    decisions: '决策记录',
+    lineage: 'Artifact 谱系',
+    settings: '项目设置'
+  },
+
   nav: {
     home: '首页',
     workspace: '工作台',
@@ -2566,6 +2583,7 @@ export default {
     taskDetail: '任务详情',
     taskWorkspace: {
       backToCenter: '返回任务中心',
+      backToProject: '返回项目总览',
       views: '任务视图切换',
       detail: '任务详情',
       result: '运行结果',

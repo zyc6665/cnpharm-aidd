@@ -42,6 +42,9 @@
       </div>
 
       <div class="sidebar-scroll">
+      <!-- 当前项目上下文：换项目 / 直达该项目的各个入口 -->
+      <SidebarProjectContext :collapsed="collapsed" />
+
       <!-- 主导航 -->
       <nav class="sidebar-nav" aria-label="主导航">
         <router-link
@@ -194,6 +197,7 @@ import {
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
+import SidebarProjectContext from '@/components/layout/SidebarProjectContext.vue'
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
 import { buildDesignNavGroups, isDesignNavItemActive, type DesignNavItem } from '@/domain/design/navigation'
 

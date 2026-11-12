@@ -80,6 +80,23 @@ export default {
   },
 
   // Navigation
+  projectNav: {
+    title: 'Current project',
+    placeholder: 'Select a project',
+    allProjects: 'All projects',
+    hint: 'Pick a project to jump straight to its overview, targets, tasks and results.',
+    overview: 'Overview',
+    targets: 'Targets & structures',
+    workflow: 'Advanced workflow',
+    tasks: 'Tasks',
+    assets: 'Data assets',
+    candidates: 'Candidates',
+    results: 'Results',
+    decisions: 'Decisions',
+    lineage: 'Artifact lineage',
+    settings: 'Project settings'
+  },
+
   nav: {
     home: 'Home',
     workspace: 'Workspace',
@@ -2579,6 +2596,7 @@ export default {
     taskDetail: 'Task Detail',
     taskWorkspace: {
       backToCenter: 'Back to Task Center',
+      backToProject: 'Back to project',
       views: 'Switch task view',
       detail: 'Task Detail',
       result: 'Run Results',
