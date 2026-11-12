@@ -168,12 +168,20 @@
                     :status="activeNode ? nodeStatuses[activeNode.id] : 'idle'"
                     :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
                     :task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
+                    :input-requirements="workflowInputRequirementDetails"
+                    :input-selections="workflowRunInputSelections"
+                    :input-options-by-semantic-type="artifactOptionsBySemanticType"
+                    :input-options-loading="workflowInputOptionsLoading"
+                    :can-upload-input="userStore.isLoggedIn"
+                    :uploading-input-key="uploadingWorkflowInputKey"
                     @select-tool="handleNodeToolSelect"
                     @update-node="workflowStore.updateCanvasNode"
                     @add-edge="handleAddEdge"
                     @delete-edge="handleDeleteEdge"
                     @update-edge-branch="handleUpdateWorkflowEdgeBranch"
                     @view-task-detail="handleViewTaskDetail"
+                    @select-input="handleWorkflowInputSelect"
+                    @upload-input="handleWorkflowInputUpload"
                   />
                 </template>
 

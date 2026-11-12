@@ -683,6 +683,15 @@ export default {
       toolSelector: 'Tool Selector',
       selectTool: 'Select tool',
       noToolRequired: 'This node does not require a tool.',
+      inputBindingTitle: 'Input source',
+      inputBindingPlaceholder: 'Pick an artifact from the project',
+      inputBindingUpload: 'Upload file',
+      inputBindingUploading: 'Uploading',
+      inputBindingHint:
+        'This is the same value as the input of the same name under Run configuration: ' +
+        'the input node takes its file from here at run time, and editing either place applies.',
+      inputBindingNoArtifact: 'The project has no artifact compatible with this input yet. Upload one, or produce one in the project first.',
+      inputBindingUnresolved: 'No workflow input requirement matches this input node — check its edge to the downstream tool.',
       nodeParameters: 'Node Parameters',
       runWorkflow: 'Run Workflow',
       configureNode: 'Configure Node',
@@ -1274,6 +1283,8 @@ export default {
     fileSourceArtifact: 'My Artifacts',
     selectArtifact: 'Select Artifact',
     selectProjectArtifact: 'Select a project file',
+    noCompatibleArtifact:
+      'The project has no artifact compatible with this input yet: upload a file, or produce one in the project first.',
     noArtifacts: 'No reusable artifacts yet',
     selectCompatibleArtifact: 'Select Compatible Artifact by Hierarchy',
     selectArtifactGroup: 'Select Group First',

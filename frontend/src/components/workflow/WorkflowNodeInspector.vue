@@ -15,7 +15,21 @@
 
       <a-tabs v-model:activeKey="activeTabKey" class="inspector-detail-tabs">
         <a-tab-pane key="config" :tab="t('workflow.inspector.configTab')">
+          <NodeInputBindingPanel
+            v-if="node.type === 'input'"
+            :node="node"
+            :template="template"
+            :requirements="inputRequirements ?? []"
+            :selections="inputSelections ?? {}"
+            :options-by-semantic-type="inputOptionsBySemanticType ?? {}"
+            :loading="inputOptionsLoading"
+            :can-upload="canUploadInput"
+            :uploading-key="uploadingInputKey"
+            @select="relayInputSelect"
+            @upload="relayInputUpload"
+          />
           <NodeToolPanel
+            v-else
             :node="node"
             :project-id="projectId"
             :selected-tool-slug="selectedToolSlug"
@@ -67,9 +81,11 @@ import type {
   WorkflowCanvasPreset,
 } from '@/workflow/canvas-types'
 import NodeEdgePanel from './NodeEdgePanel.vue'
+import NodeInputBindingPanel from './NodeInputBindingPanel.vue'
 import NodeResultPanel from './NodeResultPanel.vue'
 import NodeToolPanel from './NodeToolPanel.vue'
 import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
+import type { WorkflowInputRequirement } from '@/workflow/workflow-definitions'
 
 interface WorkflowAvailableTool {
   id?: string
@@ -88,6 +104,12 @@ const props = defineProps<{
   status?: WorkflowStepStatus
   selectedToolSlug?: string | null
   task?: WorkflowTaskRef | null
+  inputRequirements?: WorkflowInputRequirement[]
+  inputSelections?: Record<string, string | undefined>
+  inputOptionsBySemanticType?: Record<string, Array<{ value: string; label: string }>>
+  inputOptionsLoading?: boolean
+  canUploadInput?: boolean
+  uploadingInputKey?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -100,6 +122,8 @@ const emit = defineEmits<{
   (event: 'delete-edge', edgeId: string): void
   (event: 'update-edge-branch', edgeId: string, branch: WorkflowCanvasEdge['branch']): void
   (event: 'view-task-detail', nodeId: string): void
+  (event: 'select-input', requirementKey: string, artifactId: string | undefined): void
+  (event: 'upload-input', requirementKey: string, file: File): void
 }>()
 
 const { t, te } = useI18n()
@@ -150,6 +174,14 @@ function relayViewTaskDetail(nodeId: string) {
 function label(key: string) {
   if (te(key)) return t(key)
   return (key.split('.').pop() ?? key).replace(/([A-Z])/g, ' $1').replace(/[-_]/g, ' ').trim()
+}
+
+function relayInputSelect(requirementKey: string, artifactId: string | undefined) {
+  emit('select-input', requirementKey, artifactId)
+}
+
+function relayInputUpload(requirementKey: string, file: File) {
+  emit('upload-input', requirementKey, file)
 }
 
 watch(() => props.node?.id, focusConfiguration)
