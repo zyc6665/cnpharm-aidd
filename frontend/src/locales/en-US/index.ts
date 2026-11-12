@@ -2638,6 +2638,7 @@ export default {
     // Actions
     progress: 'Progress',
     logCount: '{count} entries',
+    logCountPartial: '{total} entries · showing latest {shown}',
     logs: 'Logs',
     result: 'Result',
     inputParams: 'Input Parameters',

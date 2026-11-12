@@ -292,7 +292,7 @@
                   <a-collapse-panel key="logs" :header="t('tasks.logs')">
                     <template #extra>
                       <a-space :size="4">
-                        <span class="log-count">{{ t('tasks.logCount', { count: logs.length }) }}</span>
+                        <span class="log-count">{{ logCountText }}</span>
                         <a-button type="link" size="small" :loading="logsLoading" @click.stop="fetchLogs">
                           <ReloadOutlined />
                         </a-button>
@@ -509,6 +509,7 @@ const fetchTaskDetail = async () => {
 
 const {
   logs,
+  logsTotal,
   logsLoading,
   fetchLogs,
   start: startLiveUpdates,
@@ -518,6 +519,17 @@ const {
   task,
   fetchTaskDetail,
   updateTaskProgress: tasksStore.updateTaskProgress
+})
+
+// 「共 N 条」里的 N 是后端总量，不是面板里加载的条数：面板只保留最近 500 行，
+// 直接写 logs.length 会让用户以为日志被截断（或任务只写了这么多）。
+const logCountText = computed(() => {
+  const shown = logs.value.length
+  const total = logsTotal.value
+  if (total > shown) {
+    return t('tasks.logCountPartial', { total, shown })
+  }
+  return t('tasks.logCount', { count: shown })
 })
 
 // 日志默认收起。任务处于运行中或失败时自动展开，省一次点击。

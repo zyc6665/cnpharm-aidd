@@ -2625,6 +2625,7 @@ export default {
     // 操作
     progress: '进度',
     logCount: '共 {count} 条',
+    logCountPartial: '共 {total} 条 · 显示最近 {shown} 条',
     logs: '日志',
     result: '结果',
     inputParams: '输入参数',

@@ -17,7 +17,6 @@ export interface TaskDetailLiveUpdatesOptions {
   updateTaskProgress: (taskId: string, progress: number, status?: TaskStatus) => void
   /** SSE 不可用（EventSource 缺失）时的兜底轮询间隔。 */
   intervalMs?: number
-  now?: () => number
   timestamp?: () => string
 }
 
@@ -29,10 +28,10 @@ export interface TaskDetailLiveUpdatesOptions {
  */
 export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) {
   const logs = ref<TaskLog[]>([])
+  const logsTotal = ref(0)
   const logsLoading = ref(false)
   const streamConnected = ref(false)
   const intervalMs = options.intervalMs ?? 5000
-  const now = options.now ?? (() => Date.now())
   const timestamp = options.timestamp ?? (() => new Date().toISOString())
   const taskStatus = computed(() => normalizeTaskStatus(options.task.value?.status))
   let refreshTimer: number | null = null
@@ -55,6 +54,12 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
       }
 
       logs.value = mergeTaskLogs(extractTaskLogs(response.data), logs.value)
+      // 后端总共写了多少行。面板只保留最近一段，界面上要能说清
+      // 「共 N 条，这里显示最近 M 条」，否则用户会以为日志被截断了。
+      const total = Number(response.data?.total ?? 0)
+      if (Number.isFinite(total) && total > logsTotal.value) {
+        logsTotal.value = total
+      }
     } catch {
       // Request errors are surfaced by the shared API layer.
     } finally {
@@ -126,6 +131,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   function openCurrentTaskChannel() {
     const currentTaskId = options.taskId.value
     logs.value = []
+    logsTotal.value = 0
     logSequence = 0
     void refreshTaskAndLogs(currentTaskId)
 
@@ -198,6 +204,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 
   return {
     logs,
+    logsTotal,
     logsLoading,
     streamConnected,
     fetchLogs,
