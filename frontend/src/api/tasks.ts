@@ -89,9 +89,19 @@ export const retryTask = (id: string): Promise<ApiResponse<Task>> => {
 }
 
 // 获取任务日志
+// `order: 'desc'` 表示"从最新一条开始翻页"——长任务动辄上千行，取第 1 页升序
+// 只会拿到任务刚开始那几行，界面看起来就是"日志不动了"。
+export interface TaskLogQuery extends Record<string, unknown> {
+  page?: number
+  page_size?: number
+  level?: string
+  order?: 'asc' | 'desc'
+}
+
 export const getTaskLogs = (
   id: string,
+  params?: TaskLogQuery,
   options?: RequestOptions
 ): Promise<ApiResponse<PaginatedResponse<TaskLog>>> => {
-  return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`, undefined, options)
+  return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`, params, options)
 }

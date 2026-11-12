@@ -526,6 +526,15 @@ class Settings(BaseSettings):
     # 单次 ping 的等待上限，以及结果缓存时长（避免每次提交任务都付一次广播开销）。
     CELERY_WORKER_PROBE_TIMEOUT_SECONDS: float = 2.0
     CELERY_WORKER_PROBE_CACHE_SECONDS: float = 10.0
+    # Worker 正在执行长任务时**无法应答 ping**（solo 池只有一个执行位，控制命令
+    # 排在任务后面），健康检查若只看 ping 就会把「忙」报成「死」。
+    # 所以 ping 失败时再看「运行日志是否还在写」：窗口内仍有 RUNNING 任务的日志
+    # 落库，就说明 Worker 活着，只是腾不出手回话。
+    CELERY_WORKER_ACTIVITY_WINDOW_SECONDS: float = 120.0
+    # 健康检查的去抖：连续失败这么多次才对外报异常。
+    # Redis 一次超时就把面板翻红（用户看到「缓存 unhealthy」，刷新一下又好了），
+    # 这种抖动比真故障更容易让人对监控失去信任。
+    HEALTH_CHECK_FAILURE_THRESHOLD: int = 2
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
     WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: int = 60

@@ -110,7 +110,7 @@ describe('useTaskDetailLiveUpdates', () => {
     await updates.start()
 
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
-    expect(getTaskLogs).toHaveBeenCalledWith('task-1')
+    expect(getTaskLogs).toHaveBeenCalledWith('task-1', { page_size: 200, order: 'desc' })
     expect(openTaskEventStream).toHaveBeenCalledTimes(1)
     expect(updates.streamConnected.value).toBe(true)
 
@@ -156,7 +156,7 @@ describe('useTaskDetailLiveUpdates', () => {
       timestamp: '2026-08-20T00:00:01Z',
     })
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
-    expect(getTaskLogs).toHaveBeenCalledWith('task-1')
+    expect(getTaskLogs).toHaveBeenCalledWith('task-1', { page_size: 200, order: 'desc' })
   })
 
   it('ignores events addressed to another task', async () => {
@@ -225,7 +225,7 @@ describe('useTaskDetailLiveUpdates', () => {
 
     expect(stream.close).toHaveBeenCalledTimes(1)
     expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
-    expect(getTaskLogs).toHaveBeenLastCalledWith('task-2')
+    expect(getTaskLogs).toHaveBeenLastCalledWith('task-2', { page_size: 200, order: 'desc' })
     const calls = vi.mocked(openTaskEventStream).mock.calls
     expect(calls[calls.length - 1]?.[0]).toBe('task-2')
     expect(updates.logs.value).toEqual([

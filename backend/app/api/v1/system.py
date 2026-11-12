@@ -7,6 +7,7 @@ import platform
 import psutil
 import asyncio
 import shutil
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
@@ -21,6 +22,7 @@ from app.database.session import get_db
 from app.config import settings, use_async_tasks
 from app.auth.dependencies import get_admin_user
 from app.common.responses import success_response
+from app.models.tasks import Task, TaskLog, TaskStatus
 from app.models.users import User
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.tasks.executors.factory import supported_executor_types
@@ -28,6 +30,35 @@ from app.tasks.executors.factory import supported_executor_types
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 logger = logging.getLogger(__name__)
+
+# 探针去抖状态：服务名 → 连续失败次数。
+# 进程内状态足够——健康检查本来就是「这个进程看到的最近几次结果」，
+# 多副本各自去抖没有一致性问题（每副本都会独立发现真故障）。
+_probe_failure_streaks: dict[str, int] = {}
+
+
+def _probe_failed(service: str) -> None:
+    """记录一次探活失败；调用方据返回值决定要不要对外报异常。"""
+    _probe_failure_streaks[service] = _probe_failure_streaks.get(service, 0) + 1
+
+
+def _probe_succeeded(service: str) -> None:
+    _probe_failure_streaks.pop(service, None)
+
+
+def _probe_streak(service: str) -> int:
+    return _probe_failure_streaks.get(service, 0)
+
+
+def _is_beyond_threshold(service: str) -> bool:
+    """连续失败次数是否已达到「可以对外报异常」的门槛。"""
+    threshold = max(1, int(getattr(settings, "HEALTH_CHECK_FAILURE_THRESHOLD", 1) or 1))
+    return _probe_streak(service) >= threshold
+
+
+def reset_health_probe_state_for_tests() -> None:
+    """清空探针去抖状态（测试用）。"""
+    _probe_failure_streaks.clear()
 
 
 def _optional_float(value: object) -> float | None:
@@ -245,7 +276,7 @@ async def _collect_health_status(
 
     # 5. 检查任务队列（如果启用）
     if settings.TASK_EXECUTION_BACKEND == "celery" and use_async_tasks():
-        celery_status = await _check_celery()
+        celery_status = await _check_celery(db)
         services.append(celery_status)
         if celery_status.status != "healthy" and overall_status == "healthy":
             overall_status = "degraded"
@@ -356,7 +387,12 @@ async def _check_database_schema(db: AsyncSession) -> ServiceStatus:
 
 
 async def _check_cache() -> ServiceStatus:
-    """检查缓存服务"""
+    """检查缓存服务
+
+    单次超时不判异常：Redis 偶发抖动（连接复用、网络瞬时拥塞）会让探测失败一次，
+    但缓存对业务的实际影响是「慢」，不是「坏」。连续失败达到
+    ``HEALTH_CHECK_FAILURE_THRESHOLD`` 次才对外报 unhealthy。
+    """
     start = utcnow()
     try:
         from app.cache import get_cache_backend
@@ -373,19 +409,40 @@ async def _check_cache() -> ServiceStatus:
         latency = (utcnow() - start).total_seconds() * 1000
 
         if result == test_value:
+            _probe_succeeded("cache")
             return ServiceStatus(
                 name="cache",
                 status="healthy",
                 latency_ms=round(latency, 2),
                 message=f"缓存服务正常 ({settings.CACHE_BACKEND})",
             )
-        else:
+        _probe_failed("cache")
+        if not _is_beyond_threshold("cache"):
             return ServiceStatus(
-                name="cache", status="unhealthy", message="缓存读写不一致"
+                name="cache",
+                status="healthy",
+                latency_ms=round(latency, 2),
+                message=(
+                    "缓存读写不一致（连续 "
+                    f"{_probe_streak('cache')} 次，未达判定阈值）"
+                ),
             )
-    except Exception as e:
         return ServiceStatus(
-            name="cache", status="unhealthy", message=f"缓存服务异常: {str(e)}"
+            name="cache", status="unhealthy", message="缓存读写不一致"
+        )
+    except Exception as e:
+        _probe_failed("cache")
+        if _is_beyond_threshold("cache"):
+            return ServiceStatus(
+                name="cache", status="unhealthy", message=f"缓存服务异常: {str(e)}"
+            )
+        return ServiceStatus(
+            name="cache",
+            status="healthy",
+            message=(
+                f"缓存最近一次探活失败（连续 {_probe_streak('cache')} 次），"
+                f"未达判定阈值: {str(e)}"
+            ),
         )
 
 
@@ -437,16 +494,44 @@ async def _check_storage() -> ServiceStatus:
         )
 
 
-async def _check_celery() -> ServiceStatus:
+async def _recent_running_task_log_age(db: AsyncSession) -> float | None:
+    """返回最近一条「运行中任务」日志距今的秒数；没有则 None。
+
+    Worker 边跑任务边按游标把容器日志写进 ``task_logs``（``runtime_log_sync``，
+    默认 10 秒一轮）。所以「最近还在写日志」是比 ping 更强的存活证据：
+    ping 需要 Worker 空闲才能应答，而写日志恰恰发生在它忙的时候。
+    """
+    window = float(getattr(settings, "CELERY_WORKER_ACTIVITY_WINDOW_SECONDS", 0) or 0)
+    if window <= 0:
+        return None
+    now = utcnow()
+    latest = await db.scalar(
+        select(func.max(TaskLog.timestamp))
+        .join(Task, Task.id == TaskLog.task_id)
+        .where(
+            Task.status == TaskStatus.RUNNING.value,
+            TaskLog.timestamp >= now - timedelta(seconds=window),
+        )
+    )
+    if latest is None:
+        return None
+    return max(0.0, (now - latest).total_seconds())
+
+
+async def _check_celery(db: AsyncSession | None = None) -> ServiceStatus:
     """检查 Celery broker 配置及至少一个活跃 Worker。
 
-    两点与派发路径不同：
+    三点与派发路径不同：
 
     1. Broker 地址取「实际生效值」——`settings.CELERY_BROKER_URL` 为空时回落到
        `celery_app.conf.broker_url`（程序化配置、测试替身都走这条路）。
     2. **不走探测缓存**。健康检查就是用来发现「Worker 刚死掉」的，用一份几分钟前的
        缓存回答等于把要发现的问题藏起来。一次 ``inspect().ping()`` 的代价在探针
        周期（通常 10~30 秒）下可以接受。
+    3. **ping 不应答不等于 Worker 死了**。solo 池只有一个执行位，长任务跑起来后
+       控制命令排在任务后面，ping 必然超时；此时改用「运行中的任务最近是否还在
+       写日志」判断存活，否则界面上会出现「任务在跑，却报没有活跃 Worker」。
+       ``db`` 为 None（纯单元调用）时跳过这条旁证。
     """
 
     from app.worker.health import _effective_broker_url, probe_workers
@@ -464,6 +549,24 @@ async def _check_celery() -> ServiceStatus:
             status="healthy",
             message=f"Celery broker 正常，活跃 Worker 数: {len(availability.workers)}",
         )
+
+    log_age: float | None = None
+    if db is not None:
+        try:
+            log_age = await _recent_running_task_log_age(db)
+        except Exception as exc:  # noqa: BLE001 - 旁证失败不能让健康检查本身 500
+            logger.debug("读取运行日志新鲜度失败: %s", exc)
+
+    if log_age is not None:
+        return ServiceStatus(
+            name="celery",
+            status="healthy",
+            message=(
+                "Celery Worker 正在执行任务（ping 因忙碌未应答，"
+                f"最近 {log_age:.0f} 秒内仍在写入运行日志）"
+            ),
+        )
+
     return ServiceStatus(
         name="celery",
         status="degraded",

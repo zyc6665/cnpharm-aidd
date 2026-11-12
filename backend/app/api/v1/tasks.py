@@ -824,10 +824,24 @@ async def get_task_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     level: Optional[str] = None,
+    order: str = Query(
+        "asc",
+        pattern="^(asc|desc)$",
+        description=(
+            "asc=从最早一条开始翻页（默认，兼容既有调用）；"
+            "desc=从最新一条开始翻页——长任务的日志有上千行，"
+            "想看「现在在干什么」必须能从尾部取。"
+            "无论哪种顺序，返回的 items 内部始终按时间升序，前端直接渲染即可。"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取任务日志"""
+    """获取任务日志
+
+    `order=desc` 时先按时间倒序取第 `page` 页，再在内存里翻转成升序返回：
+    调用方拿到的永远是「一段连续的、按时间正序的日志」，而 `page=1` 就是最新的那一段。
+    """
     # 检查任务是否存在和权限
     result = await db.execute(
         select(Task).where(Task.id == task_id)
@@ -852,10 +866,15 @@ async def get_task_logs(
 
     # 分页
     query = query.offset((page - 1) * page_size).limit(page_size)
-    query = query.order_by(TaskLog.timestamp.asc())
+    if order == "desc":
+        query = query.order_by(TaskLog.timestamp.desc())
+    else:
+        query = query.order_by(TaskLog.timestamp.asc())
 
     result = await db.execute(query)
-    logs = result.scalars().all()
+    logs = list(result.scalars().all())
+    if order == "desc":
+        logs.reverse()
 
     return paginated_response(
         items=[_serialize_task_log(log) for log in logs],

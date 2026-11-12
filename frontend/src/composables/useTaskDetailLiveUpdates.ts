@@ -4,6 +4,12 @@ import { openTaskEventStream, type TaskEventPayload, type TaskLogEventPayload } 
 import type { Task, TaskLog, TaskStatus } from '@/types/models'
 import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus, terminalStatuses } from '@/domain/tasks'
 
+/** 每次拉取的日志条数（后端上限 200）。 */
+const LOG_PAGE_SIZE = 200
+
+/** 内存里保留的最大日志条数，防止一次超长任务把页面拖慢。 */
+const LOG_MAX_ITEMS = 500
+
 export interface TaskDetailLiveUpdatesOptions {
   taskId: Ref<string>
   task: Ref<Task | null>
@@ -37,7 +43,13 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   async function fetchLogs(taskId = options.taskId.value) {
     logsLoading.value = true
     try {
-      const response = await getTaskLogs(taskId)
+      // 从**最新**一段开始取（order=desc），而不是从任务开头那一页。
+      // 长任务日志上千行，取第 1 页升序等于把界面钉死在「刚开始」，
+      // 看上去就是「日志不再更新」（docs/17 §5.64）。
+      const response = await getTaskLogs(taskId, {
+        page_size: LOG_PAGE_SIZE,
+        order: 'desc',
+      })
       if (taskId !== options.taskId.value) {
         return
       }
@@ -195,8 +207,22 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 }
 
 function mergeTaskLogs(primaryLogs: TaskLog[], fallbackLogs: TaskLog[]): TaskLog[] {
-  const seen = new Set(primaryLogs.map(taskLogKey))
-  return [...primaryLogs, ...fallbackLogs.filter((log) => !seen.has(taskLogKey(log)))]
+  const byKey = new Map<string, TaskLog>()
+  for (const log of [...fallbackLogs, ...primaryLogs]) {
+    byKey.set(taskLogKey(log), log)
+  }
+  const merged = [...byKey.values()].sort(compareTaskLogOrder)
+  // 只保留最近的一段：日志面板是「看现在在干什么」的地方，不是归档。
+  return merged.slice(-LOG_MAX_ITEMS)
+}
+
+function compareTaskLogOrder(left: TaskLog, right: TaskLog): number {
+  const leftTime = Date.parse(left.timestamp)
+  const rightTime = Date.parse(right.timestamp)
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime
+  }
+  return String(left.id).localeCompare(String(right.id))
 }
 
 function taskLogKey(log: TaskLog): string {
