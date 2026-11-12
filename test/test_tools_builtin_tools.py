@@ -9,7 +9,6 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -438,6 +437,12 @@ def test_builtin_protein_preparation_emits_standard_result_v2(
         assert "HOH" not in prepared_pdb.read_text(encoding="utf-8")
         receptor_pdbqt.write_text("REMARK receptor pdbqt\n", encoding="utf-8")
 
+    # 引擎只在环境里真的有 obabel 时才试图产出 receptor.pdbqt；CI 镜像没装 openbabel，
+    # 所以这里要显式伪装「obabel 可用」，否则 fake_convert 根本不会被调用。
+    monkeypatch.setattr(
+        "app.protein_preparation.engine.shutil.which",
+        lambda name: "/usr/bin/obabel" if name == "obabel" else None,
+    )
     monkeypatch.setattr(
         "app.protein_preparation.engine.convert_prepared_pdb_to_pdbqt",
         fake_convert,
