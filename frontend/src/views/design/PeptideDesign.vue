@@ -29,6 +29,44 @@
       </section>
 
       <section class="design-section">
+        <h3 class="design-section__title">{{ t('design.peptide.sequenceSource') }}</h3>
+        <a-radio-group
+          v-model:value="sequenceSource"
+          button-style="solid"
+          data-testid="peptide-sequence-source"
+        >
+          <a-radio-button value="manual">{{ t('design.peptide.sourceManual') }}</a-radio-button>
+          <a-radio-button value="target">{{ t('design.peptide.sourceTarget') }}</a-radio-button>
+        </a-radio-group>
+        <div v-if="sequenceSource === 'target'" class="sequence-source" data-testid="peptide-target-source">
+          <a-select
+            v-model:value="selectedTargetId"
+            :options="targetOptions"
+            :loading="targetsLoading"
+            :placeholder="t('design.peptide.targetPlaceholder')"
+            :not-found-content="t('design.peptide.noTargets')"
+            show-search
+            option-filter-prop="label"
+            data-testid="peptide-target-select"
+            @change="handleTargetChange"
+          />
+          <a-select
+            v-model:value="selectedProteinId"
+            :options="proteinOptions"
+            :loading="proteinsLoading"
+            :disabled="!selectedTargetId"
+            :placeholder="t('design.peptide.proteinPlaceholder')"
+            :not-found-content="t('design.peptide.noProteins')"
+            show-search
+            option-filter-prop="label"
+            data-testid="peptide-protein-select"
+            @change="handleProteinChange"
+          />
+          <p class="field-hint">{{ t('design.peptide.targetSequenceHint') }}</p>
+        </div>
+      </section>
+
+      <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
         <ModelParameterForm
           v-if="selectedOption?.parameterSchema"
@@ -63,6 +101,7 @@
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { listDesignProjects, resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import { getTarget, listTargets } from '@/api/targets'
   import {
     buildDefaultValues,
     normalizeParameters,
@@ -70,6 +109,7 @@
     type ParameterValues
   } from '@/domain/tools/parameterSchema'
   import type { ResearchProject } from '@/types/projects'
+  import type { ProteinDetail } from '@/types/targets'
   import type { ResolvedDesignTool } from '@/types/design'
   import { PEPTIDE_DESIGN_TOOL_SLUG } from '@/types/design'
 
@@ -101,6 +141,26 @@
 
   const form = reactive<{ params: ParameterValues }>({ params: {} })
 
+  /**
+   * 序列来源：手填 or 复用项目里已有的靶点序列。
+   * 多肽设计真正需要的输入只有一条序列，能复用就不要再让人复制粘贴一遍。
+   */
+  const sequenceSource = ref<'manual' | 'target'>('manual')
+  const targets = ref<{ id: string; name: string }[]>([])
+  const proteins = ref<ProteinDetail[]>([])
+  const selectedTargetId = ref('')
+  const selectedProteinId = ref('')
+  const targetsLoading = ref(false)
+  const proteinsLoading = ref(false)
+
+  const targetOptions = computed(() => targets.value.map(item => ({ value: item.id, label: item.name })))
+  const proteinOptions = computed(() =>
+    proteins.value.map(item => ({
+      value: item.id,
+      label: `${item.name}${item.seq_length ? ` · ${item.seq_length} aa` : ''}`
+    }))
+  )
+
   const projectOptions = computed(() =>
     projects.value.map(project => ({ value: project.id, label: project.name }))
   )
@@ -122,6 +182,47 @@
       }
     } catch {
       projects.value = []
+    }
+  }
+
+  async function loadTargets(): Promise<void> {
+    if (!projectId.value) {
+      targets.value = []
+      return
+    }
+    targetsLoading.value = true
+    try {
+      const response = await listTargets(projectId.value, { page: 1, page_size: 100 })
+      targets.value = (response.data.items ?? []).map(item => ({ id: item.id, name: item.name }))
+    } catch {
+      targets.value = []
+    } finally {
+      targetsLoading.value = false
+    }
+  }
+
+  async function handleTargetChange(value: unknown): Promise<void> {
+    selectedTargetId.value = typeof value === 'string' ? value : ''
+    selectedProteinId.value = ''
+    proteins.value = []
+    if (!selectedTargetId.value) return
+    proteinsLoading.value = true
+    try {
+      const response = await getTarget(selectedTargetId.value)
+      proteins.value = response.data.proteins ?? []
+    } catch {
+      proteins.value = []
+    } finally {
+      proteinsLoading.value = false
+    }
+  }
+
+  function handleProteinChange(value: unknown): void {
+    selectedProteinId.value = typeof value === 'string' ? value : ''
+    const protein = proteins.value.find(item => item.id === selectedProteinId.value)
+    if (protein?.sequence) {
+      form.params.sequence = protein.sequence
+      message.success(t('design.peptide.sequenceFilled'))
     }
   }
 
@@ -191,10 +292,26 @@
   watch(selectedSlug, () => {
     void loadTool()
   })
+
+  watch([projectId, sequenceSource], ([currentProject, source]) => {
+    if (source === 'target' && currentProject) void loadTargets()
+  })
 </script>
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
+
+  .sequence-source {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .field-hint {
+    margin: 0;
+    color: var(--color-text-secondary, #8c8c8c);
+    font-size: 12px;
+  }
 
   .design-page {
     max-width: 960px;
