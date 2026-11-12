@@ -105,3 +105,24 @@ export const getTaskLogs = (
 ): Promise<ApiResponse<PaginatedResponse<TaskLog>>> => {
   return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`, params, options)
 }
+
+/** 这次任务写进领域表的候选口袋（结果页据此展示关键残基）。 */
+export interface TaskPocketItem {
+  id: string
+  structure_id: string
+  rank: number | null
+  score: number | null
+  volume: number | null
+  residue_count: number | null
+  selected: boolean | null
+  task_id: string | null
+  project_id: string
+  target_id: string
+}
+
+export const listTaskPockets = (
+  id: string,
+  options?: RequestOptions
+): Promise<ApiResponse<{ items: TaskPocketItem[] }>> => {
+  return get<{ items: TaskPocketItem[] }>(`/tasks/${id}/pockets`, undefined, options)
+}

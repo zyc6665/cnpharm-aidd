@@ -170,81 +170,10 @@
             </div>
 
             <div v-if="selectedPocket" class="pocket-detail">
-              <div class="residue-panel">
-                <div class="section-title">
-                  关键残基
-                  <span class="section-hint">
-                    按口袋内评分从高到低 · 点击可在 3D 中多选高亮
-                  </span>
-                </div>
-                <div v-if="keyResidues.length" class="residue-actions">
-                  <a-button size="small" @click="selectAllKeyResidues">全选关键残基</a-button>
-                  <a-button size="small" :disabled="!selectedResIds.length" @click="clearResidueSelection">
-                    清空选择
-                  </a-button>
-                  <span class="residue-selected-count">已选 {{ selectedResIds.length }} / {{ keyResidues.length }}</span>
-                </div>
-                <div v-if="keyResidues.length" class="key-residue-list">
-                  <div
-                    v-for="(residue, index) in keyResidues"
-                    :key="residue.id"
-                    class="key-residue"
-                    :class="{
-                      'key-residue--core': residue.score_tier === 'core',
-                      'key-residue--key': residue.score_tier === 'key',
-                      'key-residue--active': selectedResIds.includes(residue.residue_seq ?? -1)
-                    }"
-                    :data-testid="`residue-chip-${residue.residue_seq}`"
-                    @click="toggleResidue(residue.residue_seq)"
-                  >
-                    <span class="kr-rank">{{ index + 1 }}</span>
-                    <span class="kr-name">{{ residue.residue_name }}{{ residue.residue_seq }}</span>
-                    <span class="kr-chinese">{{ propertyOf(residue.residue_name).chinese }}</span>
-                    <a-tag :color="residueCategoryColor(propertyOf(residue.residue_name).category)">
-                      {{ propertyOf(residue.residue_name).category }}
-                    </a-tag>
-                    <span class="kr-score">
-                      {{ residue.contribution !== null ? residue.contribution.toFixed(2) : '-' }}
-                    </span>
-                    <a-tag :color="tierTagColor(residue.score_tier)" data-testid="residue-tier-tag">
-                      {{ tierLabel(residue.score_tier) }}
-                    </a-tag>
-                  </div>
-                </div>
-                <div v-else class="residue-empty">
-                  该口袋暂未存储残基注释数据，仍可在 3D 中查看整个蛋白结构。
-                </div>
-                <div v-if="selectedSummary" class="residue-detail" data-testid="residue-selection-detail">
-                  {{ selectedSummary }}
-                </div>
-
-                <div class="section-title all-residues-title">
-                  全部残基
-                  <span class="section-hint">完整清单（{{ allResidueRows.length }}），此处不列分数</span>
-                </div>
-                <a-table
-                  size="small"
-                  class="all-residues-table"
-                  :columns="allResidueColumns"
-                  :data-source="allResidueRows"
-                  :pagination="{ pageSize: 10, size: 'small', showSizeChanger: false }"
-                  :row-class-name="allResidueRowClass"
-                  :custom-row="allResidueRowEvents"
-                  data-testid="all-residues-table"
-                >
-                  <template #bodyCell="{ column, record }">
-                    <template v-if="column.key === 'residue'">
-                      <span class="mono">{{ record.residue_name }}{{ record.residue_seq }}</span>
-                    </template>
-                    <template v-else-if="column.key === 'category'">
-                      <a-tag :color="residueCategoryColor(record.category)">{{ record.category }}</a-tag>
-                    </template>
-                    <template v-else-if="column.key === 'tier'">
-                      <a-tag :color="tierTagColor(record.tier)">{{ tierLabel(record.tier) }}</a-tag>
-                    </template>
-                  </template>
-                </a-table>
-              </div>
+              <PocketResiduePanel
+                v-model:selected="selectedResIds"
+                :residues="rankedResidues"
+              />
               <div class="pocket-meta">
                 <a-descriptions :column="1" size="small" bordered>
                   <a-descriptions-item label="口袋位点">{{ selectedPocket.id }}</a-descriptions-item>
@@ -368,7 +297,7 @@ import PocketViewer from '@/components/tasks/PocketViewer.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 
 import { listProjects } from '@/api/projects'
-import { residueCategoryColor, residuePropertyOf } from '@/domain/targets/residue-property'
+import PocketResiduePanel from '@/components/pockets/PocketResiduePanel.vue'
 import {
   sortStructuresByNewest,
   structureOptionLabel
@@ -389,7 +318,6 @@ import { listProjectResults } from '@/api/results'
 import type { ResearchProject } from '@/types/projects'
 import type {
   PocketResidue,
-  PocketResidueTier,
   PocketSummary,
   ProteinStructureDetail,
   TargetSummary
@@ -571,113 +499,6 @@ const rankedResidues = computed(() =>
     return (left.residue_seq ?? 0) - (right.residue_seq ?? 0)
   })
 )
-
-function tierLabel(tier: PocketResidueTier | null | undefined): string {
-  if (tier === 'core') return '核心残基'
-  if (tier === 'key') return '关键残基'
-  if (tier === 'peripheral') return '外围残基'
-  return '未评分'
-}
-
-function tierTagColor(tier: PocketResidueTier | null | undefined): string {
-  if (tier === 'core') return 'orange'
-  if (tier === 'key') return 'gold'
-  return 'default'
-}
-
-/**
- * 「关键残基」只列核心与关键两级。
- *
- * 用户要的是「先看哪几个」，把 99 个残基连分数一起铺开等于没给结论；
- * 外围残基留在下面的「全部残基」清单里备查，不在主视图占版面。
- */
-const keyResidues = computed(() =>
-  rankedResidues.value.filter(
-    (residue) => residue.score_tier === 'core' || residue.score_tier === 'key'
-  )
-)
-
-const allResidueRows = computed(() =>
-  rankedResidues.value.map((residue, index) => {
-    const property = residuePropertyOf(residue.residue_name)
-    return {
-      key: residue.id ?? `${residue.residue_seq}-${index}`,
-      residue_seq: residue.residue_seq,
-      residue_name: residue.residue_name,
-      chain: residue.chain,
-      chinese: property.chinese,
-      category: property.category,
-      hydropathy: property.hydropathy,
-      tier: residue.score_tier ?? null
-    }
-  })
-)
-
-const allResidueColumns = [
-  { title: '残基', key: 'residue', width: 96 },
-  { title: '中文名', dataIndex: 'chinese', key: 'chinese', width: 96 },
-  { title: '类别', key: 'category', width: 84 },
-  { title: '疏水指数', dataIndex: 'hydropathy', key: 'hydropathy', width: 90 },
-  { title: '分级', key: 'tier', width: 90 }
-]
-
-function allResidueRowClass(record: { residue_seq: number | null }): string {
-  return selectedResIds.value.includes(record.residue_seq ?? -1) ? 'all-residues-row--active' : ''
-}
-
-function allResidueRowEvents(record: { residue_seq: number | null }) {
-  return { onClick: () => toggleResidue(record.residue_seq) }
-}
-
-function propertyOf(name: string | null | undefined) {
-  return residuePropertyOf(name)
-}
-
-function toggleResidue(seq: number | null | undefined) {
-  if (typeof seq !== 'number') return
-  const index = selectedResIds.value.indexOf(seq)
-  if (index >= 0) {
-    selectedResIds.value = selectedResIds.value.filter((item) => item !== seq)
-  } else {
-    selectedResIds.value = [...selectedResIds.value, seq]
-  }
-}
-
-function selectAllKeyResidues() {
-  selectedResIds.value = keyResidues.value
-    .map((residue) => residue.residue_seq)
-    .filter((seq): seq is number => typeof seq === 'number')
-}
-
-function clearResidueSelection() {
-  selectedResIds.value = []
-}
-
-/** 选中集的一句话摘要：选 1 个给细节，选多个给清单。 */
-const selectedSummary = computed(() => {
-  if (!selectedResIds.value.length) return ''
-  const picked = rankedResidues.value.filter(
-    (residue) => residue.residue_seq != null && selectedResIds.value.includes(residue.residue_seq)
-  )
-  if (!picked.length) return ''
-  if (picked.length === 1) {
-    const residue = picked[0]
-    if (!residue) return ''
-    const property = residuePropertyOf(residue.residue_name)
-    return [
-      `${residue.residue_name}${residue.residue_seq}`,
-      property.chinese,
-      `${property.category}性`,
-      `疏水指数 ${property.hydropathy.toFixed(1)}`,
-      `链 ${residue.chain || '-'}`,
-      tierLabel(residue.score_tier),
-      `评分 ${residue.contribution !== null ? residue.contribution.toFixed(2) : '-'}`
-    ].join(' · ')
-  }
-  return `已选 ${picked.length} 个残基：${picked
-    .map((residue) => `${residue.residue_name}${residue.residue_seq}`)
-    .join('、')}`
-})
 
 const structureFileHint = computed(() => {
   const structure = structures.value.find((item) => item.id === structureId.value)

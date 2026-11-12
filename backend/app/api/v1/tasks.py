@@ -818,6 +818,48 @@ async def retry_task(
     return success_response(message="任务已重新提交")
 
 
+@router.get("/{task_id}/pockets", response_model=dict)
+async def list_task_pockets(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """这次任务写进领域表的候选口袋。
+
+    结果页要展示「关键残基」，而残基挂在领域口袋上（`pockets.task_id` 就是
+    写回它的那次任务）。让前端自己去拼「任务 → 结构 → 口袋」既要跨三个接口，
+    也容易在结构换版本后对不上，所以这里直接按任务查。
+    """
+    from app.models.targets import Pocket
+    from app.services import domain_targets
+
+    result = await db.execute(
+        select(Pocket)
+        # `rank` 可能为空（模型没给名次），空值排最后且不受方言 NULLS 排序差异影响。
+        .where(Pocket.task_id == task_id)
+        .order_by(Pocket.rank.is_(None), Pocket.rank.asc(), Pocket.id.asc())
+    )
+    pockets = list(result.scalars().all())
+
+    items: list[dict[str, Any]] = []
+    for pocket in pockets:
+        structure = await domain_targets.pocket_structure(db, pocket)
+        target = await domain_targets.structure_target(db, structure)
+        try:
+            await domain_targets.require_target_read_access(
+                db, target=target, user=current_user
+            )
+        except Exception:
+            # 同一个任务的口袋只可能属于一个项目；鉴权失败就当看不到，不整单 403。
+            continue
+        payload = domain_targets.serialize_pocket(pocket)
+        payload["project_id"] = str(target.project_id)
+        payload["target_id"] = str(target.id)
+        items.append(payload)
+
+    return success_response(data={"items": items})
+
+
 @router.get("/{task_id}/logs", response_model=dict)
 async def get_task_logs(
     task_id: str,
