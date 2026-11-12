@@ -1,8 +1,8 @@
 <template>
   <main class="target-detail-page" data-testid="target-detail-page">
-    <router-link :to="`/projects/${projectId}`" class="back-link">
-      {{ t('targets.backToProject') }}
-    </router-link>
+    <AppBackLink
+      :fallback="`/projects/${projectId}`"
+    />
 
     <AppPageHeader
       :title="target ? target.name : t('targets.detail.title')"
@@ -214,6 +214,7 @@
   import { uploadFile } from '@/api/files'
   import { formatOptionalText, formatPlddtMean, formatTargetDateTime, formatTargetType, plddtBand, resolveTargetErrorMessage } from '@/domain/targets/display'
   import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
   import type {
     ProteinDetail,
     ProteinStructureDetail,

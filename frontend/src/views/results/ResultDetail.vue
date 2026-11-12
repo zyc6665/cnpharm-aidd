@@ -1,13 +1,10 @@
 <template>
   <main class="result-detail-page">
-    <router-link
+    <AppBackLink
       v-if="projectId"
-      :to="`/projects/${projectId}/results`"
-      class="back-link"
-      data-testid="result-back"
-    >
-      {{ t('results.detail.backToResults') }}
-    </router-link>
+      :fallback="`/projects/${projectId}/results`"
+      test-id="result-back"
+    />
 
     <AppPageHeader :title="resultTitle" :subtitle="t('results.detail.summary')">
       <template #actions>
@@ -370,6 +367,7 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     TraceabilityPackage
   } from '@/types/compounds'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()

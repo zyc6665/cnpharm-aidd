@@ -1,8 +1,8 @@
 <template>
   <main class="pocket-residues-page" data-testid="pocket-residues-page">
-    <router-link :to="backLink" class="back-link">
-      {{ t('targets.residues.backToPockets') }}
-    </router-link>
+    <AppBackLink
+      :fallback="backLink"
+    />
 
     <AppPageHeader
       :title="t('targets.residues.title')"
@@ -96,6 +96,7 @@
   import { formatOptionalText, formatResidueContribution } from '@/domain/targets'
   import type { PocketResidue, PocketResidueTier } from '@/types/targets'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()

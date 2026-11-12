@@ -1,8 +1,8 @@
 <template>
   <main class="structure-predict-page" data-testid="structure-predict-page">
-    <router-link :to="backLink" class="back-link">
-      {{ t('targets.predict.backToTarget') }}
-    </router-link>
+    <AppBackLink
+      :fallback="backLink"
+    />
 
     <AppPageHeader :title="t('targets.predict.title')" :subtitle="t('targets.predict.subtitle')" />
 
@@ -93,6 +93,7 @@
   import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
   import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
   import type { ProteinDetail } from '@/types/targets'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const router = useRouter()

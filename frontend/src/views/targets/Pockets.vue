@@ -1,8 +1,8 @@
 <template>
   <main class="structure-pockets-page" data-testid="structure-pockets-page">
-    <router-link :to="`/structures/${structureId}`" class="back-link">
-      {{ t('targets.pockets.backToStructure') }}
-    </router-link>
+    <AppBackLink
+      :fallback="`/structures/${structureId}`"
+    />
 
     <AppPageHeader :title="t('targets.pockets.title')" :subtitle="t('targets.pockets.subtitle')">
       <template #actions>
@@ -121,6 +121,7 @@
   } from '@/domain/targets'
   import type { PocketSummary } from '@/types/targets'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const router = useRouter()

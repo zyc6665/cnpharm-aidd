@@ -1,13 +1,10 @@
 <template>
   <main class="candidate-set-page">
-    <router-link
+    <AppBackLink
       v-if="candidateSet?.project_id"
-      :to="`/projects/${candidateSet.project_id}/assets`"
-      class="back-link"
-      data-testid="set-back-assets"
-    >
-      {{ t('compounds.backToAssets') }}
-    </router-link>
+      :fallback="`/projects/${candidateSet.project_id}/assets`"
+      test-id="set-back-assets"
+    />
 
     <AppPageHeader :title="setTitle" :subtitle="t('candidates.set.subtitle')">
       <template #actions>
@@ -242,6 +239,7 @@
   } from '@/api/compounds'
   import { candidateLocationLabel } from '@/domain/compounds'
   import type { Candidate, CandidateSet as CandidateSetModel, CandidateSetItem } from '@/types/compounds'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   interface SelectOption {
     label: string

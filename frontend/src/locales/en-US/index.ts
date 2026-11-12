@@ -35,6 +35,7 @@ export default {
     reset: 'Reset',
     submit: 'Submit',
     back: 'Back',
+    backToPrevious: 'Back to previous page',
     loading: 'Loading...',
     success: 'Operation successful',
     error: 'Operation failed',

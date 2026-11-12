@@ -35,6 +35,7 @@ export default {
     reset: '重置',
     submit: '提交',
     back: '返回',
+    backToPrevious: '返回上一页',
     loading: '加载中...',
     success: '操作成功',
     error: '操作失败',

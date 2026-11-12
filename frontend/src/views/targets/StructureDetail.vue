@@ -1,8 +1,8 @@
 <template>
   <main class="structure-detail-page" data-testid="structure-detail-page">
-    <router-link :to="backLink" class="back-link">
-      {{ t('targets.structure.backToTarget') }}
-    </router-link>
+    <AppBackLink
+      :fallback="backLink"
+    />
 
     <AppPageHeader :title="t('targets.structure.title')" :subtitle="t('targets.structure.subtitle')">
       <template #actions>
@@ -171,6 +171,7 @@
     StructureFileLink
   } from '@/types/targets'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+  import AppBackLink from '@/components/common/AppBackLink.vue'
 
   const route = useRoute()
   const { t } = useI18n()
