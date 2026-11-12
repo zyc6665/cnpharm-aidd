@@ -153,7 +153,7 @@ PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨
 
 ### 4.3 删除代码
 
-拆包/删除前先在 Issue 里列出所有引用点（`grep -rn "from app.<模块>" backend/`），确认无遗漏。参考已完成的 `agents/aidd` 拆包（步骤 3）：它混装了三种东西——真 Agent（planner/graph/llm，已删）、工具能力注册表（`tools/capability_registry.py`，工作流成功回调依赖）、内建工具执行（`tools/builtin_tools.py`，Vina 对接依赖），所以**只能拆包不能整目录删**。教训与对照表见 [docs/17](docs/17-交付仓库与分支策略.md) 第 5 节。
+拆包/删除前先在 Issue 里列出所有引用点（`grep -rn "from app.<模块>" backend/`），确认无遗漏。参考已完成的 `agents/aidd` 拆包（步骤 3）：它混装了三种东西——真 Agent（planner/graph/llm，已删）、工具能力注册表（`tools/capability_registry.py`，工作流成功回调依赖）、内建工具执行（`tools/builtin_tools.py`，Vina 对接依赖），所以**只能拆包不能整目录删**。教训与对照表见 [docs/17](docs/internal/17-交付仓库与分支策略.md) 第 5 节。
 
 ### 4.4 离线合规
 

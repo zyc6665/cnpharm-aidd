@@ -8,7 +8,7 @@
 ## 1. 构建模型镜像
 
 ### 1.1 基础要求
-- 基于与集群驱动匹配的 CUDA 基座（示例 `nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04`；与 `docs/08A` 记录一致）。
+- 基于与集群驱动匹配的 CUDA 基座（示例 `nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04`；与 `docs/archive/08A` 记录一致）。
 - 只装**运行期**依赖，不要把训练代码/数据集打进镜像。
 - 单个模型镜像必须自包含：入口脚本、模型推理代码、必要 Python 依赖。
 - **权重外置**：不要把权重打进镜像；用 `runtime.weights.mounts` 把宿主机/共享存储只读挂到容器 `/opt/model/weights`。
