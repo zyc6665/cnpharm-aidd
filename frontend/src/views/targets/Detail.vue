@@ -185,6 +185,10 @@
       <p v-if="structureFileName" class="field-hint">
         {{ t('targets.detail.fileSelected', { name: structureFileName }) }}
       </p>
+      <a-checkbox v-model:checked="prepareAfterImport" data-testid="structure-import-prepare">
+        {{ t('targets.detail.prepareAfterImport') }}
+      </a-checkbox>
+      <p class="field-hint">{{ t('targets.detail.prepareAfterImportHint') }}</p>
     </a-modal>
   </main>
 </template>
@@ -204,6 +208,7 @@
     createProtein,
     getTarget,
     importStructure,
+    prepareStructure,
     listStructures
   } from '@/api/targets'
   import { uploadFile } from '@/api/files'
@@ -243,6 +248,8 @@
     uploadList: [] as UploadFile[]
   })
   const structureUploadList = ref<UploadFile[]>([])
+  /** 导入后直接跑结构准备：用户上传的 PDB 通常就是为了拿可对接的受体。 */
+  const prepareAfterImport = ref(true)
   const structureFileName = ref('')
 
   const proteins = computed<ProteinDetail[]>(() => target.value?.proteins ?? [])
@@ -390,9 +397,14 @@
     importing.value = true
     try {
       const uploaded = await uploadFile(file)
-      await importStructure(protein.id, { file_id: uploaded.data.id })
+      const imported = await importStructure(protein.id, { file_id: uploaded.data.id })
+      if (prepareAfterImport.value) {
+        await prepareStructure(imported.data.id, {})
+        message.success(t('targets.detail.importAndPrepareSuccess'))
+      } else {
+        message.success(t('targets.detail.importSuccess'))
+      }
       importModalOpen.value = false
-      message.success(t('targets.detail.importSuccess'))
       await load()
     } catch (cause) {
       message.error(resolveTargetErrorMessage(cause, t('targets.detail.importFailed')))
