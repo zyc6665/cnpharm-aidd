@@ -2,6 +2,7 @@
   <main class="structure-pockets-page" data-testid="structure-pockets-page">
     <AppBackLink
       :fallback="`/structures/${structureId}`"
+      :parent-label="t('targets.pockets.backToStructure')"
     />
 
     <AppPageHeader :title="t('targets.pockets.title')" :subtitle="t('targets.pockets.subtitle')">

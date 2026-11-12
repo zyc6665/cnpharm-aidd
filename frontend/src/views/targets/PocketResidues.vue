@@ -2,6 +2,7 @@
   <main class="pocket-residues-page" data-testid="pocket-residues-page">
     <AppBackLink
       :fallback="backLink"
+      :parent-label="t('targets.residues.backToPockets')"
     />
 
     <AppPageHeader

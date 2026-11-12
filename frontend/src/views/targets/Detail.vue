@@ -2,6 +2,7 @@
   <main class="target-detail-page" data-testid="target-detail-page">
     <AppBackLink
       :fallback="`/projects/${projectId}`"
+      :parent-label="t('targets.backToProject')"
     />
 
     <AppPageHeader

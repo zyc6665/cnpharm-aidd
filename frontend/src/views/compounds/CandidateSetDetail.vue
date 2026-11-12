@@ -4,6 +4,7 @@
       v-if="candidateSet?.project_id"
       :fallback="`/projects/${candidateSet.project_id}/assets`"
       test-id="set-back-assets"
+      :parent-label="t('compounds.backToAssets')"
     />
 
     <AppPageHeader :title="setTitle" :subtitle="t('candidates.set.subtitle')">

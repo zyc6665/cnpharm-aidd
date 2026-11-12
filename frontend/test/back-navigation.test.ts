@@ -67,11 +67,31 @@ describe('详情页统一用 AppBackLink', () => {
     }
   })
 
+  it('每个页面都给出父级文案，让用户还能选「回上一层」', () => {
+    for (const page of pages) {
+      const text = source(page)
+      // 两种情况都要有入口：只是「回上一页」不够，用户有时就是想回到上一层
+      assert.match(text, /:parent-label="t\('[a-zA-Z.]+'\)"/, page)
+    }
+  })
+
   it('组件本身优先走历史，回不去才 push 兜底', () => {
     const component = source('src/components/common/AppBackLink.vue')
     assert.match(component, /readHistoryBack\(window\.history\.state\)/)
     assert.match(component, /resolveBackTarget\(/)
     assert.match(component, /router\.back\(\)/)
     assert.match(component, /router\.push\(decision\.to\)/)
+  })
+
+  it('组件同时渲染「上一页」按钮与父级链接两个入口', () => {
+    const component = source('src/components/common/AppBackLink.vue')
+    assert.match(component, /parentLabel\?: string/)
+    assert.match(component, /<button[^>]*class="app-back-link"[^>]*@click="handleBack"/)
+    assert.match(
+      component,
+      /<router-link class="app-back-link app-back-link--parent" :to="fallback"/
+    )
+    // 父级链接只在给了文案时才出现，避免出现「返回」两个同义按钮
+    assert.match(component, /<template v-if="parentLabel">/)
   })
 })

@@ -2,6 +2,7 @@
   <main class="structure-detail-page" data-testid="structure-detail-page">
     <AppBackLink
       :fallback="backLink"
+      :parent-label="t('targets.structure.backToTarget')"
     />
 
     <AppPageHeader :title="t('targets.structure.title')" :subtitle="t('targets.structure.subtitle')">

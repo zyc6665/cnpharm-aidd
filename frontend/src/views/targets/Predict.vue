@@ -2,6 +2,7 @@
   <main class="structure-predict-page" data-testid="structure-predict-page">
     <AppBackLink
       :fallback="backLink"
+      :parent-label="t('targets.predict.backToTarget')"
     />
 
     <AppPageHeader :title="t('targets.predict.title')" :subtitle="t('targets.predict.subtitle')" />

@@ -4,6 +4,7 @@
       v-if="projectId"
       :fallback="`/projects/${projectId}/results`"
       test-id="result-back"
+      :parent-label="t('results.detail.backToResults')"
     />
 
     <AppPageHeader :title="resultTitle" :subtitle="t('results.detail.summary')">
