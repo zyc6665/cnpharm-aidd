@@ -524,7 +524,7 @@ class Settings(BaseSettings):
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     # Worker 可用性探测：派发任务与健康检查都先问一次「有没有 Worker 在消费」。
     # 单次 ping 的等待上限，以及结果缓存时长（避免每次提交任务都付一次广播开销）。
-    CELERY_WORKER_PROBE_TIMEOUT_SECONDS: float = 2.0
+    CELERY_WORKER_PROBE_TIMEOUT_SECONDS: float = 3.0
     CELERY_WORKER_PROBE_CACHE_SECONDS: float = 10.0
     # Worker 正在执行长任务时**无法应答 ping**（solo 池只有一个执行位，控制命令
     # 排在任务后面），健康检查若只看 ping 就会把「忙」报成「死」。
