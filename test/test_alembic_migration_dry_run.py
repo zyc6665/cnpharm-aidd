@@ -165,6 +165,38 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     assert "workflow_runs" not in remaining_tables
 
 
+SSO_IAM_TICKET_COLUMNS = {
+    "iam_access_token_enc",
+    "iam_refresh_token_enc",
+    "iam_access_expires_at",
+    "iam_checked_at",
+}
+
+
+def _refresh_token_columns(db_path: Path) -> set[str]:
+    with sqlite3.connect(db_path) as conn:
+        return {row[1] for row in conn.execute("PRAGMA table_info(refresh_tokens)")}
+
+
+def test_alembic_iam_ticket_columns_are_reversible(tmp_path: Path) -> None:
+    """SSO 票据四列必须能加、能减、能再加回来（契约层迁移的回滚底线）。"""
+    db_path = tmp_path / "iam_ticket_columns.db"
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
+
+    upgrade = _run_alembic("upgrade", "head", env=env)
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+    assert SSO_IAM_TICKET_COLUMNS.issubset(_refresh_token_columns(db_path))
+
+    downgrade = _run_alembic("downgrade", "-1", env=env)
+    assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
+    assert not (SSO_IAM_TICKET_COLUMNS & _refresh_token_columns(db_path))
+
+    again = _run_alembic("upgrade", "head", env=env)
+    assert again.returncode == 0, again.stderr or again.stdout
+    assert SSO_IAM_TICKET_COLUMNS.issubset(_refresh_token_columns(db_path))
+
+
 def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy_project_links.db"
     with sqlite3.connect(db_path) as conn:
