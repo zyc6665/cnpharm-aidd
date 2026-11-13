@@ -500,8 +500,9 @@ class Settings(BaseSettings):
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_RESULT_BACKEND: Optional[str] = None
-    # 数据库连接池模式。`pooled` 是常规的进程级连接池；`null` 表示「每个会话新建
-    # 连接、用完即关」。
+    # 数据库连接池模式。`auto`（默认）按进程形态自动判断：Celery 的 worker/beat 用
+    # `null`，其余进程（uvicorn、脚本、测试）用 `pooled`。显式写 `pooled` / `null`
+    # 时以显式值为准。
     #
     # 为什么需要这个开关：Celery 的 threads/prefork 池里，同一个任务函数可能在不同
     # 线程/进程的不同事件循环中执行，而 asyncpg 的连接**绑定到创建它的事件循环**。
@@ -509,7 +510,7 @@ class Settings(BaseSettings):
     # `Future attached to a different loop` / `another operation is in progress`。
     # 因此 Worker 进程必须用 `null`（任务本身是分钟级，每条任务一条连接的代价可忽略），
     # API 进程保持 `pooled`。见 docs/internal/17「Celery Worker 部署前置条件」。
-    DB_POOL_MODE: Literal["pooled", "null"] = "pooled"
+    DB_POOL_MODE: Literal["auto", "pooled", "null"] = "auto"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     # 任务执行时限的上限（秒）。工具自己的 timeout_minutes 可以很长（MD 轨迹要跑几天），
     # 但平台必须有一个封顶值，否则一个卡死的 Job 能占着卡位到天荒地老。

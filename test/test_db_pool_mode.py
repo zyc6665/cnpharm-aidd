@@ -33,6 +33,70 @@ def test_engine_switches_to_null_pool_when_configured(monkeypatch) -> None:
     assert kwargs["pool_pre_ping"] is False
 
 
+def test_auto_mode_picks_null_pool_for_celery_worker(monkeypatch) -> None:
+    """#113：照着手册起 worker、没设 DB_POOL_MODE，也必须自动用 NullPool。"""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DB_POOL_MODE", "auto")
+    monkeypatch.setattr(
+        session_module.sys,
+        "argv",
+        [
+            "celery",
+            "-A",
+            "app.worker.celery_app",
+            "worker",
+            "--pool=threads",
+            "--concurrency=4",
+            "-Q",
+            "high_priority,gpu_queue",
+        ],
+    )
+
+    assert session_module.celery_runtime() == "worker"
+    assert session_module._engine_kwargs()["poolclass"] is NullPool
+
+
+def test_auto_mode_picks_null_pool_for_celery_beat(monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DB_POOL_MODE", "auto")
+    monkeypatch.setattr(
+        session_module.sys,
+        "argv",
+        ["celery", "-A", "app.worker.celery_app", "beat"],
+    )
+
+    assert session_module.celery_runtime() == "beat"
+    assert session_module._engine_kwargs()["poolclass"] is NullPool
+
+
+def test_auto_mode_keeps_pool_for_api_process(monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DB_POOL_MODE", "auto")
+    monkeypatch.setattr(
+        session_module.sys,
+        "argv",
+        ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
+    )
+
+    assert session_module.celery_runtime() is None
+    assert "poolclass" not in session_module._engine_kwargs()
+
+
+def test_explicit_mode_wins_over_autodetection(monkeypatch) -> None:
+    """显式写了 pooled / null 就按写的来，别被自动判断覆盖。"""
+    from app.config import settings
+
+    monkeypatch.setattr(
+        session_module.sys, "argv", ["celery", "-A", "app.worker.celery_app", "worker"]
+    )
+    monkeypatch.setattr(settings, "DB_POOL_MODE", "pooled")
+
+    assert "poolclass" not in session_module._engine_kwargs()
+
+
 def test_compose_sets_null_pool_on_every_worker_service() -> None:
     compose = (ROOT / "deploy" / "compose" / "docker-compose.prod.yml").read_text(
         encoding="utf-8"
