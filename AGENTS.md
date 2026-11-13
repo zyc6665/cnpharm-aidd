@@ -85,6 +85,8 @@ cd frontend && npm run dev
 
 Windows 上 `--pool=threads`，**不要用 `solo`**（会串行卡死）。8 个队列名写错或漏写，前端表现为「任务一直排队、`worker_available=false`」。
 
+`DB_POOL_MODE` 不用手工设：默认 `auto`，worker / beat 会自动切到 `NullPool`（`backend/app/database/session.py` 的 `celery_runtime()` 看命令行判断）。asyncpg 的连接绑定创建它的事件循环，而 threads 池里两个任务可能跑在不同循环上——共享连接池就会报 `got Future ... attached to a different loop`，表现为**维护任务每次都失败**（取消超时清理、GPU 租约回收、执行记录对账全部静默失灵）。显式写 `DB_POOL_MODE=pooled` 会把这个坑踩回来；只有 compose 部署的 worker 才在清单里写死 `null`。
+
 ### 自检
 
 ```bash
