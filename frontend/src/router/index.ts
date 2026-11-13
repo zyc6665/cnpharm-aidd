@@ -452,6 +452,11 @@ router.beforeEach(async (to, _from, next) => {
     if (!userStore.userInfo) {
       await userStore.fetchUserInfo()
     }
+    // 会话取不回来（过期/失效）时先回登录页，否则会被 /403 误读成「没有权限」
+    if (!userStore.isLoggedIn) {
+      next({ name: 'Login', query: { redirect: to.fullPath } })
+      return
+    }
     if (!userStore.isAdmin) {
       next('/403')
       return

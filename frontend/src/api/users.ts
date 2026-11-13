@@ -56,8 +56,8 @@ export interface AdminUserCreateParams {
   password?: string
   role?: string
   status?: string
-  /** 认证来源：本地口令或企业 LDAP */
-  auth_source: 'local' | 'ldap'
+  /** 认证来源：本地口令、企业 LDAP 目录或统一身份认证（sso 预建账号可无口令） */
+  auth_source: 'local' | 'ldap' | 'sso'
 }
 
 export interface AdminResetUserPasswordParams {

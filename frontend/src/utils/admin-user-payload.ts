@@ -7,7 +7,7 @@ export interface AdminUserCreateForm {
   password?: string
   role?: string
   status?: string
-  auth_source: 'local' | 'ldap'
+  auth_source: 'local' | 'ldap' | 'sso'
 }
 
 /**

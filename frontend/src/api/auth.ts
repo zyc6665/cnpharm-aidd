@@ -1,10 +1,16 @@
 import { get, post, patch, type RequestOptions } from './request'
+import {
+  isSsoStatusCacheFresh,
+  readSsoStatusCache,
+  writeSsoStatusCache
+} from './sso-status'
 import type { ApiResponse } from '@/types/api'
 import type {
   UserInfo,
   LoginParams,
   LoginResponse,
-  AuthTokens
+  AuthTokens,
+  SsoStatus
 } from '@/types/models'
 
 // 用户登录（企业内网：账号 + 口令，后端按账号解析本地/LDAP 认证源）。
@@ -39,3 +45,27 @@ export const getCurrentUser = (config?: RequestOptions): Promise<ApiResponse<Use
 export const updateCurrentUser = (data: Partial<UserInfo>): Promise<ApiResponse<UserInfo>> => {
   return patch<UserInfo>('/users/me', data)
 }
+
+// 统一认证是否启用：登录页入口与 401 决策共用，60 秒缓存。
+// 失败不缓存、不抛错、也不弹全局错误——认证服务异常时本地账号登录必须照常可用，
+// 所以只返回上一次的值或 null，由调用方按「未启用」处理。
+export const getSsoStatus = async (options?: { force?: boolean }): Promise<SsoStatus | null> => {
+  if (!options?.force && isSsoStatusCacheFresh()) {
+    return readSsoStatusCache().status
+  }
+  try {
+    const response = await get<SsoStatus>('/auth/sso/status', undefined, {
+      silent: true,
+      skipAuthRedirect: true
+    })
+    const status = response?.data ?? null
+    if (status && typeof status === 'object') {
+      writeSsoStatusCache(status)
+      return status
+    }
+    return readSsoStatusCache().status
+  } catch {
+    return readSsoStatusCache().status
+  }
+}
+

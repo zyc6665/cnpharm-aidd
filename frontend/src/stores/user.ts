@@ -12,6 +12,7 @@ import {
   getCurrentUser
 } from '@/api/auth'
 import { AUTH_CLEARED_EVENT, clearTokens } from '@/api/request'
+import { applySessionInvalid, consumeRefreshFailureReason } from '@/api/sso-session'
 import { getCsrfToken } from '@/utils/cookies'
 
 export const useUserStore = defineStore('user', () => {
@@ -36,6 +37,17 @@ export const useUserStore = defineStore('user', () => {
   const clearLocalAuthState = () => {
     userInfo.value = null
     authReady.value = true
+  }
+
+  /**
+   * 会话失效后的跳转决策不在 store 里做：这里只把请求层旁路记下的「原因」
+   * 交给 sso-session 这一个决策点，避免多个 catch 各拼一份 URL 重复跳转。
+   */
+  const applyPendingSessionInvalid = () => {
+    const reason = consumeRefreshFailureReason()
+    if (reason) {
+      applySessionInvalid(reason)
+    }
   }
 
   if (typeof window !== 'undefined') {
@@ -88,6 +100,8 @@ export const useUserStore = defineStore('user', () => {
         return userInfo.value
       } catch {
         userInfo.value = null
+        // 启动恢复走 skipAuthRedirect，跳不跳由决策点补做
+        applyPendingSessionInvalid()
         return null
       } finally {
         loading.value = false
@@ -131,6 +145,7 @@ export const useUserStore = defineStore('user', () => {
       // 会话无效，清除状态
       clearTokens()
       clearLocalAuthState()
+      applyPendingSessionInvalid()
       return null
     } finally {
       loading.value = false

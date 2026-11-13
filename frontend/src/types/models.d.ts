@@ -21,8 +21,8 @@ export interface UserInfo {
   display_name?: string
   /** 账号名，本地与 LDAP 用户必填 */
   username: string
-  /** 认证来源：本地口令或企业 LDAP 目录 */
-  auth_source: 'local' | 'ldap'
+  /** 认证来源：本地口令、企业 LDAP 目录或统一身份认证（sso 账号无平台口令） */
+  auth_source: 'local' | 'ldap' | 'sso'
   /** 最近一次登录时间，未登录过为 null */
   last_login_at?: string | null
   avatar_url?: string
@@ -912,4 +912,13 @@ export interface ToolCreateParams {
   gpu_memory_mb?: number
   timeout_sec?: number
   tag_ids?: string[]
+}
+
+/** GET /api/v1/auth/sso/status 响应：统一身份认证是否对本部署启用 */
+export interface SsoStatus {
+  enabled: boolean
+  /** 后端下发的授权入口路径（含 /api/v1 前缀），前端据此跳转 */
+  authorize_path: string
+  /** 首次统一认证登录是否允许自动开户 */
+  auto_provision: boolean
 }

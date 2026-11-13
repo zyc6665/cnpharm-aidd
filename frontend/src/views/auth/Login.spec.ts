@@ -13,6 +13,11 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} })
 }))
 
+// 登录页会探测统一认证状态，单测里必须挡掉真实请求（jsdom 没有后端）
+vi.mock('@/api/auth', () => ({
+  getSsoStatus: vi.fn().mockResolvedValue(null)
+}))
+
 vi.mock('ant-design-vue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ant-design-vue')>()
   return {

@@ -2,7 +2,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, AxiosError, type In
 import { message } from 'ant-design-vue'
 import type { ApiResponse, ApiError } from '@/types/api'
 import { shouldAttemptTokenRefresh } from './auth-request-policy'
-import { redirectToLogin } from './auth-redirect'
+import { applySessionInvalid, readErrorReason, rememberRefreshFailure } from './sso-session'
 import { clearAuthStorage } from '@/utils/auth-storage'
 import { buildCsrfHeader } from '@/utils/cookies'
 
@@ -10,7 +10,7 @@ export interface RequestOptions extends AxiosRequestConfig {
   silent?: boolean
   retry?: number
   retryDelayMs?: number
-  /** 启动恢复会话等场景：刷新失败时不要强制跳转登录页 */
+  /** 启动恢复会话等场景：刷新失败时不要在这里跳转，由调用方决定（store 会交给 sso-session 决策） */
   skipAuthRedirect?: boolean
 }
 
@@ -158,11 +158,13 @@ request.interceptors.response.use(
         onTokenRefreshed()
         return request(originalRequest)
       } catch (refreshError) {
-        // 刷新失败，清除用户态并跳转登录
+        // 刷新失败，清除用户态；具体「跳 IAM 还是回登录页」交给唯一决策点，
+        // 这里只把 refresh 的原因旁路记下（reject 给调用方的是原始 401，会丢 detail.reason）
         clearTokens()
         rejectRefreshSubscribers(refreshError)
+        rememberRefreshFailure(refreshError)
         if (!originalRequest.skipAuthRedirect) {
-          redirectToLogin(window.location.pathname)
+          applySessionInvalid(readErrorReason(refreshError))
         }
         return Promise.reject(error)
       } finally {

@@ -123,8 +123,8 @@
             {{ record.username || '-' }}
           </template>
           <template v-else-if="column.key === 'auth_source'">
-            <a-tag :color="record.auth_source === 'ldap' ? 'gold' : 'default'">
-              {{ record.auth_source === 'ldap' ? t('admin.authSourceLdap') : t('admin.authSourceLocal') }}
+            <a-tag :color="authSourceTagColor(record.auth_source)">
+              {{ t(authSourceLabelKey(record.auth_source)) }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'role'">
@@ -143,15 +143,19 @@
               <a-button type="link" size="small" @click="handleEdit(record)">
                 {{ t('common.edit') }}
               </a-button>
-              <a-button
-                type="link"
-                size="small"
-                :disabled="record.auth_source === 'ldap'"
-                :title="record.auth_source === 'ldap' ? t('admin.resetPasswordLdapDisabled') : undefined"
-                @click="openResetPasswordModal(record)"
-              >
-                {{ t('admin.resetPassword') }}
-              </a-button>
+              <!-- disabled 按钮不派发 mouse 事件，必须由外层 span 承接 hover 才出 tooltip -->
+              <a-tooltip :title="resetPasswordTooltip(record)">
+                <span>
+                  <a-button
+                    type="link"
+                    size="small"
+                    :disabled="isPasswordManagedExternally(record.auth_source)"
+                    @click="openResetPasswordModal(record)"
+                  >
+                    {{ t('admin.resetPassword') }}
+                  </a-button>
+                </span>
+              </a-tooltip>
               <a-button type="link" size="small" danger @click="handleSoftDelete(record)">
                 {{ t('admin.softDeleteUser') }}
               </a-button>
@@ -191,6 +195,7 @@
           <a-select v-model:value="createForm.auth_source">
             <a-select-option value="local">{{ t('admin.authSourceLocal') }}</a-select-option>
             <a-select-option value="ldap">{{ t('admin.authSourceLdap') }}</a-select-option>
+            <a-select-option value="sso">{{ t('admin.authSourceSso') }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item
@@ -300,6 +305,12 @@ import {
 import type { AdminResetUserPasswordParams, AdminUserCreateParams } from '@/api/users'
 import type { AdminUserStats, UserInfo } from '@/types/models'
 import { formatUserEmail, getUserDisplayName } from '@/utils/user-display'
+import {
+  authSourceLabelKey,
+  authSourceTagColor,
+  isPasswordManagedExternally,
+  resetPasswordDisabledReasonKey
+} from '@/utils/auth-source'
 import { buildAdminUserCreatePayload } from '@/utils/admin-user-payload'
 
 const { t } = useI18n()
@@ -568,9 +579,17 @@ const handleSaveUser = async () => {
   }
 }
 
+// 返回 undefined 表示该账号可重置口令；此时 tooltip 的 title 为空，气泡不会渲染
+const resetPasswordTooltip = (record: UserInfo): string | undefined => {
+  const reasonKey = resetPasswordDisabledReasonKey(record.auth_source)
+  return reasonKey ? t(reasonKey) : undefined
+}
+
 const openResetPasswordModal = (record: UserInfo) => {
-  if (record.auth_source === 'ldap') {
-    message.warning(t('admin.resetPasswordLdapDisabled'))
+  // 按钮已禁用，这里再兜一层：绕过 UI（键盘/脚本）也不该向 ldap/sso 发口令请求
+  const reasonKey = resetPasswordDisabledReasonKey(record.auth_source)
+  if (reasonKey) {
+    message.warning(t(reasonKey))
     return
   }
   resetPasswordUser.value = record
@@ -580,8 +599,9 @@ const openResetPasswordModal = (record: UserInfo) => {
 
 const handleResetPassword = async () => {
   if (!resetPasswordUser.value) return
-  if (resetPasswordUser.value.auth_source === 'ldap') {
-    message.warning(t('admin.resetPasswordLdapDisabled'))
+  const reasonKey = resetPasswordDisabledReasonKey(resetPasswordUser.value.auth_source)
+  if (reasonKey) {
+    message.warning(t(reasonKey))
     return
   }
 
