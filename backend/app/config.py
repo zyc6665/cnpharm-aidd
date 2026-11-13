@@ -260,6 +260,65 @@ class Settings(BaseSettings):
     LDAP_CA_CERT_FILE: str = ""
     LDAP_TLS_VALIDATE: bool = True
 
+    # ==================== 统一身份认证（甲方 IAM / 单点登录）====================
+    # 对接方式：WEB 非网关模式（标准 OAuth2 授权码），见
+    # docs/03-接口/32-统一身份认证对接方案.md。SSO_ENABLED=False 时登录链路
+    # 完全不触发统一认证，行为与未接入前一致（保留本地口令兜底）。
+    SSO_ENABLED: bool = False
+    # 统一认证服务基地址（不含末尾斜杠）。由部署清单注入，仓库内不写死。
+    SSO_BASE_URL: str = ""
+    # 应用注册后由甲方 IAM 管理员下发的应用编码与密钥。
+    SSO_APP_ID: str = ""
+    SSO_CLIENT_SECRET: str = ""
+    # 必须在统一认证侧预先登记的跳转地址：{平台对外地址}/api/v1/auth/sso/callback
+    SSO_REDIRECT_URI: str = ""
+    # 单点登录成功后的前端落地路径（相对平台根）。
+    SSO_SUCCESS_PATH: str = "/workspace"
+    # 首次登录是否自动开户。关闭时未开通的账号一律拒绝（403 + 40301）。
+    SSO_AUTO_PROVISION: bool = True
+    # 自动开户时的默认角色；权限仍由平台管理员后续调整。
+    SSO_DEFAULT_ROLE: Literal["user", "admin"] = "user"
+    # 用户名口径：userName=统一认证登录名；employeeNo=员工号（需甲方开通该字段）。
+    SSO_USERNAME_CLAIM: Literal["userName", "employeeNo"] = "userName"
+    # 是否在刷新令牌时校验统一票据：开启后全局会话失效将在最长一个
+    # ACCESS_TOKEN_EXPIRE_MINUTES 内传导到平台；关闭则平台会话独立到期。
+    SSO_VALIDATE_ON_REFRESH: bool = True
+    # 调用统一认证接口的超时（秒）与证书校验（内网自签 CA 时可关闭）。
+    SSO_TIMEOUT_SECONDS: float = 5.0
+    SSO_TLS_VALIDATE: bool = True
+    # 统一认证 state 的有效期（秒），仅用于一次授权跳转。
+    SSO_STATE_TTL_SECONDS: int = 300
+
+    @model_validator(mode="after")
+    def _validate_sso_settings(self):
+        """SSO 开启时必须配齐四项密钥材料，生产环境必须使用 https 回调。"""
+        if not self.SSO_ENABLED:
+            return self
+
+        required = {
+            "SSO_BASE_URL": self.SSO_BASE_URL,
+            "SSO_APP_ID": self.SSO_APP_ID,
+            "SSO_CLIENT_SECRET": self.SSO_CLIENT_SECRET,
+            "SSO_REDIRECT_URI": self.SSO_REDIRECT_URI,
+        }
+        missing = [name for name, value in required.items() if not (value or "").strip()]
+        if missing:
+            raise ValueError("SSO_ENABLED requires: " + ", ".join(missing))
+
+        if not self.SSO_BASE_URL.startswith(("http://", "https://")):
+            raise ValueError("SSO_BASE_URL must be an absolute http(s) URL")
+        if not self.SSO_REDIRECT_URI.startswith(("http://", "https://")):
+            raise ValueError("SSO_REDIRECT_URI must be an absolute http(s) URL")
+        if self.ENVIRONMENT in {"staging", "production"} and not self.SSO_REDIRECT_URI.startswith(
+            "https://"
+        ):
+            # 统一认证只把授权码回送到登记过的地址；生产用 http 会同时触发
+            # Secure Cookie 写不进去，表现为「登录成功但仍是未登录」。
+            raise ValueError(
+                "SSO_REDIRECT_URI must use https in staging/production environment"
+            )
+        return self
+
     @model_validator(mode="after")
     def _validate_production_security(self):
         """生产环境强制校验安全关键配置。"""
