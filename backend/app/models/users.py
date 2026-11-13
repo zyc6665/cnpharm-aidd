@@ -25,9 +25,15 @@ class UserStatus(str, enum.Enum):
 
 
 class AuthSource(str, enum.Enum):
-    """认证来源：local=平台本地口令，ldap=企业目录校验。"""
+    """认证来源。
+
+    * ``local``：平台本地口令；
+    * ``ldap``：企业目录（LDAP）校验；
+    * ``sso``：甲方统一身份认证（IAM）单点登录，平台不保存口令。
+    """
     LOCAL = "local"
     LDAP = "ldap"
+    SSO = "sso"
 
 
 #: 用户名允许的字符集（其余替换为 ``_``）。
@@ -55,6 +61,9 @@ class User(Base, UUIDMixin, TimestampMixin):
         String(16), nullable=False, default="local", server_default="local"
     )
     ldap_dn = Column(String(512), nullable=True)
+    # 甲方统一身份认证的用户唯一标识（getUserInfo 的 userId）。单点登录用户用它
+    # 做幂等匹配，避免改名/换部门后重复开户；本地与 LDAP 用户为 NULL。
+    sso_uid = Column(String(128), nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     display_name = Column(String(100), nullable=True)
     avatar_url = Column(String(500), nullable=True)
@@ -82,6 +91,15 @@ class User(Base, UUIDMixin, TimestampMixin):
             unique=True,
             postgresql_where=text("ldap_dn IS NOT NULL"),
             sqlite_where=text("ldap_dn IS NOT NULL"),
+        ),
+        # 统一身份（IAM）用户唯一：同一 userId 只能绑定一个平台账号。
+        # 与 ldap_dn 同理用部分唯一索引，本地/LDAP 用户的 NULL 互不冲突。
+        Index(
+            "uq_users_sso_uid",
+            "sso_uid",
+            unique=True,
+            postgresql_where=text("sso_uid IS NOT NULL"),
+            sqlite_where=text("sso_uid IS NOT NULL"),
         ),
         # 注意：列上的 ``index=True`` 生成的是普通非唯一索引 ix_users_username，
         # 它与上面的 uq_users_username_lower 语义不同——前者服务于「按原始大小写
