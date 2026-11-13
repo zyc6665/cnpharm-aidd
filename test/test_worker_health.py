@@ -12,7 +12,6 @@ from app.api.v1 import system as system_module
 from app.config import settings
 from app.worker import health as health_module
 from app.worker.health import (
-    WorkerAvailability,
     probe_workers,
     reset_worker_availability_cache,
     worker_availability,
@@ -95,6 +94,51 @@ async def test_worker_availability_caches_until_expiry(monkeypatch):
 
     assert refreshed.workers == ("worker@host",)
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_probe_budget_covers_slow_ping(monkeypatch):
+    """#112：探测预算必须容得下 `inspect(timeout)` 的真实耗时（T + 0.3~0.4s）。
+
+    Celery 的 `control.inspect(timeout=T)` 自己就要等满 T 秒，再叠加连接与线程调度。
+    这里模拟「T=2.0 实际花了 3.2s」——旧预算 `T + 1.0 = 3.0s` 会超时误报 degraded。
+    """
+    import time
+
+    monkeypatch.setattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr(settings, "CELERY_WORKER_PROBE_TIMEOUT_SECONDS", 2.0)
+
+    def _slow_ping(_timeout):
+        time.sleep(3.2)
+        return ("worker@host",)
+
+    monkeypatch.setattr(health_module, "_ping_workers_sync", _slow_ping)
+
+    result = await probe_workers()
+
+    assert result.available is True
+    assert result.workers == ("worker@host",)
+
+
+@pytest.mark.asyncio
+async def test_worker_availability_does_not_cache_misses(monkeypatch):
+    """#112：没探到 Worker 不写缓存，否则 Worker 刚起来时界面会持续报不可用。"""
+    monkeypatch.setattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr(settings, "CELERY_WORKER_PROBE_CACHE_SECONDS", 60.0)
+    replies: list[tuple[str, ...]] = [(), ("worker@host",)]
+
+    def _ping(_timeout):
+        return replies.pop(0)
+
+    monkeypatch.setattr(health_module, "_ping_workers_sync", _ping)
+
+    first = await worker_availability()
+    second = await worker_availability()
+
+    assert first.available is False
+    assert second.available is True
+    assert second.workers == ("worker@host",)
+    assert replies == []
 
 
 @pytest.mark.asyncio

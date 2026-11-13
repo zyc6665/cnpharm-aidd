@@ -19,6 +19,13 @@
 
 * **`inspect()` 是广播 + 等等回包**，每次调用有固定开销，所以结果做短时缓存
   （`CELERY_WORKER_PROBE_CACHE_SECONDS`），避免每次提交任务都付一次。
+  **但「没探测到 Worker」不缓存**：Worker 刚起、正在重启时把 negative 结果缓存住，
+  `/health` 会在一段时间里持续显示 degraded，而 Worker 其实已经就绪（#112）。
+* **外层 `wait_for` 的预算必须比 `inspect(timeout)` 宽**：`control.inspect(timeout=T)`
+  本身就至少要等 T 秒（广播 + 收回复），再叠加连 broker、序列化、线程调度，实测是
+  `T + 0.3~0.4s`；Worker 冷启动时线程里首次 import celery 生态还要再加 ~1.7s。
+  以前只给了 `T + 1.0`，默认 `T=2.0` 时预算 3.0s < 实测 3.30s，**必然超时误报**。
+  现在是 `T * 1.5 + 2.0`（T=2 → 5.0s）。
 * **`--pool=solo` 下探测会失真**：单线程 Worker 在执行长任务时无法回应控制通道，
   会被判成「没有 Worker」。本地/生产都应当用 `prefork`（Linux）或 `threads`
   （Windows）池。这一条已写进 `docs/internal/17` 的部署前置条件。
@@ -92,13 +99,16 @@ async def probe_workers(*, timeout: float | None = None) -> WorkerAvailability:
         return WorkerAvailability(configured=False, workers=(), checked_at=time.monotonic())
 
     wait_seconds = float(timeout if timeout is not None else settings.CELERY_WORKER_PROBE_TIMEOUT_SECONDS)
+    # 预算要覆盖「inspect 自己等满 wait_seconds」+ 连接/序列化/调度 + 冷启动 import。
+    # 详细推导见模块 docstring（#112）。
+    budget = wait_seconds * 1.5 + 2.0
     try:
         workers = await asyncio.wait_for(
             asyncio.to_thread(_ping_workers_sync, wait_seconds),
-            timeout=wait_seconds + 1.0,
+            timeout=budget,
         )
     except Exception as exc:  # noqa: BLE001 - 探测失败等价「不可用」，不能影响主流程
-        logger.debug("Celery Worker 探测失败: %s", exc)
+        logger.debug("Celery Worker 探测失败（预算 %.1fs）: %s", budget, exc)
         workers = ()
     return WorkerAvailability(
         configured=True, workers=tuple(workers), checked_at=time.monotonic()
@@ -106,15 +116,22 @@ async def probe_workers(*, timeout: float | None = None) -> WorkerAvailability:
 
 
 async def worker_availability(*, refresh: bool = False) -> WorkerAvailability:
-    """带短时缓存的探测结果。"""
+    """带短时缓存的探测结果。
+
+    「探到了 Worker」才写缓存；没探到时清空缓存并直接返回这次的结果。理由：Worker
+    刚起或正在重启的窗口里，缓存住 degraded 会让任务派发在 TTL 内一直写
+    `worker_available=false`，界面显示「等待 Worker 接单」——而 Worker 其实已经好了
+    （#112）。代价只是多探几次，探测本身有 `wait_for` 兜底，不会挂住调用方。
+    """
 
     global _cached
     ttl = float(settings.CELERY_WORKER_PROBE_CACHE_SECONDS)
     async with _lock:
         if not refresh and _cached is not None and (time.monotonic() - _cached.checked_at) < ttl:
             return _cached
-        _cached = await probe_workers()
-        return _cached
+        result = await probe_workers()
+        _cached = result if result.available else None
+        return result
 
 
 def reset_worker_availability_cache() -> None:

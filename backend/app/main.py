@@ -2,6 +2,7 @@
 """FastAPI 主应用入口"""
 
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 
 from fastapi import FastAPI, Request
@@ -68,6 +69,16 @@ def configure_direct_managed_execution_runtime():
     return configure_managed_execution_runtime()
 
 
+async def _warm_worker_probe() -> None:
+    """后台预热一次 Celery Worker 探测（#112），把 celery 生态的 import 开销挪出请求路径。"""
+    try:
+        from app.worker.health import probe_workers
+
+        await probe_workers()
+    except Exception:  # noqa: BLE001 - 预热失败只影响首次探测的速度，不能影响启动
+        logger.debug("启动期 Celery 探测预热失败（忽略）", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -83,6 +94,10 @@ async def lifespan(app: FastAPI):
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
         direct_task_recovery_loop.start()
+    # Celery Worker 探测预热（#112）：第一次 `inspect().ping()` 要在探测线程里 import
+    # celery/kombu/redis 生态（实测 1.7s），放在请求路径上会把首次 `/health` 拖过预算、
+    # 误报 degraded。这里后台跑一次把 import 开销挪走；失败无所谓，`_check_celery` 会再探。
+    app.state.worker_probe_warmup = asyncio.create_task(_warm_worker_probe())
     # 审计事件落库（步骤 7）：文件轨迹仍开启，数据库是查询入口。
     audit_writer = configure_audit_db_writer()
     audit_writer.start()
@@ -115,6 +130,9 @@ async def lifespan(app: FastAPI):
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    warmup = getattr(app.state, "worker_probe_warmup", None)
+    if warmup is not None and not warmup.done():
+        warmup.cancel()
     if runtime_log_sync_loop is not None:
         await runtime_log_sync_loop.stop()
     if quota_settlement_loop is not None:
