@@ -53,6 +53,10 @@ python-dotenv==1.2.2
 
 # Celery 任务队列
 celery[redis]==5.3.6
+# kombu 必须跟着 celery 5.3.6 走：celery 对 kombu 只声明 >=5.3.4,<6.0，
+# 不 pin 会解析到 5.7.0，而 kombu>=5.6 要求 redis-py>=6.1，与下面的
+# redis==5.0.1 冲突 —— worker 启动即抛 VersionMismatch（#110）
+kombu==5.3.7
 
 # Redis
 redis==5.0.1
