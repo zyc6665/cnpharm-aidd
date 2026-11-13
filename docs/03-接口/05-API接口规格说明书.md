@@ -53,7 +53,7 @@
 |---|---|---|
 | 0 | 成功 | |
 | 400xx | 参数与校验 | `40001` 参数缺失、`40002` 参数非法、`40003` 文件格式不支持 |
-| 401xx | 认证 | `40101` 未登录、`40102` Token 过期 |
+| 401xx | 认证 | `40101` 未登录、`40102` Token 过期、`40103` 统一认证会话失效（HTTP 401，`detail.reason=iam_session_expired`，响应同时清除三个认证 Cookie，客户端须重新登录） |
 | 403xx | 权限 | `40301` 无项目权限、`40302` 只读成员不可写、`40303` 配额不足 |
 | 404xx | 资源不存在 | `40401` 项目不存在、`40402` 任务不存在 |
 | 409xx | 状态冲突 | `40901` 资源已存在 / 项目已归档（**两义，用 `detail.reason` 区分**：`DUPLICATE` 表示唯一约束冲突、`ARCHIVED` 表示项目已归档；见 `04` §5.6）、`40902` 任务当前状态不允许该操作、`40903` 乐观锁版本冲突（带 `currentVersion`）、`40904` 幂等键正在处理中（带 `Retry-After: 2`）、`40905` 幂等键已用于另一请求（同 key 不同请求体） |
@@ -93,8 +93,9 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/v1/auth/login` | 登录，返回 access/refresh token；请求体 `{username, password}`（`username` 大小写不敏感，**email 不再作为登录名**）；失败统一 `40101`，不区分「用户不存在/口令错/LDAP 未启用」 |
-| POST | `/api/v1/auth/refresh` | 刷新 token |
+| POST | `/api/v1/auth/refresh` | 刷新 token；SSO 会话会顺带校验统一票据（`SSO_VALIDATE_ON_REFRESH`）。IAM 判定失效时返回 **HTTP 401 + `40103`**（`detail.reason=iam_session_expired`），并**清除三个认证 Cookie** |
 | POST | `/api/v1/auth/logout` | 登出 |
+| POST | `/api/v1/auth/sso/logout` | 统一认证登出；无请求体，Cookie 认证时须带 `X-CSRF-Token`；返回 `data.logout_url`（甲方 GLO 地址，前端做顶层 `window.location.assign`；`null` 表示无 IAM 全局会话，如 local/ldap 用户或 `SSO_ENABLED=false`）；**CSRF 校验失败返回 HTTP 403（不清 Cookie、不吊销会话）**，其余情况清除三个认证 Cookie。幂等：无 Cookie 调用也返回 200 |
 | GET | `/api/v1/auth/me` | 当前用户信息与全局角色 |
 | GET | `/api/v1/users` | 用户列表（管理员，需 `user.read`） |
 | POST | `/api/v1/users` | 创建用户（管理员，需 `user.write`）；body `{username, displayName, email?, password?, authSource, role}`；`password` 缺省时由服务端生成临时口令并在响应中一次性返回，同时置 `mustChangePassword=true` |
@@ -106,6 +107,10 @@
 > **v1.2 补齐说明**：此前只有「创建/启停」，`16` §14.1 却承诺「重置密码」，导致开发无处落接口。现补 `:reset-password` 与 `auth/change-password` 两个动作，并在 `04` §5.0 补 `must_change_password` / `password_reset_by` 两个字段。**口令一律不落明文、不由服务端回显历史口令**；临时口令只在创建/重置的响应中出现一次。
 >
 > **v1.28（2026-10-30）企业账号制认证**：`POST /auth/register` 已删除；`/auth/reset-password`、`/verification/send-code`、`/verification/verify` 停用（HTTP 403 + `40002`）。`POST /users` 的 `authSource` 取 `local|ldap`（默认 `local`），`email` 可空，`username` 必填且创建后不可改；**LDAP 用户不存本地口令**，管理员重置其口令与自助改密均返回 `40002`。`UserResponse`、登录响应、`/users/me` 均含 `username`/`authSource`/`lastLoginAt`。
+>
+> **v1.29（统一认证会话续期与登出）**：`/auth/sso/callback` 成功时把甲方 `accessToken`/`refreshToken`/过期时间加密后挂到平台 refresh 会话行（**不下发任何新 Cookie**）；`POST /auth/refresh` 在 `SSO_VALIDATE_ON_REFRESH=true` 时先 `checkAccessToken`，业务码非 `9001`（或 HTTP 401/403，视为待确认）再 `refreshToken` 续期，仍失败返回 `40103` 并清三个 Cookie。错误码分三档：票据类（`2002`/`1025`）判失效；配置/系统类（`1005`/`1008`/`1012`/`9002`/`9100` 等）与网络故障、HTTP 408/429/5xx 归「不可达」走宽限；未知码 fail-closed 并记 ERROR 日志。IAM 不可达在 `SSO_OFFLINE_GRACE_SECONDS`（默认 86400 秒，`0` 为严格失败关闭）内放行，锚点是最近一次**成功**校验时间且失败放行不刷新锚点。新增 `POST /api/v1/auth/sso/logout`，返回 GLO 地址供前端顶层跳转（`redirectToLogin=false`，回跳 `SSO_LOGOUT_REDIRECT_URI` 或 `/login?sso_logout=1`）。
+>
+> **运维口径（v1.29 补充）**：宽限期耗尽且 IAM 仍不可达时，SSO 用户将无法续期（`40103`）且重新登录同样依赖该 IAM，等同不可用；应急手段是临时置 `SSO_VALIDATE_ON_REFRESH=false` 恢复可用（代价是平台会话不再受甲方全局登出约束），IAM 恢复后须立即改回。旧版本升级后首次续期会因历史会话无票据而 `40103`，上线公告需说明「SSO 用户需重新登录一次」。
 
 ---
 
