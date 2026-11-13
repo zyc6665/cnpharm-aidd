@@ -276,7 +276,8 @@ class Settings(BaseSettings):
     SSO_REDIRECT_URI: str = ""
     # 单点登录成功后的前端落地路径（相对平台根）。
     SSO_SUCCESS_PATH: str = "/workspace"
-    # 首次登录是否自动开户。关闭时未开通的账号一律拒绝（403 + 40301）。
+    # 首次登录是否自动开户。关闭时未开通的账号一律拒绝：303 回跳
+    # /login?sso_error=not_provisioned（前端提示「尚未开通平台账号」）。
     SSO_AUTO_PROVISION: bool = True
     # 自动开户时的默认角色；权限仍由平台管理员后续调整。
     SSO_DEFAULT_ROLE: Literal["user", "admin"] = "user"

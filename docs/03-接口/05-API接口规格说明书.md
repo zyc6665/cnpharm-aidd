@@ -53,7 +53,7 @@
 |---|---|---|
 | 0 | 成功 | |
 | 400xx | 参数与校验 | `40001` 参数缺失、`40002` 参数非法、`40003` 文件格式不支持 |
-| 401xx | 认证 | `40101` 未登录、`40102` Token 过期、`40103` 统一认证会话失效（HTTP 401，`detail.reason=iam_session_expired`，响应同时清除三个认证 Cookie，客户端须重新登录） |
+| 401xx | 认证 | `40101` 未登录、`40102` Token 过期、`40103` 统一认证会话失效（HTTP 401，`detail.reason=iam_session_expired`，响应同时清除三个认证 Cookie，客户端须重新登录；排错见 [`32`](./32-统一身份认证对接方案.md) §8） |
 | 403xx | 权限 | `40301` 无项目权限、`40302` 只读成员不可写、`40303` 配额不足 |
 | 404xx | 资源不存在 | `40401` 项目不存在、`40402` 任务不存在 |
 | 409xx | 状态冲突 | `40901` 资源已存在 / 项目已归档（**两义，用 `detail.reason` 区分**：`DUPLICATE` 表示唯一约束冲突、`ARCHIVED` 表示项目已归档；见 `04` §5.6）、`40902` 任务当前状态不允许该操作、`40903` 乐观锁版本冲突（带 `currentVersion`）、`40904` 幂等键正在处理中（带 `Retry-After: 2`）、`40905` 幂等键已用于另一请求（同 key 不同请求体） |
@@ -92,6 +92,9 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| GET | `/api/v1/auth/sso/status` | 统一认证可用状态；返回 `{enabled, authorize_path, auto_provision}`。`enabled` 只等于 `SSO_ENABLED`，**不校验** `SSO_BASE_URL`/`appId`/`secret`/回调是否齐全 |
+| GET | `/api/v1/auth/sso/authorize` | 发起统一认证登录；`?next=<本地路径>`（白名单校验，非法则回落 `SSO_SUCCESS_PATH`）。成功 302 到甲方 IAM 授权页并写 HMAC 签名 state Cookie（host-only、`Path=/api/v1/auth/sso`、TTL `SSO_STATE_TTL_SECONDS`）；未启用时 303 到 `/login?sso_error=disabled` |
+| GET | `/api/v1/auth/sso/callback` | 统一认证回调；`?code=&state=`。校验 state → 服务端换票 → `getUserInfo` → 账号映射（可自动开户）→ 下发三个平台 Cookie → 303 到 `next`（默认 `/workspace`）；任一失败 303 到 `/login?sso_error=<码>`（`state`/`denied`/`token`/`userinfo`/`unavailable`/`conflict`/`inactive`/`not_provisioned`/`disabled`） |
 | POST | `/api/v1/auth/login` | 登录，返回 access/refresh token；请求体 `{username, password}`（`username` 大小写不敏感，**email 不再作为登录名**）；失败统一 `40101`，不区分「用户不存在/口令错/LDAP 未启用」 |
 | POST | `/api/v1/auth/refresh` | 刷新 token；SSO 会话会顺带校验统一票据（`SSO_VALIDATE_ON_REFRESH`）。IAM 判定失效时返回 **HTTP 401 + `40103`**（`detail.reason=iam_session_expired`），并**清除三个认证 Cookie** |
 | POST | `/api/v1/auth/logout` | 登出 |
@@ -104,6 +107,8 @@
 | POST | `/api/v1/users/{id}:reset-password` | **管理员重置本地用户口令**（需 `user.reset_password`）；body `{tempPassword?}`，缺省由服务端生成；返回 `{tempPassword, mustChangePassword:true}`；置 `password_reset_by` 并写 `audit_log.action=PASSWORD_RESET`；**LDAP 用户返回 `40002`**（口令由目录服务管理） |
 | POST | `/api/v1/auth/change-password` | **用户自助改密**；body `{oldPassword, newPassword}`；成功后置 `must_change_password=false`、更新 `password_updated_at`，并**吊销该用户全部 refresh token**（Redis `jti` 黑名单）；`oldPassword` 错误返回 `40101` |
 
+> **SSO 端点**：上表 `status`/`authorize`/`callback` 三行为统一认证登录入口，浏览器只经历「去 IAM」与「回平台」两次顶层跳转；完整流程、配置、账号映射、宽限期与排错见 [`32`](./32-统一身份认证对接方案.md)。
+>
 > **v1.2 补齐说明**：此前只有「创建/启停」，`16` §14.1 却承诺「重置密码」，导致开发无处落接口。现补 `:reset-password` 与 `auth/change-password` 两个动作，并在 `04` §5.0 补 `must_change_password` / `password_reset_by` 两个字段。**口令一律不落明文、不由服务端回显历史口令**；临时口令只在创建/重置的响应中出现一次。
 >
 > **v1.28（2026-10-30）企业账号制认证**：`POST /auth/register` 已删除；`/auth/reset-password`、`/verification/send-code`、`/verification/verify` 停用（HTTP 403 + `40002`）。`POST /users` 的 `authSource` 取 `local|ldap`（默认 `local`），`email` 可空，`username` 必填且创建后不可改；**LDAP 用户不存本地口令**，管理员重置其口令与自助改密均返回 `40002`。`UserResponse`、登录响应、`/users/me` 均含 `username`/`authSource`/`lastLoginAt`。
@@ -111,6 +116,8 @@
 > **v1.29（统一认证会话续期与登出）**：`/auth/sso/callback` 成功时把甲方 `accessToken`/`refreshToken`/过期时间加密后挂到平台 refresh 会话行（**不下发任何新 Cookie**）；`POST /auth/refresh` 在 `SSO_VALIDATE_ON_REFRESH=true` 时先 `checkAccessToken`，业务码非 `9001`（或 HTTP 401/403，视为待确认）再 `refreshToken` 续期，仍失败返回 `40103` 并清三个 Cookie。错误码分三档：票据类（`2002`/`1025`）判失效；配置/系统类（`1005`/`1008`/`1012`/`9002`/`9100` 等）与网络故障、HTTP 408/429/5xx 归「不可达」走宽限；未知码 fail-closed 并记 ERROR 日志。IAM 不可达在 `SSO_OFFLINE_GRACE_SECONDS`（默认 86400 秒，`0` 为严格失败关闭）内放行，锚点是最近一次**成功**校验时间且失败放行不刷新锚点。新增 `POST /api/v1/auth/sso/logout`，返回 GLO 地址供前端顶层跳转（`redirectToLogin=false`，回跳 `SSO_LOGOUT_REDIRECT_URI` 或 `/login?sso_logout=1`）。
 >
 > **运维口径（v1.29 补充）**：宽限期耗尽且 IAM 仍不可达时，SSO 用户将无法续期（`40103`）且重新登录同样依赖该 IAM，等同不可用；应急手段是临时置 `SSO_VALIDATE_ON_REFRESH=false` 恢复可用（代价是平台会话不再受甲方全局登出约束），IAM 恢复后须立即改回。旧版本升级后首次续期会因历史会话无票据而 `40103`，上线公告需说明「SSO 用户需重新登录一次」。
+>
+> **v1.30（2026-11-13 统一认证端点补齐）**：§2 表补 `GET /auth/sso/status`、`GET /auth/sso/authorize`、`GET /auth/sso/callback` 三行（此前只在实现中，契约层缺登记）；`40103` 行加指向 `32` §8 的排错入口。`POST /auth/sso/logout` 与 `40103` 口径不变（v1.29）。
 
 ---
 
