@@ -320,6 +320,16 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_cookie_flags(self):
+        """``SameSite=None`` 必须配 ``Secure``：缺 Secure 的 None Cookie 会被浏览器直接丢弃。"""
+        if self.COOKIE_SAMESITE == "none" and not self.COOKIE_SECURE:
+            raise ValueError(
+                "COOKIE_SAMESITE=none requires COOKIE_SECURE=true "
+                "(browsers drop SameSite=None cookies without the Secure attribute)"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_production_security(self):
         """生产环境强制校验安全关键配置。"""
         if self.EXECUTOR_ENABLED_K8S:
