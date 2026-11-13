@@ -33,7 +33,7 @@ from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import Tool, ToolFavorite, ToolVersion
-from app.models.users import User, UserRole, UserStatus
+from app.models.users import AuthSource, User, UserRole, UserStatus
 
 
 @pytest_asyncio.fixture
@@ -401,3 +401,104 @@ async def test_admin_hard_delete_user_cascades_related_records(
 
     await db_session.refresh(reviewed_tool)
     assert reviewed_tool.reviewed_by is None
+
+
+@pytest.mark.asyncio
+async def test_admin_create_sso_user_without_password(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """SSO_AUTO_PROVISION=false 的部署可以预建 sso 账号：无平台口令、sso_uid 留空。"""
+    response = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": "preseeded-sso",
+            "email": "preseeded@example.com",
+            "display_name": "Preseeded SSO",
+            "auth_source": "sso",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["message"] == "用户创建成功"
+
+    result = await db_session.execute(
+        select(User).where(User.username == "preseeded-sso")
+    )
+    created_user = result.scalar_one()
+    assert created_user.auth_source == AuthSource.SSO.value
+    # sso 账号的口令由统一身份认证托管，平台侧必须为空
+    assert created_user.password_hash is None
+    # 留空表示首次统一认证登录时按用户名匹配后回填
+    assert created_user.sso_uid is None
+
+
+@pytest.mark.asyncio
+async def test_admin_create_sso_user_ignores_supplied_password(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """即使请求里带了口令，sso 账号也不能把口令落库。"""
+    response = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": "preseeded-sso-pwd",
+            "email": "preseeded-pwd@example.com",
+            "auth_source": "sso",
+            "password": "SsoIgnored123",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 201
+    result = await db_session.execute(
+        select(User).where(User.username == "preseeded-sso-pwd")
+    )
+    created_user = result.scalar_one()
+    assert created_user.password_hash is None
+
+
+@pytest.mark.asyncio
+async def test_admin_create_local_user_still_requires_password(
+    api_client: httpx.AsyncClient,
+):
+    """local 分支不能被放宽：缺口令仍是 40002。"""
+    response = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": "local-no-pwd",
+            "email": "local-no-pwd@example.com",
+            "auth_source": "local",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 40002
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_rejects_unknown_auth_source(
+    api_client: httpx.AsyncClient,
+):
+    """认证源是枚举，未知值必须在 schema 层被拒。"""
+    response = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": "unknown-source",
+            "auth_source": "iam",
+            "password": "UnknownSource123",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 422

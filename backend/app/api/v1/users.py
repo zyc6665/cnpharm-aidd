@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from app.common.time import utcnow
 from app.common.exceptions import BusinessException
@@ -91,8 +91,8 @@ class AdminUserCreate(BaseModel):
         pattern=r"^[A-Za-z0-9._-]{1,64}$",
         description="登录用户名（大小写不敏感唯一）",
     )
-    auth_source: Literal["local", "ldap"] = Field(
-        default="local", description="认证源: local / ldap"
+    auth_source: Literal["local", "ldap", "sso"] = Field(
+        default="local", description="认证源: local / ldap / sso（sso 为统一身份认证预建账号）"
     )
     email: Optional[str] = Field(None, description="邮箱（可选；LDAP 用户可不落邮箱）")
     display_name: Optional[str] = Field(None, description="显示名称")
@@ -100,16 +100,19 @@ class AdminUserCreate(BaseModel):
         None,
         min_length=MIN_PASSWORD_LENGTH,
         max_length=MAX_BCRYPT_PASSWORD_BYTES,
-        description="初始密码（local 必填；ldap 忽略）",
+        description="初始密码（local 必填；ldap/sso 忽略，sso 不落库）",
     )
     role: str = Field(default=UserRole.USER.value, description="角色: user, admin")
     status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
 
     @field_validator("password")
     @classmethod
-    def _validate_password(cls, value: Optional[str]) -> Optional[str]:
-        """仅 local 用户填写口令时校验；LDAP 用户传 None 直接放行。"""
-        if value is None:
+    def _validate_password(
+        cls, value: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
+        """local 才校验口令；ldap/sso 由外部系统托管（sso 账号不得有平台口令）。"""
+        # auth_source 声明在口令字段之前，pydantic v2 顺序校验保证 info.data 里可见
+        if value is None or info.data.get("auth_source") in ("ldap", "sso"):
             return None
         return validate_password_policy(value)
 
@@ -394,7 +397,9 @@ async def admin_create_user(
             )
         pwd_hash = hash_password(user_data.password)
     else:
-        # LDAP 用户不保存本地口令
+        # ldap 由目录服务校验口令、sso 由统一身份认证校验，平台侧都不留口令。
+        # sso 预建账号的 sso_uid 故意留空：首次统一认证登录由 auth_sso._resolve_user
+        # 按用户名匹配到本行后回填，之后改用户名也能按 uid 命中。
         pwd_hash = None
 
     created_user = User(

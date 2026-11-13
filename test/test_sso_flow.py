@@ -608,6 +608,37 @@ async def test_callback_reuses_sso_user_by_uid_even_if_username_changed(
 
 
 @pytest.mark.asyncio
+async def test_callback_backfills_uid_for_preseeded_sso_user(
+    client: httpx.AsyncClient, db_session: AsyncSession, sso_settings, monkeypatch
+):
+    """SSO_AUTO_PROVISION=false 的部署：管理员预建的 sso 账号（无口令、uid 为空）首次登录
+    应按用户名匹配到同一行、回填 sso_uid，而不是报 not_provisioned 或重复开户。"""
+    monkeypatch.setattr(settings, "SSO_AUTO_PROVISION", False)
+    preseeded = await _add_user(
+        db_session,
+        username=IAM_USERNAME,
+        auth_source=AuthSource.SSO.value,
+        sso_uid=None,
+    )
+    assert preseeded.password_hash is None
+    assert preseeded.sso_uid is None
+    _install_iam(_iam_handler())
+    _prime_state(client, target="/tasks")
+
+    response = await client.get("/api/v1/auth/sso/callback?code=c1&state=state-1")
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/tasks"
+    assert "cpumodel_access=" in " ".join(response.headers.get_list("set-cookie"))
+
+    await db_session.refresh(preseeded)
+    assert preseeded.sso_uid == IAM_UID
+    assert preseeded.auth_source == AuthSource.SSO.value
+    assert preseeded.password_hash is None  # 回填过程中不得给 sso 账号补口令
+    rows = (await db_session.execute(select(User))).scalars().all()
+    assert len(rows) == 1  # 预建账号被复用，没有第二个开户
+
+
 async def test_callback_refuses_to_take_over_local_account(
     client: httpx.AsyncClient, db_session: AsyncSession, sso_settings
 ):
@@ -2370,3 +2401,23 @@ def test_frontend_login_page_handles_sso_logout_query():
     assert "ssoLogoutSuccess" in _frontend_source("locales/zh-CN/index.ts")
     assert "ssoLogoutSuccess" in _frontend_source("locales/en-US/index.ts")
 
+
+def test_frontend_wires_sso_login_and_session_expiry():
+    """前端接线兜底：入口按钮、?sso_error 文案、iam_session_expired 单点决策都必须落地。"""
+    login = _frontend_source("views/auth/Login.vue")
+    for token in ("getSsoStatus", "sso_error", "ssoLogin", "navigateToSso"):
+        assert token in login
+
+    request = _frontend_source("api/request.ts")
+    assert "applySessionInvalid" in request
+    assert "rememberRefreshFailure" in request
+    session = _frontend_source("api/sso-session.ts")
+    assert "applySessionInvalid" in session
+    assert "iam_session_expired" in _frontend_source("utils/sso.ts")
+    assert "iam_session_expired" in session
+
+    for locale in ("locales/zh-CN/index.ts", "locales/en-US/index.ts"):
+        source = _frontend_source(locale)
+        assert "ssoError" in source
+        assert "not_provisioned" in source
+        assert "authSourceSso" in source
