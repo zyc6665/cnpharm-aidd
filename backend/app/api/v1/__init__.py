@@ -6,6 +6,7 @@ from app.api.v1 import (
     admin_audit,
     artifacts,
     auth,
+    auth_sso,
     compounds,
     compound_versions,
     decisions,
@@ -35,6 +36,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
+api_router.include_router(auth_sso.router, prefix="/auth/sso", tags=["认证"])
 api_router.include_router(verification.router, prefix="/verification", tags=["验证码"])
 api_router.include_router(users.router, prefix="/users", tags=["用户"])
 api_router.include_router(tools.router, prefix="/tools", tags=["工具"])
