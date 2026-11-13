@@ -64,6 +64,22 @@ def _column_names() -> set[str]:
     return {column["name"] for column in _inspector().get_columns(TABLE)}
 
 
+def _foreign_targets_present() -> bool:
+    """本表外键指向的表是否都在。
+
+    SQLite 删列必须重建表，而重建要反射外键：``user_id`` 指向 ``users``，
+    若目标表缺失（手工拼的精简基线库，如 ``test/test_task_project_aggregate.py``），
+    反射会直接抛 ``NoSuchTableError: users``。真实部署里两表由同一批迁移创建，
+    不会出现这种组合，这里只是让精简库的回滚路径不炸。
+    """
+    if not _table_exists():
+        return False
+    tables = set(_inspector().get_table_names())
+    return all(
+        fk.get("referred_table") in tables for fk in _inspector().get_foreign_keys(TABLE)
+    )
+
+
 def upgrade() -> None:
     if not _table_exists():
         # 精简基线库可能从未建过 refresh_tokens；建表由 20261031_08 负责，这里安全跳过。
@@ -83,6 +99,12 @@ def downgrade() -> None:
     existing = _column_names()
     present = [name for name, _ in IAM_COLUMNS if name in existing]
     if not present:
+        return
+    if not _foreign_targets_present():
+        # 外键目标表缺失的精简库无法走 batch 重建（反射会失败），改用原生 DDL 删列：
+        # 这类库没有历史数据要保，SQLite 3.35+/PostgreSQL 都支持直接 DROP COLUMN。
+        for name in present:
+            op.drop_column(TABLE, name)
         return
     with op.batch_alter_table(TABLE) as batch:
         for name in present:
