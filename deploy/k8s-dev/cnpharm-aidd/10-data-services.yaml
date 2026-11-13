@@ -184,7 +184,13 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+          # 4090 节点出网走镜像加速 docker.1panel.live，该加速对 minio/minio 返回 403，
+          # 直接引用 docker.io 会 ImagePullBackOff。镜像已推入集群内 registry（30500）。
+          # 注意：这个 tag 里装的是 bitnami-legacy 构建（minio 二进制 + mc 客户端），
+          # 不是官方 minio/minio;所以下面显式给 command/args，不依赖镜像自带 entrypoint。
+          # 换集群 / 节点能直连 Docker Hub 时，把 image 换成 minio/minio:<release> 即可，
+          # 其余字段（secret 引用、PVC 挂载、command）都要保留。
+          image: 10.202.2.228:30500/aidd/minio:bitnami-legacy-2025.5.24
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
@@ -233,3 +239,50 @@ spec:
       port: 9001
       targetPort: 9001
       nodePort: 30901
+---
+# 幂等建桶：新集群 apply 后 storage 直接可用，不需要人手 mc mb。
+# 只跑一次（Job 不会随 apply 重跑；要重跑先 kubectl delete job cnpharm-minio-init）。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cnpharm-minio-init
+  namespace: cnpharm-aidd
+  labels: {app: cnpharm-minio-init}
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: cnpharm-minio-init}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: 10.202.2.228:30500/aidd/minio:bitnami-legacy-2025.5.24
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              # 该镜像自带 mc；换成官方 minio/minio 镜像时没有 mc，需要另配镜像。
+              if ! command -v mc >/dev/null 2>&1; then
+                echo "image 内没有 mc，跳过建桶（由部署方手工执行 mc mb）"; exit 0
+              fi
+              until mc alias set local http://cnpharm-minio:9000 \
+                      "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do
+                echo "等待 MinIO 就绪..."; sleep 3
+              done
+              for b in scitool-files drp-assets drp-bulk drp-logs drp-models drp-results drp-temp; do
+                mc mb --ignore-existing "local/$b" >/dev/null
+              done
+              mc ls local
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: cnpharm-aidd-credentials, key: MINIO_ROOT_USER}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: cnpharm-aidd-credentials, key: MINIO_ROOT_PASSWORD}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 256Mi}

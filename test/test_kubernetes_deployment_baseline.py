@@ -385,3 +385,97 @@ def test_dev_network_policies_default_deny_and_allow_only_required_ports():
         for port in rule["ports"]
     }
     assert allowed_ports <= {5432, 6379, 9000, 9001, 5000}
+
+
+# --- 4090 共享数据服务（deploy/k8s-dev/cnpharm-aidd） ---------------------------------
+#
+# 这组测试对应 #111：MinIO 集群里的 env / volumeMounts / command 曾经被一个只写了
+# image 的覆盖清单 apply 掉，Pod 于是用镜像默认口令启动、桶也丢了挂载。回归防线就是
+# 让「清单里少字段」在本地测试阶段直接失败，而不是等别人连环境时才发现。
+
+SHARED_DEPLOY_ROOT = ROOT / "deploy" / "k8s-dev" / "cnpharm-aidd"
+SHARED_CREDENTIALS_SECRET = "cnpharm-aidd-credentials"
+SHARED_BUCKETS = (
+    "scitool-files",
+    "drp-assets",
+    "drp-bulk",
+    "drp-logs",
+    "drp-models",
+    "drp-results",
+    "drp-temp",
+)
+
+
+def _shared_resources() -> list[tuple[str, dict]]:
+    collected: list[tuple[str, dict]] = []
+    for path in sorted(SHARED_DEPLOY_ROOT.glob("*.yaml")):
+        content = path.read_text(encoding="utf-8")
+        for item in yaml.safe_load_all(content):
+            if item:
+                collected.append((path.name, item))
+    return collected
+
+
+def _shared_resource(kind: str, name: str) -> dict:
+    for filename, item in _shared_resources():
+        if item.get("kind") == kind and item.get("metadata", {}).get("name") == name:
+            return item
+    raise AssertionError(f"missing {kind}/{name} under {SHARED_DEPLOY_ROOT}")
+
+
+def test_shared_data_services_define_each_workload_once():
+    """同一个 Deployment/Service/Job 只能出现在一个文件里。
+
+    曾经用 `11-image-4090.yaml` 单独覆盖 minio 的镜像，`kubectl apply` 的三方合并
+    把上一版有、这一版没写的字段全删了。只写 image 的覆盖文件一律不允许存在。
+    """
+    seen: dict[tuple[str, str], str] = {}
+    for filename, item in _shared_resources():
+        kind = item.get("kind")
+        if kind not in {"Deployment", "Service", "Job", "StatefulSet"}:
+            continue
+        key = (kind, item["metadata"]["name"])
+        assert key not in seen, f"{kind}/{key[1]} 在 {seen[key]} 与 {filename} 重复定义"
+        seen[key] = filename
+
+
+def test_shared_minio_keeps_secret_credentials_and_persistent_volume():
+    """minio 必须挂 secret 凭据、挂 PVC、显式给启动命令。"""
+    deployment = _shared_resource("Deployment", "cnpharm-minio")
+    containers = deployment["spec"]["template"]["spec"]["containers"]
+    assert len(containers) == 1
+    container = containers[0]
+
+    assert ":latest" not in container["image"]
+    assert container.get("command"), "minio 容器缺少 command，会退回镜像默认 entrypoint"
+
+    env_by_name = {entry["name"]: entry for entry in container.get("env", [])}
+    for name in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"):
+        secret_ref = env_by_name[name]["valueFrom"]["secretKeyRef"]
+        assert secret_ref["name"] == SHARED_CREDENTIALS_SECRET
+        assert secret_ref["key"] == name
+
+    mounts = {mount["name"]: mount["mountPath"] for mount in container["volumeMounts"]}
+    assert mounts.get("data") == "/data"
+    volumes = {
+        volume["name"]: volume.get("persistentVolumeClaim", {}).get("claimName")
+        for volume in deployment["spec"]["template"]["spec"]["volumes"]
+    }
+    assert volumes.get("data") == "cnpharm-minio-data"
+
+
+def test_shared_minio_init_job_recreates_buckets_idempotently():
+    """建桶 Job 必须幂等，且覆盖平台会用到的全部 7 个桶。"""
+    job = _shared_resource("Job", "cnpharm-minio-init")
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    script = container["args"][-1]
+
+    assert "mc mb --ignore-existing" in script
+    for bucket in SHARED_BUCKETS:
+        assert bucket in script, f"建桶脚本缺少 {bucket}"
+
+    env_by_name = {entry["name"]: entry for entry in container.get("env", [])}
+    for name in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"):
+        assert env_by_name[name]["valueFrom"]["secretKeyRef"]["name"] == (
+            SHARED_CREDENTIALS_SECRET
+        )

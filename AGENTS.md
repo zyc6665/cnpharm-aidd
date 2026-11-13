@@ -45,7 +45,7 @@
 |---|---|
 | 后端 | Python 3.11、FastAPI、SQLAlchemy、Alembic、Celery（worker + beat）、flower |
 | 前端 | Vue 3、Vite、ant-design-vue 4、Pinia、vitest、Playwright、Node 20 |
-| 数据 | PostgreSQL **16**（`postgres:16-alpine`）、Redis 7、MinIO `RELEASE.2024-06-13T22-53-53Z` |
+| 数据 | PostgreSQL **16**（`postgres:16-alpine`）、Redis 7、MinIO（集群内 registry 镜像 `bitnami-legacy-2025.5.24`，内含 minio `DEVELOPMENT.2025-05-24`） |
 
 > `docs/02-架构/04-数据模型设计说明书.md` 里写的 PostgreSQL 15 是早期口径；以 compose 与集群清单里的 16 为准。
 
@@ -84,6 +84,8 @@ cd frontend && npm run dev
 ```
 
 Windows 上 `--pool=threads`，**不要用 `solo`**（会串行卡死）。8 个队列名写错或漏写，前端表现为「任务一直排队、`worker_available=false`」。
+
+`DB_POOL_MODE` 不用手工设：默认 `auto`，worker / beat 会自动切到 `NullPool`（`backend/app/database/session.py` 的 `celery_runtime()` 看命令行判断）。asyncpg 的连接绑定创建它的事件循环，而 threads 池里两个任务可能跑在不同循环上——共享连接池就会报 `got Future ... attached to a different loop`，表现为**维护任务每次都失败**（取消超时清理、GPU 租约回收、执行记录对账全部静默失灵）。显式写 `DB_POOL_MODE=pooled` 会把这个坑踩回来；只有 compose 部署的 worker 才在清单里写死 `null`。
 
 ### 自检
 
@@ -146,7 +148,8 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 |---|---|---|
 | 配置模块路径 | `from app.core.config import settings` 报 ModuleNotFoundError | 是 **`from app.config import settings`** |
 | Git Bash 路径改写 | `pg_dump -f /tmp/x.dump` 被改写成 `C:\...\tmp\x.dump` | 走 stdout 重定向：`pg_dump ... > x.dump` |
-| 4090 拉不到 minio 镜像 | `ErrImagePull`，节点默认的公共镜像加速器对 minio 返回 403 | 必须保留 `deploy/k8s-dev/cnpharm-aidd/11-image-4090.yaml`（指向集群内 registry 的镜像） |
+| 4090 拉不到 minio 镜像 | `ErrImagePull`，节点默认的公共镜像加速器对 minio 返回 403 | 镜像地址直接写进 `deploy/k8s-dev/cnpharm-aidd/10-data-services.yaml`（指向集群内 registry），**不要再加只含 `image:` 的覆盖文件** |
+| `kubectl apply` 把字段删没了 | 用只写 `image:` 的清单 apply 后，Deployment 的 `env` / `volumeMounts` / `command` 全被三方合并删掉，Pod 用镜像默认口令启动 | 只改一个字段用 `kubectl set image`；要 apply 就连完整清单一起；`test/test_kubernetes_deployment_baseline.py` 有回归防线 |
 | 工具 Pod 回读存储 | 用 `127.0.0.1` 的 MinIO 地址，Pod 在 4090 上连不到 | `K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT` 写内网 IP `http://10.202.2.228:30900` |
 | 代理 | `gh auth refresh` / `git clone` 超时，浏览器却正常 | 系统代理只对浏览器生效；设 `HTTP_PROXY`/`HTTPS_PROXY=http://127.0.0.1:10808`，git 侧用 `git config --global http.proxy` |
 | 密钥泄漏 | `backend/.env.bak-*` 被提交 | `.gitignore` 只忽略了 `backend/.env`，任何备份文件都放仓库外 |
