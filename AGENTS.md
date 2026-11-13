@@ -161,10 +161,95 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 - **分支**：`feature/` `fix/` `refactor/` `docs/` `release/` `spike/`；**活不过 3 天**；谁后合谁 rebase。
 - **评审**：1 人通过即可（CODEOWNERS 配好后按域找人）。**不要自己合自己的 PR**。
 - **进度**：看板 5 列（Backlog / Ready / In Progress / In Review / Done），In Progress 每人 ≤ 1；每日在 Discussion 的站会帖回 3 行。
+- **同步**：每天开工先 `git fetch` 看清本地落后多少，落后就 rebase——纪律见第 9 节。
 
 ---
 
-## 9. 文档治理
+## 9. 开发生命线：随时知道本地离远端有多远
+
+**一句话**：分支不是资产，是租来的。本地落后远端这件事，只要自己不主动查，就不会有任何提示——CI 只跑你推上去的那份代码，它不看你基于哪天的 `main`。
+
+单仓多人 + 主干 squash + 线性历史（`required_linear_history`）这三个前提叠在一起，**落后越久，冲突越贵**：落后一天冲突是「改 3 行」，落后一周就是「重写 300 行」，而且很容易在解决冲突时把别人的改动丢掉。
+
+### 9.1 每天开工第一件事
+
+```bash
+git fetch origin
+git status -sb | head -1
+git rev-list --left-right --count HEAD...origin/main     # 输出「领先<TAB>落后」
+```
+
+- **落后 = 0** 才安心写代码；落后 > 0 先 `git rebase origin/main`，再动手。
+- 在 `main` 上更新用 `git pull --ff-only`——分支保护开了线性历史，`pull` 造出 merge commit 会直接推不上去。
+
+### 9.2 提交 / 推送之前再查一次
+
+```bash
+git fetch origin
+git rebase origin/main        # 有冲突现在解决，别拖到 PR 里再撞
+git push --force-with-lease   # 只在自己的分支上、且只在 rebase 之后用
+```
+
+- 用 `--force-with-lease` 而不是 `--force`：万一别人往你分支推过东西，前者会拒绝，后者会把它覆盖掉。
+- **禁止 `git merge origin/main` 进特性分支**：会产生非线性历史，PR 被分支保护挡住，白跑一轮 CI。
+
+### 9.3 判断「别人是不是动了我正在改的文件」
+
+```bash
+git log --oneline origin/main --since="3 days ago" -- <路径>
+git diff --stat HEAD...origin/main -- <路径>
+```
+
+命中就当天在 Issue 里留一句「我在改 X，看到你已经合了 Y」，rebase 后重跑受影响的测试。**语义冲突 git 不报**——两边都改了同一个行为的不同位置时，只能靠这一步提前发现。
+
+### 9.4 任务超过一天怎么办
+
+- 每天至少 `fetch` + `rebase` 一次，别攒到收尾。
+- 第二天就推 **draft PR**（`gh pr create --draft`），让 CI 和别人都能看见你在改哪些文件。
+- **分支活不过 3 天**：3 天还合不了就拆成两个 PR 或砍范围，别让它长成「合并地狱」。
+
+### 9.5 合并之后立刻做的事
+
+```bash
+git checkout main
+git pull --ff-only
+git branch -d <刚合掉的分支>      # 远端分支由 delete_branch_on_merge 自动删
+```
+
+留在本地的旧分支不会自己消失，下次顺手 checkout 上去就是基于两周前的 `main` 开工。
+
+### 9.6 禁止清单
+
+| 别做 | 为什么 |
+|---|---|
+| 分支挂一周不 rebase | 冲突从「改 3 行」变成「重写 300 行」，解决冲突时最容易丢别人的改动 |
+| `git merge origin/main` 进特性分支 | 非线性历史被分支保护拒绝，还得再跑一轮 CI |
+| `git push --force` 到公共分支或别人的分支 | 直接覆盖别人的提交；自己的分支请用 `--force-with-lease` |
+| 用 `stash` 长期存未提交改动 | stash 不进 CI、不进评审、不进备份，等于隐身的工作，机器一崩就没了 |
+| 在别人的 worktree / 共享检出目录里切分支 | 会把别人的工作树切走，排查问题时互相踩 |
+| 凭「我本地跑通了」判断没冲突 | 你的本地可能是三天前的 `main` |
+
+### 9.7 一分钟自检（写进每日日报第一行）
+
+```bash
+git fetch -q origin
+echo "分支:     $(git branch --show-current)"
+echo "领先/落后: $(git rev-list --left-right --count HEAD...origin/main)"
+echo "未提交:   $(git status --porcelain | wc -l) 个文件"
+echo "最新main: $(git log -1 --format='%h %s' origin/main)"
+```
+
+判据：
+
+- **落后 0、未提交 ≤ 3** → 绿灯，继续写。
+- **落后 > 0** → 先 rebase 再写，别一边落后一边加功能。
+- **未提交一堆且多天没动** → 这批改动该拆成小提交、推上去、开 draft PR 了。
+
+> 进度对齐不靠嘴说：站会帖的三行日报第一行就是「昨天合了什么（贴 PR 号）」，配合看板的 `In Progress`（每人 ≤ 1）和上面这三行输出，谁落后、谁卡住、谁和别人撞了文件，一眼能看出来。详见 [`docs/internal/30`](docs/internal/30-团队协作与域划分.md) §5~§7。
+
+---
+
+## 10. 文档治理
 
 - 索引在 [docs/README.md](docs/README.md)（§0.1 编号规则、§0.2 交付文档八类汇总与交付打包建议、§10 治理规则）。
 - 交付文档按八类分子目录：`docs/01-需求/` `02-架构/` `03-接口/` `04-测试/` `05-部署/` `06-运维/` `07-验收/` `08-开发与工程/`；`docs/` 根只留 `README.md`。内部记录放 `docs/internal/`，一次性记录放 `docs/archive/`（**只读，不要改**）。
@@ -174,7 +259,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 ---
 
-## 10. 给 AI Agent 的额外约定
+## 11. 给 AI Agent 的额外约定
 
 1. **先读再改**：改动前读 `docs/internal/30` 的域边界表，确认这个文件归谁；跨域改动拆成多个 PR。
 2. **不碰别人的 WIP**：工作树里未提交的文件可能属于其他人，不要 `git checkout --`、`git stash` 或删掉它们。用独立 worktree 从 `origin/main` 开工。
@@ -186,7 +271,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 ---
 
-## 11. 新人第一周
+## 12. 新人第一周
 
 | 天 | 做什么 |
 |---|---|
