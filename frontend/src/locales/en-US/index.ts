@@ -1837,15 +1837,24 @@ export default {
       subjectType: 'Subject type',
       subjectId: 'Subject ID',
       subjectIdPlaceholder: 'e.g. the candidate set ID',
+      subjectSelectPlaceholder: 'Pick a candidate set',
       reason: 'Reason',
       reasonPlaceholder: 'Explain the trade-off (required)',
       selectedIds: 'Selected members',
       excludedIds: 'Excluded members',
       idsPlaceholder: 'Comma separated, e.g. candidate-1, candidate-2',
+      memberSelectPlaceholder: 'Pick members',
+      memberListHint: 'This set has {count} members; picked members are recorded in the snapshot',
+      memberListTooLarge: 'This set has too many members ({count}); please type the member IDs',
       basisTaskIds: 'Basis task IDs',
       basisTaskIdsPlaceholder: 'Comma separated; they will link to the tasks after submission',
+      taskSelectPlaceholder: 'Pick basis tasks',
       basisMetrics: 'Basis metrics JSON (optional)',
-      basisMetricsPlaceholder: 'A JSON object, e.g. {"pic50": 7.2}',
+      // vue-i18n treats `{` as the start of an interpolation: the JSON example must be
+      // wrapped in a literal block (`{'...'}`), otherwise compilation throws
+      // "Invalid token in placeholder" and the whole drawer fails to render.
+      // Regression test: test/locales-message-compile.test.ts
+      basisMetricsPlaceholder: 'A JSON object, e.g. {\'{"pic50": 7.2}\'}',
       basisMetricsInvalid: 'Basis metrics is not valid JSON',
       snapshotHint:
         'The snapshot is generated from the selected/excluded members with no scores: members without a score are marked "Not recorded" in the record.',

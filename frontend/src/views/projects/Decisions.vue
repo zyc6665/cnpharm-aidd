@@ -289,10 +289,27 @@
               v-model:value="draft.subjectType"
               :options="subjectTypeOptions"
               data-testid="decisions-drawer-subject-type"
+              @change="handleSubjectTypeChange"
             />
           </a-form-item>
           <a-form-item :label="t('decisions.drawer.subjectId')">
+            <!--
+              对象是候选集时直接列出本项目的候选集：让用户记一次决策却先手敲 UUID，
+              等于把「记录」这一步变成不可完成的操作。列表为空（未导入/加载失败）
+              时退回手填，功能不因一次失败请求而消失。
+            -->
+            <a-select
+              v-if="useSubjectPicker"
+              v-model:value="draft.subjectId"
+              show-search
+              option-filter-prop="label"
+              :options="subjectOptions"
+              :placeholder="t('decisions.drawer.subjectSelectPlaceholder')"
+              data-testid="decisions-drawer-subject-id"
+              @change="handleSubjectChange"
+            />
             <a-input
+              v-else
               v-model:value="draft.subjectId"
               :placeholder="t('decisions.drawer.subjectIdPlaceholder')"
               data-testid="decisions-drawer-subject-id"
@@ -306,22 +323,72 @@
               data-testid="decisions-drawer-reason"
             />
           </a-form-item>
-          <a-form-item :label="t('decisions.drawer.selectedIds')">
-            <a-input
-              v-model:value="draft.selectedIdsText"
-              :placeholder="t('decisions.drawer.idsPlaceholder')"
-              data-testid="decisions-drawer-selected"
-            />
-          </a-form-item>
-          <a-form-item :label="t('decisions.drawer.excludedIds')">
-            <a-input
-              v-model:value="draft.excludedIdsText"
-              :placeholder="t('decisions.drawer.idsPlaceholder')"
-              data-testid="decisions-drawer-excluded"
-            />
-          </a-form-item>
+          <!--
+            入选/淘汰成员：选了候选集就把成员列出来点选，否则保留原来的逗号分隔输入。
+            两条路径最终都写回 `draft.selectedIdsText` / `excludedIdsText`，
+            校验和提交逻辑（`buildDecisionCreatePayload`）完全不用改。
+          -->
+          <template v-if="useMemberPicker">
+            <a-form-item :label="t('decisions.drawer.selectedIds')">
+              <a-select
+                mode="multiple"
+                v-model:value="selectedMemberIds"
+                :options="selectedMemberOptions"
+                :placeholder="t('decisions.drawer.memberSelectPlaceholder')"
+                :loading="membersLoading"
+                data-testid="decisions-drawer-selected"
+              />
+            </a-form-item>
+            <a-form-item :label="t('decisions.drawer.excludedIds')">
+              <a-select
+                mode="multiple"
+                v-model:value="excludedMemberIds"
+                :options="excludedMemberOptions"
+                :placeholder="t('decisions.drawer.memberSelectPlaceholder')"
+                :loading="membersLoading"
+                data-testid="decisions-drawer-excluded"
+              />
+            </a-form-item>
+            <p class="decisions-drawer__hint" data-testid="decisions-drawer-member-hint">
+              {{ t('decisions.drawer.memberListHint', { count: memberOptions.length }) }}
+            </p>
+          </template>
+          <template v-else>
+            <a-form-item :label="t('decisions.drawer.selectedIds')">
+              <a-input
+                v-model:value="draft.selectedIdsText"
+                :placeholder="t('decisions.drawer.idsPlaceholder')"
+                data-testid="decisions-drawer-selected"
+              />
+            </a-form-item>
+            <a-form-item :label="t('decisions.drawer.excludedIds')">
+              <a-input
+                v-model:value="draft.excludedIdsText"
+                :placeholder="t('decisions.drawer.idsPlaceholder')"
+                data-testid="decisions-drawer-excluded"
+              />
+            </a-form-item>
+            <p
+              v-if="memberListTooLarge"
+              class="decisions-drawer__hint"
+              data-testid="decisions-drawer-member-limit"
+            >
+              {{ t('decisions.drawer.memberListTooLarge', { count: memberTotal }) }}
+            </p>
+          </template>
           <a-form-item :label="t('decisions.drawer.basisTaskIds')">
+            <!-- 依据任务同样只存 UUID，能列出来就不该让人手敲。 -->
+            <a-select
+              v-if="taskOptions.length > 0"
+              mode="multiple"
+              v-model:value="basisTaskIds"
+              :options="taskOptions"
+              :placeholder="t('decisions.drawer.taskSelectPlaceholder')"
+              :loading="tasksLoading"
+              data-testid="decisions-drawer-basis-tasks"
+            />
             <a-input
+              v-else
               v-model:value="draft.basisTaskIdsText"
               :placeholder="t('decisions.drawer.basisTaskIdsPlaceholder')"
               data-testid="decisions-drawer-basis-tasks"
@@ -376,7 +443,10 @@
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { createProjectDecision, getProjectStage, listProjectDecisions } from '@/api/decisions'
-  import { listCandidateSets } from '@/api/compounds'
+  import { listCandidateSetItems, listCandidateSets } from '@/api/compounds'
+  import { getTaskList } from '@/api/tasks'
+  import { getTaskStatusTextKey } from '@/domain/tasks/status'
+  import type { Task } from '@/types/models'
   import {
     DECISION_POINT_OPTIONS,
     DECISION_SUBJECT_TYPE_OPTIONS,
@@ -388,11 +458,13 @@
     clampDecisionPageSize,
     formatBasisMetrics,
     formatDecisionTime,
+    formatScoreNumber,
     formatSnapshotRank,
     formatSnapshotScore,
     groupDecisionsByPoint,
     isBasisMetricsEmpty,
     isSnapshotScoreMissing,
+    parseIdList,
     recordHasMissingScore,
     resolveDecisionErrorMessage,
     resolveDecisionSubjectLabel,
@@ -401,6 +473,7 @@
     type DecisionDraft
   } from '@/domain/decisions'
   import type { DecisionItem, DecisionPoint, DecisionRecord, ProjectStage } from '@/types/decisions'
+  import type { CandidateSetItem } from '@/types/compounds'
   import { SCORE_SOURCE_MISSING } from '@/types/decisions'
 
   const route = useRoute()
@@ -529,20 +602,26 @@
   // 决策对象的名字。后端只存 subject_id，直接印 UUID 对使用者没有意义；
   // 候选集是本页最常见的对象，按项目把「id → 名称」拉一次即可，其余类型退化为短 id。
   const subjectNames = ref<Record<string, string>>({})
+  // 抽屉里的对象选择器复用同一份列表，不再单独请求。
+  const candidateSets = ref<{ id: string; name: string }[]>([])
 
-  async function loadSubjectNames(): Promise<void> {
+  async function loadCandidateSets(): Promise<void> {
     if (!projectId.value) {
       return
     }
     try {
       const response = await listCandidateSets(projectId.value, { page: 1, page_size: 100 })
       const mapping: Record<string, string> = {}
+      const options: { id: string; name: string }[] = []
       for (const item of response.data.items) {
         mapping[item.id] = item.name
+        options.push({ id: item.id, name: item.name })
       }
       subjectNames.value = mapping
+      candidateSets.value = options
     } catch {
       subjectNames.value = {}
+      candidateSets.value = []
     }
   }
 
@@ -598,7 +677,7 @@
 
   function loadAll(): void {
     void loadStage()
-    void loadSubjectNames()
+    void loadCandidateSets()
     void loadDecisions()
   }
 
@@ -622,6 +701,149 @@
 
   /* 新建抽屉 */
 
+  /**
+   * 候选集成员。选定候选集后按需拉一页（500 是后端 `page_size` 的上限），
+   * 拉失败就以空列表收场——选择器消失、手填输入回来，不阻断记决策。
+   */
+  const memberOptions = ref<{ value: string; label: string }[]>([])
+  const memberTotal = ref(0)
+  const membersLoading = ref(false)
+  const MEMBER_PAGE_SIZE = 500
+
+  const subjectOptions = computed(() =>
+    candidateSets.value.map(item => ({ value: item.id, label: item.name }))
+  )
+  // 只有「对象类型 = 候选集」且确实拿到了列表，才把输入框换成下拉。
+  const useSubjectPicker = computed(
+    () => draft.subjectType === 'CANDIDATE_SET' && subjectOptions.value.length > 0
+  )
+  // 成员超过一页时不列了：漏掉成员比多敲几个 ID 更糟，退回手填并说明原因。
+  const memberListTooLarge = computed(() => memberTotal.value > memberOptions.value.length)
+  const useMemberPicker = computed(
+    () =>
+      draft.subjectType === 'CANDIDATE_SET' &&
+      memberOptions.value.length > 0 &&
+      !memberListTooLarge.value
+  )
+
+  const selectedMemberIds = computed<string[]>({
+    get: () => parseIdList(draft.selectedIdsText),
+    set: ids => {
+      draft.selectedIdsText = ids.join(', ')
+    }
+  })
+  const excludedMemberIds = computed<string[]>({
+    get: () => parseIdList(draft.excludedIdsText),
+    set: ids => {
+      draft.excludedIdsText = ids.join(', ')
+    }
+  })
+
+  // 同一个成员不能既入选又淘汰：各自的下拉里剔掉对面已选中的项。
+  const selectedMemberOptions = computed(() =>
+    memberOptions.value.filter(option => !excludedMemberIds.value.includes(option.value))
+  )
+  const excludedMemberOptions = computed(() =>
+    memberOptions.value.filter(option => !selectedMemberIds.value.includes(option.value))
+  )
+
+  // 标签要同时能「看懂」和「搜到」：名称给人看，候选物 id 用来区分同名/搜索，
+  // 分数有就带上——没录分时留空，与记录里的「未记录」语义一致。
+  // 真实 id 是 UUID，整串进下拉会把名称挤没，长 id 只留前 8 位。
+  function shortIdOf(id: string): string {
+    return id.length > 16 ? id.slice(0, 8) : id
+  }
+
+  function memberLabel(item: CandidateSetItem): string {
+    const name = item.candidate?.name || item.candidate?.code || ''
+    const shortId = shortIdOf(item.candidate_id)
+    const parts = [name || shortId]
+    if (name) {
+      parts.push(shortId)
+    }
+    if (typeof item.snapshot_score === 'number') {
+      parts.push(formatScoreNumber(item.snapshot_score))
+    }
+    return parts.join(' · ')
+  }
+
+  function clearMembers(): void {
+    memberOptions.value = []
+    memberTotal.value = 0
+  }
+
+  /**
+   * 依据任务。后端 `/tasks` 单页上限 100，够列本项目近期任务——列出「选得中」的
+   * 比让人去任务中心翻 UUID 现实得多。拉不到就退回手填输入。
+   */
+  const taskOptions = ref<{ value: string; label: string }[]>([])
+  const tasksLoading = ref(false)
+  const TASK_PAGE_SIZE = 100
+
+  const basisTaskIds = computed<string[]>({
+    get: () => parseIdList(draft.basisTaskIdsText),
+    set: ids => {
+      draft.basisTaskIdsText = ids.join(', ')
+    }
+  })
+
+  function taskLabel(task: Task): string {
+    const name = task.name || task.tool_name || shortIdOf(task.id)
+    const status = t(getTaskStatusTextKey(task.status))
+    return `${name} · ${status}`
+  }
+
+  async function loadTasks(): Promise<void> {
+    tasksLoading.value = true
+    try {
+      const response = await getTaskList({
+        project_id: projectId.value,
+        page: 1,
+        page_size: TASK_PAGE_SIZE
+      })
+      taskOptions.value = response.data.items.map(task => ({
+        value: task.id,
+        label: taskLabel(task)
+      }))
+    } catch {
+      taskOptions.value = []
+    } finally {
+      tasksLoading.value = false
+    }
+  }
+
+  async function loadMembers(setId: string): Promise<void> {
+    clearMembers()
+    if (!setId) {
+      return
+    }
+    membersLoading.value = true
+    try {
+      const response = await listCandidateSetItems(setId, { page: 1, page_size: MEMBER_PAGE_SIZE })
+      memberTotal.value = response.data.total
+      memberOptions.value = response.data.items.map(item => ({
+        value: item.candidate_id,
+        label: memberLabel(item)
+      }))
+    } catch {
+      clearMembers()
+    } finally {
+      membersLoading.value = false
+    }
+  }
+
+  // 换对象类型时 id 的含义整组变了，旧 id 留着只会被后端 404，直接清空。
+  function handleSubjectTypeChange(): void {
+    draft.subjectId = ''
+    clearMembers()
+  }
+
+  function handleSubjectChange(value: unknown): void {
+    draft.selectedIdsText = ''
+    draft.excludedIdsText = ''
+    void loadMembers(typeof value === 'string' ? value : '')
+  }
+
   function resetDraft(): void {
     draft.decisionPoint = 'DP3'
     draft.subjectType = 'CANDIDATE_SET'
@@ -631,12 +853,15 @@
     draft.excludedIdsText = ''
     draft.basisTaskIdsText = ''
     draft.basisMetricsText = ''
+    clearMembers()
     submitError.value = ''
   }
 
   function openDrawer(): void {
     resetDraft()
     createOpen.value = true
+    // 任务列表随时在变，每次开抽屉都重新取一次（一页请求，代价可接受）。
+    void loadTasks()
   }
 
   function closeDrawer(): void {
@@ -923,6 +1148,12 @@
     display: flex;
     justify-content: flex-end;
     margin-top: @spacing-lg;
+  }
+
+  .decisions-drawer__hint {
+    margin: -@spacing-sm 0 @spacing-md;
+    color: @text-tertiary;
+    font-size: @font-size-xs;
   }
 
   .decisions-drawer__error {
