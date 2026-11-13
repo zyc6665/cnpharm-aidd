@@ -6,11 +6,24 @@ import type { DecisionRecord, ProjectStage } from '@/types/decisions'
 const listProjectDecisionsMock = vi.fn()
 const createProjectDecisionMock = vi.fn()
 const getProjectStageMock = vi.fn()
+const listCandidateSetsMock = vi.fn()
+const getTaskListMock = vi.fn()
 
 vi.mock('@/api/decisions', () => ({
   listProjectDecisions: (...args: unknown[]) => listProjectDecisionsMock(...args),
   createProjectDecision: (...args: unknown[]) => createProjectDecisionMock(...args),
   getProjectStage: (...args: unknown[]) => getProjectStageMock(...args)
+}))
+
+// 本文件只关心既有列表/表单行为：把候选集与任务列表固定成空，页面就退回纯手填路径，
+// 不会因为「本机有没有后端」而抖动。
+vi.mock('@/api/compounds', () => ({
+  listCandidateSets: (...args: unknown[]) => listCandidateSetsMock(...args),
+  listCandidateSetItems: () => Promise.reject(new Error('not used'))
+}))
+
+vi.mock('@/api/tasks', () => ({
+  getTaskList: (...args: unknown[]) => getTaskListMock(...args)
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -209,6 +222,19 @@ describe('决策记录页 P-39', () => {
     listProjectDecisionsMock.mockReset()
     createProjectDecisionMock.mockReset()
     getProjectStageMock.mockReset()
+    listCandidateSetsMock.mockReset()
+    getTaskListMock.mockReset()
+
+    listCandidateSetsMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: { items: [], total: 0, page: 1, page_size: 100, total_pages: 0 }
+    })
+    getTaskListMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: { items: [], total: 0, page: 1, page_size: 100, total_pages: 0 }
+    })
 
     listProjectDecisionsMock.mockResolvedValue({
       code: 0,
