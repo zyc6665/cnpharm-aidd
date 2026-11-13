@@ -625,3 +625,98 @@ class TestDeploymentHardeningSettings:
         assert explicit.docs_enabled is False
         assert explicit.resolved_rate_limit_backend == "redis"
         assert explicit.RATE_LIMIT_FAIL_MODE == "open"
+
+
+class TestSsoSessionSettings:
+    """统一认证会话续期/登出相关配置：宽限期上下界与登出回跳地址校验。"""
+
+    def _base(self, **overrides):
+        kwargs = {
+            "ENVIRONMENT": "production",
+            "DEBUG": False,
+            "CORS_ORIGINS": ["https://sciminer.example.com"],
+            "JWT_SECRET_KEY": "j" * 32,
+            "SETTINGS_ENCRYPTION_KEY": "e" * 32,
+            **_production_runtime_settings("production"),
+        }
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_negative_offline_grace_is_rejected(self):
+        """宽限期为负没有含义，直接拒绝启动。"""
+        with pytest.raises(ValueError, match="SSO_OFFLINE_GRACE_SECONDS must be >= 0"):
+            Settings(ENVIRONMENT="development", SSO_OFFLINE_GRACE_SECONDS=-1)
+
+    def test_offline_grace_longer_than_refresh_lifetime_is_rejected(self):
+        """宽限期不得长于平台 refresh 本身寿命，否则等于永久放行。"""
+        with pytest.raises(
+            ValueError,
+            match="SSO_OFFLINE_GRACE_SECONDS must not exceed refresh token lifetime",
+        ):
+            Settings(
+                ENVIRONMENT="development",
+                REFRESH_TOKEN_EXPIRE_DAYS=1,
+                SSO_OFFLINE_GRACE_SECONDS=86401,
+            )
+
+    def test_offline_grace_equal_to_refresh_lifetime_is_accepted(self):
+        settings = Settings(
+            ENVIRONMENT="development",
+            REFRESH_TOKEN_EXPIRE_DAYS=1,
+            SSO_OFFLINE_GRACE_SECONDS=86400,
+        )
+        assert settings.SSO_OFFLINE_GRACE_SECONDS == 86400
+
+    def test_zero_offline_grace_means_strict_fail_closed(self):
+        settings = Settings(ENVIRONMENT="development", SSO_OFFLINE_GRACE_SECONDS=0)
+        assert settings.SSO_OFFLINE_GRACE_SECONDS == 0
+
+    @pytest.mark.parametrize(
+        "redirect",
+        [
+            "/login?sso_logout=1",
+            "javascript:alert(1)",
+            "https://aidd.example.internal/login?sso_logout=1\nX-Injected: 1",
+            "https:///login",
+        ],
+    )
+    def test_logout_redirect_requires_absolute_http_url(self, redirect):
+        """相对路径、伪协议、含控制字符、缺主机名的地址一律拒绝。"""
+        with pytest.raises(ValueError, match="SSO_LOGOUT_REDIRECT_URI"):
+            Settings(ENVIRONMENT="development", SSO_LOGOUT_REDIRECT_URI=redirect)
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_logout_redirect_must_be_https_in_deployment(self, environment):
+        with pytest.raises(
+            ValueError,
+            match="SSO_LOGOUT_REDIRECT_URI must use https in staging/production",
+        ):
+            Settings(
+                **self._base(
+                    ENVIRONMENT=environment,
+                    SSO_LOGOUT_REDIRECT_URI=(
+                        "http://aidd.example.internal/login?sso_logout=1"
+                    ),
+                )
+            )
+
+    def test_logout_redirect_accepts_https_in_production(self):
+        settings = Settings(
+            SSO_LOGOUT_REDIRECT_URI="https://aidd.example.internal/login?sso_logout=1",
+            **self._base(),
+        )
+        assert settings.SSO_LOGOUT_REDIRECT_URI.startswith("https://aidd.example.internal/")
+
+    def test_empty_logout_redirect_falls_back_to_derivation(self):
+        """留空合法：由 SSO_REDIRECT_URI 推导，不算配置错误。"""
+        settings = Settings(ENVIRONMENT="development", SSO_LOGOUT_REDIRECT_URI="  ")
+        assert settings.SSO_LOGOUT_REDIRECT_URI == "  "
+
+    def test_env_example_documents_sso_session_keys(self):
+        """示例环境文件必须同时给出宽限期与登出回跳地址，避免上线时靠猜。"""
+        example = Path(__file__).resolve().parents[1] / "backend" / ".env.example"
+        contents = example.read_text(encoding="utf-8")
+
+        assert "SSO_OFFLINE_GRACE_SECONDS=86400" in contents
+        assert "SSO_LOGOUT_REDIRECT_URI=https://aidd.example.internal/login?sso_logout=1" in contents
+        assert "0 表示严格失败关闭" in contents

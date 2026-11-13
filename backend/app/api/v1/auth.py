@@ -12,14 +12,19 @@
 公开注册已移除；邮箱验证码/自助重置等链路统一停用（HTTP 403 + 业务码 40002）。
 """
 
+import logging
+from datetime import timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
+from app.config import settings
 from app.database.session import get_db
-from app.models.users import User, UserStatus
+from app.models.users import AuthSource, User, UserStatus
 from app.auth.jwt_handler import JWTHandler
 from app.auth.password import verify_password
 from app.auth.dependencies import get_current_user
@@ -33,14 +38,27 @@ from app.auth.ldap_provider import LdapAuthenticator, get_ldap_authenticator
 from app.schemas.users import UserLogin, UserResponse
 from app.schemas.verification import PasswordResetRequest
 from app.services import login_throttle
+from app.services.iam_client import IamClient, get_iam_client
+from app.services.iam_session import (
+    IamSessionStatus,
+    IamTicketDecryptError,
+    IamTickets,
+    open_tickets,
+    seal_ticket_columns,
+    validate_iam_session,
+)
 from app.services.refresh_token_store import (
     ROTATE_OK,
     ROTATE_REUSE,
+    clear_iam_tickets,
     expires_at_from_payload,
+    get_refresh_token,
     revoke_all_for_user,
     revoke_refresh_token,
     rotate_refresh_token,
     store_refresh_token,
+    touch_iam_checked_at,
+    update_iam_tickets,
 )
 from app.common.responses import success_response
 from app.common.exceptions import BusinessException, UnauthorizedException
@@ -50,10 +68,15 @@ from app.logging.audit import AuditResult, get_audit_logger
 
 router = APIRouter()
 jwt_handler = JWTHandler()
+logger = logging.getLogger(__name__)
 
 #: 统一登录失败文案：不泄露用户是否存在/认证源/是否禁用。
 _LOGIN_FAILED_MESSAGE = "用户名或密码错误"
 _DISABLED_MESSAGE = "该功能已停用，请联系管理员"
+
+#: 统一认证判定会话失效时的业务码（HTTP 401），前端据此清本地状态回登录页。
+IAM_SESSION_EXPIRED_CODE = 40103
+IAM_SESSION_EXPIRED_MESSAGE = "统一认证会话已失效，请重新登录"
 
 
 class RefreshTokenRequest(BaseModel):
@@ -245,18 +268,62 @@ async def reset_password(data: PasswordResetRequest | None = None):
     raise BusinessException(_DISABLED_MESSAGE, http_status=403, code=40002)
 
 
+def _iam_session_expired() -> BusinessException:
+    """统一认证判定会话失效的统一 401（业务码 40103）。"""
+    return BusinessException(
+        IAM_SESSION_EXPIRED_MESSAGE,
+        http_status=401,
+        code=IAM_SESSION_EXPIRED_CODE,
+        detail={"reason": "iam_session_expired"},
+    )
+
+
+def _iam_grace_allows(tickets: IamTickets, *, now=None) -> bool:
+    """IAM 不可达时，是否还落在 ``SSO_OFFLINE_GRACE_SECONDS`` 宽限窗口内。
+
+    锚点是「最近一次校验成功」的 ``iam_checked_at``，放行时**不刷新**该锚点，
+    保证最长只能多活一个宽限窗口；``0`` 表示严格失败关闭。
+
+    锚点缺失（迁移前的存量行，或锚点被清空）时直接返回 ``False``：若拿「当前时刻」
+    当锚点，每次请求都会重新起算宽限期，等于永久放行。缺锚点宁可让用户重登一次。
+    """
+    grace = int(settings.SSO_OFFLINE_GRACE_SECONDS or 0)
+    if grace <= 0:
+        # 必须显式判 0：否则 ``elapsed(≈0) <= 0`` 会意外放行一次。
+        return False
+    anchor = tickets.checked_at
+    if anchor is None:
+        logger.warning("IAM 票据缺少校验锚点，按会话失效处理（不发放宽限）")
+        return False
+    current = now or utcnow()
+    return current - anchor <= timedelta(seconds=grace)
+
+
+async def _end_session_for_iam(db: AsyncSession, jti: str) -> None:
+    """统一认证判定会话失效：吊销刚轮换出的新 jti、清票据、提交。"""
+    if jti:
+        await revoke_refresh_token(db, jti)
+        await clear_iam_tickets(db, jti)
+    await db.commit()
+
+
 @router.post("/refresh", response_model=dict)
 async def refresh_token(
     request: Request,
     response: Response,
     refresh_data: RefreshTokenRequest | None = None,
     db: AsyncSession = Depends(get_db),
+    iam_client: Optional[IamClient] = Depends(get_iam_client),
 ):
     """刷新令牌。
 
     优先读取 ``cpumodel_refresh`` Cookie；无 Cookie 时回退到 JSON body 的
     ``refresh_token``（旧契约，供 CLI/测试）。响应 body 默认不含 token，仅当请求头
     ``X-Token-Transport: body`` 时返回，便于非浏览器客户端迁移。
+
+    SSO 会话在这里同步校验统一票据（开关 ``SSO_VALIDATE_ON_REFRESH``）：
+    平台 jti 先轮换并**提交**（不把 IAM 网络调用圈进数据库事务，避免对方超时拖住
+    连接池/行锁），再按 IAM 结果续期、宽限放行或判死；判死返回 401 + 40103。
     """
     client_ip, user_agent = _client_meta(request)
     token = request.cookies.get(REFRESH_COOKIE_NAME)
@@ -283,6 +350,26 @@ async def refresh_token(
     if not user or user.status != UserStatus.ACTIVE.value:
         raise UnauthorizedException("用户不存在或已被禁用")
 
+    # 先把旧行上挂着的 IAM 票据解密出来；解密失败按「票据失效」处理，不抛 500。
+    tickets: Optional[IamTickets] = None
+    decrypt_failed = False
+    old_record = await get_refresh_token(db, str(old_jti))
+    if old_record is not None and (
+        old_record.iam_access_token_enc or old_record.iam_refresh_token_enc
+    ):
+        try:
+            tickets = open_tickets(
+                access_token_enc=old_record.iam_access_token_enc,
+                refresh_token_enc=old_record.iam_refresh_token_enc,
+                access_expires_at=old_record.iam_access_expires_at,
+                checked_at=old_record.iam_checked_at,
+            )
+        except IamTicketDecryptError:
+            decrypt_failed = True
+            logger.error(
+                "统一认证票据解密失败，按会话失效处理 user_id=%s", user.id
+            )
+
     new_access_token = jwt_handler.create_access_token(
         user_id=user.id,
         username=user.username,
@@ -291,12 +378,13 @@ async def refresh_token(
     )
     new_refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
     new_payload = jwt_handler.decode_token(new_refresh_token) or {}
+    new_jti = str(new_payload.get("jti") or "")
 
     rotate_result = await rotate_refresh_token(
         db,
         old_jti=str(old_jti),
         user_id=str(user.id),
-        new_jti=str(new_payload.get("jti") or ""),
+        new_jti=new_jti,
         new_expires_at=expires_at_from_payload(new_payload),
         user_agent=user_agent,
         ip_address=client_ip,
@@ -310,7 +398,53 @@ async def refresh_token(
     if rotate_result != ROTATE_OK:
         raise UnauthorizedException("无效的刷新令牌")
 
+    # 轮换先落库：IAM 调用最长 SSO_TIMEOUT_SECONDS 秒，不应占着事务/行锁。
     await db.commit()
+
+    needs_iam_check = bool(
+        settings.SSO_ENABLED
+        and settings.SSO_VALIDATE_ON_REFRESH
+        and iam_client is not None
+        and user.auth_source == AuthSource.SSO.value
+    )
+
+    if needs_iam_check:
+        if decrypt_failed or tickets is None:
+            # 迁移前的存量 SSO 会话没有票据，或密文已无法解密：只能重新登录。
+            await _end_session_for_iam(db, new_jti)
+            raise _iam_session_expired()
+
+        iam_result = await validate_iam_session(iam_client, tickets)
+
+        if iam_result.status is IamSessionStatus.ALIVE and iam_result.tickets:
+            await touch_iam_checked_at(
+                db, new_jti, iam_result.tickets.checked_at or utcnow()
+            )
+            await db.commit()
+        elif iam_result.status is IamSessionStatus.REFRESHED and iam_result.tickets:
+            await update_iam_tickets(
+                db, new_jti, **seal_ticket_columns(iam_result.tickets)
+            )
+            await db.commit()
+        elif iam_result.status is IamSessionStatus.UNAVAILABLE and _iam_grace_allows(
+            tickets
+        ):
+            # 宽限期内放行，且**不刷新** iam_checked_at（否则故障期变永久放行）。
+            logger.warning(
+                "IAM 校验不可达，宽限期内放行 user_id=%s status=%s code=%s",
+                user.id,
+                iam_result.status.value,
+                iam_result.reason,
+            )
+        else:
+            logger.warning(
+                "统一认证会话失效，结束平台会话 user_id=%s status=%s code=%s",
+                user.id,
+                iam_result.status.value,
+                iam_result.reason,
+            )
+            await _end_session_for_iam(db, new_jti)
+            raise _iam_session_expired()
 
     set_auth_cookies(
         response,
@@ -349,6 +483,9 @@ async def logout(
         jti = payload.get("jti")
         if jti and payload.get("type") == "refresh":
             await revoke_refresh_token(db, str(jti))
+            # 顺带清掉该会话挂着的统一认证票据密文：行虽已吊销，但没有理由把
+            # 还能用的 IAM refreshToken 留在库里等过期。
+            await clear_iam_tickets(db, str(jti))
             await db.commit()
     get_audit_logger().log_logout(
         user_id=str(current_user.id),

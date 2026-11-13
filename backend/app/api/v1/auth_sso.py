@@ -32,15 +32,23 @@ import logging
 import re
 import secrets
 from typing import Optional
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.cookies import generate_csrf_token, set_auth_cookies
+from app.auth.cookies import (
+    ACCESS_COOKIE_NAME,
+    CSRF_COOKIE_NAME,
+    REFRESH_COOKIE_NAME,
+    clear_auth_cookies,
+    generate_csrf_token,
+    set_auth_cookies,
+)
+from app.auth.dependencies import enforce_csrf
 from app.auth.jwt_handler import JWTHandler
 from app.common.request_meta import client_meta
 from app.common.responses import success_response
@@ -49,9 +57,12 @@ from app.config import settings
 from app.database.session import get_db
 from app.logging.audit import AuditResult, get_audit_logger
 from app.models.users import AuthSource, User, UserStatus
-from app.services.iam_client import IamClient, IamError, IamUser, get_iam_client
+from app.services.iam_client import IamClient, IamError, IamToken, IamUser, get_iam_client
+from app.services.iam_session import seal_tickets
 from app.services.refresh_token_store import (
+    clear_iam_tickets,
     expires_at_from_payload,
+    revoke_refresh_token,
     store_refresh_token,
 )
 
@@ -343,8 +354,14 @@ async def _issue_session(
     *,
     client_ip: Optional[str],
     user_agent: Optional[str],
+    iam_token: Optional[IamToken] = None,
 ) -> tuple[str, str, str]:
-    """签发平台自己的会话，返回 ``(access_token, refresh_token, csrf_token)``。"""
+    """签发平台自己的会话，返回 ``(access_token, refresh_token, csrf_token)``。
+
+    ``iam_token`` 非空时，把甲方票据加密后挂到**同一行** refresh 上：续期、登出、
+    复用检测与平台会话同生共死，不会出现「平台 Cookie 已换新、台上票据还是旧的」。
+    甲方没给 refreshToken 时只存 access（access 过期后只能重新登录），只记 user_id。
+    """
     access_token = jwt_handler.create_access_token(
         user_id=user.id,
         username=user.username,
@@ -353,6 +370,15 @@ async def _issue_session(
     )
     refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
     payload = jwt_handler.decode_token(refresh_token) or {}
+    sealed: dict[str, object] = {}
+    if iam_token is not None:
+        sealed = seal_tickets(
+            access_token=iam_token.access_token,
+            refresh_token=iam_token.refresh_token,
+            expires_in=iam_token.expires_in,
+        )
+        if not iam_token.refresh_token:
+            logger.warning("统一认证未返回 refreshToken user_id=%s", user.id)
     await store_refresh_token(
         db,
         jti=str(payload.get("jti") or ""),
@@ -360,6 +386,7 @@ async def _issue_session(
         expires_at=expires_at_from_payload(payload),
         user_agent=user_agent,
         ip_address=client_ip,
+        **sealed,
     )
     user.last_login_at = utcnow()
     await db.commit()
@@ -476,7 +503,7 @@ async def sso_callback(
         return response
 
     access_token, refresh_token, csrf_token = await _issue_session(
-        db, user, client_ip=client_ip, user_agent=user_agent
+        db, user, client_ip=client_ip, user_agent=user_agent, iam_token=token
     )
 
     get_audit_logger().log_login(
@@ -498,3 +525,85 @@ async def sso_callback(
         csrf_token=csrf_token,
     )
     return response
+
+
+# ------------------------------------------------------------------ 登出
+def _logout_redirect_url() -> str:
+    """统一认证注销后的回跳地址。
+
+    优先用 ``SSO_LOGOUT_REDIRECT_URI``（前后端分域时必须显式配置）；否则由回调地址
+    推导同源的 ``/login?sso_logout=1``——推导假设 SPA 与后端同源。
+    """
+    configured = (settings.SSO_LOGOUT_REDIRECT_URI or "").strip()
+    if configured:
+        return configured
+    parts = urlsplit(settings.SSO_REDIRECT_URI or "")
+    if parts.scheme and parts.netloc:
+        return f"{parts.scheme}://{parts.netloc}/login?sso_logout=1"
+    return "/login?sso_logout=1"
+
+
+@router.post("/logout")
+async def sso_logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    client: Optional[IamClient] = Depends(get_iam_client),
+):
+    """登出：清理平台会话，并把甲方 GLO 地址交给前端做**顶层跳转**。
+
+    为什么不是 302：axios 跟随跨域 302 时 JS 读不到最终地址，页面也不会离开 SPA，
+    甲方的 Cookie 清不掉；而让浏览器直接 GET 本站登出接口又带不了 CSRF 头（登出
+    CSRF）。所以拆成「POST 带 CSRF 换 URL」+「前端 window.location.assign」。
+
+    不依赖 ``get_current_user``：access 已过期也必须能登出；jti 从 ``cpumodel_refresh``
+    解出（``decode_token`` 不校验过期），解析失败就跳过吊销——登出必须幂等。
+    """
+    has_auth_cookie = any(
+        request.cookies.get(name)
+        for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, CSRF_COOKIE_NAME)
+    )
+    if has_auth_cookie:
+        enforce_csrf(request)
+
+    client_ip, user_agent = client_meta(request)
+    user: Optional[User] = None
+    # 先记下认证源：万一后续 commit/rollback 让 ORM 对象过期，也不影响是否拼 GLO。
+    is_sso_user = False
+    try:
+        token = request.cookies.get(REFRESH_COOKIE_NAME)
+        payload = jwt_handler.decode_token(token) if token else None
+        if payload and payload.get("type") == "refresh":
+            sub = payload.get("sub")
+            jti = payload.get("jti")
+            if sub:
+                user = await db.get(User, str(sub))
+                if user is not None:
+                    is_sso_user = user.auth_source == AuthSource.SSO.value
+            if jti:
+                await revoke_refresh_token(db, str(jti))
+                # 行已吊销，clear 只按 jti 过滤，仍能清掉密文。
+                await clear_iam_tickets(db, str(jti))
+            await db.commit()
+    except Exception:  # noqa: BLE001 - 登出必须幂等，清理失败也不能让用户退不出去
+        logger.warning("统一认证登出清理本地会话失败", exc_info=True)
+        await db.rollback()
+
+    if user is not None:
+        get_audit_logger().log_logout(
+            user_id=str(user.id),
+            client_ip=client_ip,
+            user_agent=user_agent,
+        )
+
+    logout_url: Optional[str] = None
+    if is_sso_user:
+        if not settings.SSO_ENABLED or client is None:
+            logger.warning("统一认证未启用或配置不完整，仅清理平台会话 user_id=%s", user.id)
+        else:
+            logout_url = client.build_logout_url(
+                _logout_redirect_url(), redirect_to_login=False
+            )
+
+    clear_auth_cookies(response)
+    return success_response(data={"logout_url": logout_url}, message="登出成功")

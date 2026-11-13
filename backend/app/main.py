@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.auth.cookies import clear_auth_cookies
 from app.config import settings, use_direct_task_execution
 from app.cache import get_cache
 from app.database.session import init_db
@@ -161,7 +162,7 @@ async def app_exception_handler(request: Request, exc: AppException):
     # ``BusinessException`` 携带独立 ``http_status``（信封业务码与 HTTP 状态可不同）；
     # 其余 AppException 仍以 code 作为 HTTP 状态。
     status_code = getattr(exc, "http_status", None) or exc.code
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status_code,
         content={
             "code": exc.code,
@@ -173,6 +174,14 @@ async def app_exception_handler(request: Request, exc: AppException):
             "timestamp": isoformat_utc(utcnow()),
         }
     )
+    # 刷新失败（含 40103 统一认证会话失效）必须顺手清掉三个认证 Cookie：
+    # 端点里的 set/delete_cookie 写在依赖注入的 Response 上，一旦抛异常 FastAPI 会
+    # 改用这个新 response 走异常处理器，原来那些 Set-Cookie 头全部丢失。不在这里清，
+    # 前端就还攥着可用的 refresh Cookie，会形成「刷新→401→再刷新」的死循环。
+    path = getattr(getattr(request, "url", None), "path", "") or ""
+    if status_code == 401 and path.rstrip("/").endswith("/auth/refresh"):
+        clear_auth_cookies(response)
+    return response
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):

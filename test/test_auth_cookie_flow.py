@@ -248,3 +248,22 @@ async def test_logout_clears_all_cookies(api_client: httpx.AsyncClient):
     # 清理后访问受保护接口应回到未认证。
     me = await api_client.get("/api/v1/users/me")
     assert me.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_failure_clears_all_auth_cookies(api_client: httpx.AsyncClient):
+    """刷新失败（含 40103 统一认证会话失效）必须清三个 Cookie。
+
+    否则前端还攥着可用的 ``cpumodel_refresh``，会形成「刷新 -> 401 -> 再刷新」的死循环；
+    端点的 ``Set-Cookie`` 写在注入的 Response 上，抛异常后由全局异常处理器补齐。
+    """
+    api_client.cookies.set(REFRESH_COOKIE, "not-a-valid-refresh-token", path="/api/v1/auth")
+
+    response = await api_client.post("/api/v1/auth/refresh")
+
+    assert response.status_code == 401, response.text
+    cookies = _set_cookie_headers(response)
+    assert set(cookies) == {ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE}
+    for name, line in cookies.items():
+        lowered = line.lower()
+        assert "max-age=0" in lowered or "expires=" in lowered, (name, line)

@@ -46,14 +46,26 @@ async def store_refresh_token(
     expires_at: datetime,
     user_agent: Optional[str] = None,
     ip_address: Optional[str] = None,
+    iam_access_token_enc: Optional[str] = None,
+    iam_refresh_token_enc: Optional[str] = None,
+    iam_access_expires_at: Optional[datetime] = None,
+    iam_checked_at: Optional[datetime] = None,
 ) -> RefreshToken:
-    """落库一个新签发的 refresh jti（不 commit，由调用方统一提交）。"""
+    """落库一个新签发的 refresh jti（不 commit，由调用方统一提交）。
+
+    统一身份认证（IAM）票据以密文形式随行落库；非 SSO 登录时四个参数均为
+    ``None``，与历史行为一致。
+    """
     record = RefreshToken(
         jti=jti,
         user_id=user_id,
         expires_at=expires_at,
         user_agent=(user_agent or None),
         ip_address=(ip_address or None),
+        iam_access_token_enc=iam_access_token_enc,
+        iam_refresh_token_enc=iam_refresh_token_enc,
+        iam_access_expires_at=iam_access_expires_at,
+        iam_checked_at=iam_checked_at,
     )
     db.add(record)
     await db.flush()
@@ -78,11 +90,20 @@ async def revoke_refresh_token(
 
 
 async def revoke_all_for_user(db: AsyncSession, user_id: str) -> int:
-    """吊销某用户全部未吊销的 refresh（复用入侵响应）。返回受影响行数。"""
+    """吊销某用户全部未吊销的 refresh（复用入侵响应）。返回受影响行数。
+
+    同时清空统一身份认证票据密文，缩短凭证在库内的残留窗口。
+    """
     result = await db.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=utcnow())
+        .values(
+            revoked_at=utcnow(),
+            iam_access_token_enc=None,
+            iam_refresh_token_enc=None,
+            iam_access_expires_at=None,
+            iam_checked_at=None,
+        )
     )
     return int(result.rowcount or 0)
 
@@ -105,6 +126,9 @@ async def rotate_refresh_token(
 
     并发保护：吊销用条件 UPDATE（``revoked_at IS NULL``），两个并发 refresh 只有
     一个能拿到 ``rowcount == 1``，另一个落到 ``ROTATE_REUSE``。
+
+    统一身份认证票据随会话一起搬家：旧行的四列在同一条 UPDATE 里清空，新行复制
+    旧行的值；随后调用方再按 IAM 的校验结果覆盖新行（见 ``update_iam_tickets``）。
     """
     record = await db.get(RefreshToken, old_jti)
     if record is None or record.user_id != user_id:
@@ -114,10 +138,25 @@ async def rotate_refresh_token(
     if record.expires_at is not None and record.expires_at <= utcnow():
         return ROTATE_EXPIRED
 
+    # 先取出旧行票据，之后统一交给新行（旧行在同一条 UPDATE 里清空，避免残留）。
+    carried = {
+        "iam_access_token_enc": record.iam_access_token_enc,
+        "iam_refresh_token_enc": record.iam_refresh_token_enc,
+        "iam_access_expires_at": record.iam_access_expires_at,
+        "iam_checked_at": record.iam_checked_at,
+    }
+
     result = await db.execute(
         update(RefreshToken)
         .where(RefreshToken.jti == old_jti, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=utcnow(), replaced_by=new_jti)
+        .values(
+            revoked_at=utcnow(),
+            replaced_by=new_jti,
+            iam_access_token_enc=None,
+            iam_refresh_token_enc=None,
+            iam_access_expires_at=None,
+            iam_checked_at=None,
+        )
     )
     if not result.rowcount:
         return ROTATE_REUSE
@@ -129,10 +168,68 @@ async def rotate_refresh_token(
             expires_at=new_expires_at,
             user_agent=(user_agent or None),
             ip_address=(ip_address or None),
+            **carried,
         )
     )
     await db.flush()
     return ROTATE_OK
+
+
+async def update_iam_tickets(
+    db: AsyncSession,
+    jti: str,
+    *,
+    access_token_enc: Optional[str],
+    refresh_token_enc: Optional[str],
+    access_expires_at: Optional[datetime],
+    checked_at: Optional[datetime],
+) -> bool:
+    """整体覆盖某 jti 上的统一身份认证票据（只对未吊销行生效）。不 commit。"""
+    result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.jti == jti, RefreshToken.revoked_at.is_(None))
+        .values(
+            iam_access_token_enc=access_token_enc,
+            iam_refresh_token_enc=refresh_token_enc,
+            iam_access_expires_at=access_expires_at,
+            iam_checked_at=checked_at,
+        )
+    )
+    return bool(result.rowcount)
+
+
+async def touch_iam_checked_at(
+    db: AsyncSession, jti: str, checked_at: datetime
+) -> bool:
+    """只刷新「最近一次校验成功」时间（只对未吊销行生效）。不 commit。
+
+    宽限放行时**不要**调用本函数：锚点一旦滑动，IAM 长期故障就会变成永久放行。
+    """
+    result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.jti == jti, RefreshToken.revoked_at.is_(None))
+        .values(iam_checked_at=checked_at)
+    )
+    return bool(result.rowcount)
+
+
+async def clear_iam_tickets(db: AsyncSession, jti: str) -> bool:
+    """清空某 jti 上的统一身份认证票据密文。不 commit。
+
+    只按 ``jti`` 过滤，**不加** ``revoked_at IS NULL``：登出/判死时该行通常已经被
+    吊销，带上条件就永远清不掉凭证。
+    """
+    result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.jti == jti)
+        .values(
+            iam_access_token_enc=None,
+            iam_refresh_token_enc=None,
+            iam_access_expires_at=None,
+            iam_checked_at=None,
+        )
+    )
+    return bool(result.rowcount)
 
 
 async def purge_expired_for_user(db: AsyncSession, user_id: str) -> None:

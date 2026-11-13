@@ -57,6 +57,15 @@ def _enforce_csrf(request: Request) -> None:
         )
 
 
+def enforce_csrf(request: Request) -> None:
+    """公开包装：供不依赖 ``get_current_user`` 的端点复用同一套 CSRF 校验。
+
+    典型场景是 ``POST /api/v1/auth/sso/logout``：它要允许 access 已过期的用户登出，
+    因此不能走依赖链，但状态变更方法仍必须校验 CSRF。
+    """
+    _enforce_csrf(request)
+
+
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),

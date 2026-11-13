@@ -10,7 +10,7 @@ import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, List, Literal
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from dotenv import load_dotenv
 from pydantic import field_validator, model_validator
@@ -24,6 +24,8 @@ _DNS_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _IPV4_NUMERIC_HOST_PATTERN = re.compile(
     r"(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)(?:\.(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)){0,3}"
 )
+#: 配置里的 URL 不允许夹带控制字符（换行会切断响应头，是典型的头注入入口）。
+_CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 # 已知的示例/占位符密钥片段（不区分大小写）。这些值一旦进入运行环境就等同于
 # 公开密钥：预发布/生产环境必须拒绝启动，开发环境告警并回退到随机值。
 _PLACEHOLDER_SECRET_MARKERS = (
@@ -288,6 +290,14 @@ class Settings(BaseSettings):
     SSO_TLS_VALIDATE: bool = True
     # 统一认证 state 的有效期（秒），仅用于一次授权跳转。
     SSO_STATE_TTL_SECONDS: int = 300
+    # IAM 不可达（网络/超时/5xx）时，允许平台会话继续续期的宽限窗口（秒）：
+    # 从最近一次校验**成功**的时间算起，最多多活这么久；0 表示严格失败关闭。
+    # 宽限期内放行不会刷新锚点，因此故障期不会变成无限期放行。
+    SSO_OFFLINE_GRACE_SECONDS: int = 86400
+    # 统一认证全局登出（GLO）完成后的回跳地址，通常指向前端登录页。
+    # 留空则由 SSO_REDIRECT_URI 的 scheme://netloc 推导（假设 SPA 与后端同源）；
+    # 前后端分域部署时必须显式配置。
+    SSO_LOGOUT_REDIRECT_URI: str = ""
 
     @model_validator(mode="after")
     def _validate_sso_settings(self):
@@ -316,6 +326,40 @@ class Settings(BaseSettings):
             # Secure Cookie 写不进去，表现为「登录成功但仍是未登录」。
             raise ValueError(
                 "SSO_REDIRECT_URI must use https in staging/production environment"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_sso_session_settings(self):
+        """统一认证会话续期/登出相关的配置，任何环境下都必须合法。
+
+        单独成校验器（而不是塞进 ``_validate_sso_settings``）：后者在
+        ``SSO_ENABLED=False`` 时直接返回，但宽限期、登出回跳地址即使关闭 SSO
+        也不该允许非法值——否则一开关就启动失败，问题被推迟到上线时暴露。
+        """
+        if self.SSO_OFFLINE_GRACE_SECONDS < 0:
+            raise ValueError("SSO_OFFLINE_GRACE_SECONDS must be >= 0")
+
+        max_grace = int(self.REFRESH_TOKEN_EXPIRE_DAYS) * 86400
+        if self.SSO_OFFLINE_GRACE_SECONDS > max_grace:
+            # 宽限期长于平台 refresh 本身的寿命没有意义，还会掩盖配置错误。
+            raise ValueError(
+                "SSO_OFFLINE_GRACE_SECONDS must not exceed refresh token lifetime"
+            )
+
+        redirect = (self.SSO_LOGOUT_REDIRECT_URI or "").strip()
+        if not redirect:
+            return self
+        if _CONTROL_CHAR_PATTERN.search(redirect):
+            raise ValueError(
+                "SSO_LOGOUT_REDIRECT_URI must not contain control characters"
+            )
+        parsed = urlsplit(redirect)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("SSO_LOGOUT_REDIRECT_URI must be an absolute http(s) URL")
+        if self.ENVIRONMENT in {"staging", "production"} and parsed.scheme != "https":
+            raise ValueError(
+                "SSO_LOGOUT_REDIRECT_URI must use https in staging/production environment"
             )
         return self
 
