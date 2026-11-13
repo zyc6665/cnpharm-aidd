@@ -8,7 +8,7 @@ import {
 import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
   login as apiLogin,
-  logout as apiLogout,
+  ssoLogout as apiSsoLogout,
   getCurrentUser
 } from '@/api/auth'
 import { AUTH_CLEARED_EVENT, clearTokens } from '@/api/request'
@@ -102,15 +102,23 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  const logout = async () => {
+  /**
+   * 退出登录：统一认证登出接口会吊销平台会话并返回甲方 GLO 地址。
+   * 返回 null 表示没有 IAM 全局会话（local/ldap 用户、未启用 SSO 或接口失败），
+   * 调用方据此决定回首页还是顶层跳转。无论接口成败都必须清本地状态。
+   */
+  const logout = async (): Promise<string | null> => {
+    let logoutUrl: string | null = null
     try {
-      await apiLogout()
+      const res = await apiSsoLogout()
+      logoutUrl = res.data?.logout_url ?? null
     } catch {
       // 忽略退出登录的错误（如 401），因为无论如何都要清除本地数据
     } finally {
       clearTokens()
       clearLocalAuthState()
     }
+    return logoutUrl
   }
 
   const fetchUserInfo = async () => {

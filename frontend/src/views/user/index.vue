@@ -132,9 +132,14 @@ const handleLogout = () => {
     okText: t('common.confirm'),
     cancelText: t('common.cancel'),
     onOk: async () => {
-      await userStore.logout()
+      const logoutUrl = await userStore.logout()
       message.success(t('auth.logoutSuccess'))
-      router.push('/')
+      if (logoutUrl) {
+        // 顶层跳转到甲方 GLO：XHR 跟随跨域 302 时读不到最终地址，也清不掉 IAM Cookie
+        window.location.assign(logoutUrl)
+      } else {
+        router.push('/')
+      }
     }
   })
 }

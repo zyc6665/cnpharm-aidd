@@ -983,6 +983,7 @@ export default {
     goLogin: '立即登录',
     loginSuccess: '登录成功',
     logoutSuccess: '退出成功',
+    ssoLogoutSuccess: '已退出统一认证',
     loginRequired: '请先登录',
     validation: {
       accountRequired: '请输入账号',

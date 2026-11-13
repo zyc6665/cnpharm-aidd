@@ -23,6 +23,13 @@ export const logout = (): Promise<ApiResponse<null>> => {
   return post<null>('/auth/logout')
 }
 
+// 统一认证登出：后端吊销平台会话并返回甲方 GLO 地址，前端需顶层跳转
+// （axios 跟随跨域 302 时 JS 读不到最终地址，IAM 的 Cookie 也不会被清）。
+// logout_url 为 null 表示没有 IAM 全局会话（local/ldap 用户或未启用 SSO）。
+export const ssoLogout = (): Promise<ApiResponse<{ logout_url: string | null }>> => {
+  return post<{ logout_url: string | null }>('/auth/sso/logout')
+}
+
 // 获取当前用户信息（Cookie 会话有效即可返回，无需前端持有 token）
 export const getCurrentUser = (config?: RequestOptions): Promise<ApiResponse<UserInfo>> => {
   return get<UserInfo>('/users/me', undefined, config)

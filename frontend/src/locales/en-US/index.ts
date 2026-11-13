@@ -985,6 +985,7 @@ export default {
     goLogin: 'Sign in now',
     loginSuccess: 'Login successful',
     logoutSuccess: 'Logout successful',
+    ssoLogoutSuccess: 'Signed out of unified authentication',
     loginRequired: 'Please login first',
     validation: {
       accountRequired: 'Please enter account',

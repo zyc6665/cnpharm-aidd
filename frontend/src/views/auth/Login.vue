@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive } from 'vue'
+  import { ref, reactive, onMounted } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
@@ -100,6 +100,18 @@
       loading.value = false
     }
   }
+
+  // 从统一认证登出回跳（GLO 带 ?sso_logout=1）：提示一次并把标记从地址栏清掉，
+  // 避免刷新页面重复提示；这里**不**自动发起 SSO 登录，仍由用户选择登录方式。
+  onMounted(() => {
+    if (!route.query.sso_logout) {
+      return
+    }
+    message.info(t('auth.ssoLogoutSuccess'))
+    const restQuery = { ...route.query }
+    delete restQuery.sso_logout
+    router.replace({ path: route.path, query: restQuery })
+  })
 
 </script>
 
