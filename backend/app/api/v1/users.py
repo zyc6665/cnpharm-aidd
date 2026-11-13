@@ -337,9 +337,11 @@ async def change_password(
     db: AsyncSession = Depends(get_db)
 ):
     """修改当前用户的密码"""
-    if current_user.auth_source == "ldap":
+    if current_user.auth_source in ("ldap", "sso"):
         raise BusinessException(
-            "LDAP 用户的口令由企业目录管理，请在目录中修改",
+            "统一认证账号的口令由统一身份认证平台管理，请在统一认证平台修改"
+            if current_user.auth_source == "sso"
+            else "LDAP 用户的口令由企业目录管理，请在目录中修改",
             http_status=400,
             code=40002,
         )
@@ -683,9 +685,11 @@ async def admin_reset_user_password(
             detail="用户不存在"
         )
 
-    if user.auth_source == "ldap":
+    if user.auth_source in ("ldap", "sso"):
         raise BusinessException(
-            "LDAP 用户的口令由企业目录管理，不能在平台重置",
+            "统一认证账号的口令由统一身份认证平台管理，不能在平台重置"
+            if user.auth_source == "sso"
+            else "LDAP 用户的口令由企业目录管理，不能在平台重置",
             http_status=400,
             code=40002,
         )

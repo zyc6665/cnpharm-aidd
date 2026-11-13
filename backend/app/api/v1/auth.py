@@ -6,6 +6,8 @@
 * ``local``：``verify_password(password, user.password_hash)``；
 * ``ldap``：调用 ``get_ldap_authenticator()`` 校验企业目录，成功后回填 ``ldap_dn`` /
   ``last_login_at``，绝不落本地口令。
+* ``sso``：统一身份认证账号在本平台没有口令，口令登录一律 401，登录只能走
+  ``/api/v1/auth/sso/*``。
 
 公开注册已移除；邮箱验证码/自助重置等链路统一停用（HTTP 403 + 业务码 40002）。
 """
@@ -153,6 +155,20 @@ async def login(
         user.ldap_dn = ldap_result.dn
         user.last_login_at = utcnow()
         await db.commit()
+    elif user.auth_source == "sso":
+        # 统一认证账号在平台侧没有口令：任何口令登录都必须拒绝，否则管理员重置
+        # 过一次口令就会在本地留下可绕开 IAM 的凭证。
+        audit.log_login(
+            user_id=str(user.id),
+            email=user.email,
+            username=user.username,
+            result=AuditResult.FAILURE,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            reason="统一认证账号不允许口令登录",
+        )
+        await login_throttle.register_failure(username, client_ip)
+        raise _login_failed()
     else:
         if not user.password_hash or not verify_password(
             login_data.password, user.password_hash

@@ -40,11 +40,17 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码"""
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    """验证密码。
+
+    ``hashed_password`` 为 None（统一认证账号在平台侧无口令，见 auth_sso 开户逻辑）
+    或库里存了畸形 hash 时一律返回 False——这两个入口都是「外部数据不对」，
+    不该升级成 500。
+    """
+    if not hashed_password:
+        return False
     try:
         password_bytes = _encode_password(plain_password)
-    except ValueError:
+        return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    except (TypeError, ValueError):
         return False
-    hashed_bytes = hashed_password.encode('utf-8')
-    return bcrypt.checkpw(password_bytes, hashed_bytes)
