@@ -208,14 +208,22 @@ def test_http_error_status_raises_with_status():
     assert excinfo.value.http_status == 503
 
 
-def test_secret_never_appears_in_logs(caplog):
-    client = _client(lambda request: _json({"code": "1005", "message": "appId 非法"}))
+def test_secret_never_appears_in_logs_or_exception(caplog):
+    # 断言用配置里的真值：写死一个从未出现过的字面量会让断言恒真。
+    config = _settings()
+    client = IamClient(
+        config,
+        transport=httpx.MockTransport(
+            lambda request: _json({"code": "1005", "message": "appId 非法"})
+        ),
+    )
 
     with caplog.at_level("DEBUG"):
-        with pytest.raises(IamError):
+        with pytest.raises(IamError) as excinfo:
             _run(client.exchange_code("code-1"))
 
-    assert "super-secret-value" not in caplog.text
+    assert config.SSO_CLIENT_SECRET not in caplog.text
+    assert config.SSO_CLIENT_SECRET not in str(excinfo.value)
 
 
 def test_build_iam_client_returns_none_when_disabled():
@@ -226,3 +234,48 @@ def test_enabled_config_without_secret_is_rejected_at_startup():
     """配置校验在启动时就拦住半配置状态，不等到第一次登录才报错。"""
     with pytest.raises(ValidationError):
         _settings(SSO_CLIENT_SECRET="")
+
+
+def test_http_400_with_business_code_keeps_both_code_and_status():
+    """甲方可能用 400 + {"code":"1025"} 表达 refreshToken 失效。
+
+    只看状态码会把它归成「对方不可用」，吃不存在的宽限；必须把业务码带上来，
+    上层才能按 `ticket_invalid` 立刻判死。
+    """
+    client = _client(
+        lambda request: httpx.Response(
+            400, json={"code": "1025", "message": "refresh_token 不正确或过期"}
+        )
+    )
+
+    with pytest.raises(IamError) as excinfo:
+        _run(client.refresh("rt-old"))
+
+    assert excinfo.value.code == "1025"
+    assert excinfo.value.http_status == 400
+
+
+def test_http_503_with_non_json_body_falls_back_to_status_code():
+    """非 JSON 的 5xx 拿不到业务码：code 为 None，只带状态码，按传输类处理。"""
+    client = _client(lambda request: httpx.Response(503, text="<html>busy</html>"))
+
+    with pytest.raises(IamError) as excinfo:
+        _run(client.refresh("rt-old"))
+
+    assert excinfo.value.code is None
+    assert excinfo.value.http_status == 503
+
+
+def test_refresh_without_refresh_token_raises_transport_like_error(caplog):
+    """规范 4.1.4.5：续期返回的 refreshToken 必填，缺了不能沿用已消费的旧票。"""
+    client = _client(
+        lambda request: _json({"code": "9001", "data": {"accessToken": "at-2"}})
+    )
+
+    with caplog.at_level("ERROR"):
+        with pytest.raises(IamError) as excinfo:
+            _run(client.refresh("rt-old"))
+
+    assert excinfo.value.code is None
+    assert excinfo.value.http_status is None
+    assert "refreshToken" in caplog.text

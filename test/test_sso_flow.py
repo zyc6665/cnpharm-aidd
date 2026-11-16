@@ -639,6 +639,7 @@ async def test_callback_backfills_uid_for_preseeded_sso_user(
     assert len(rows) == 1  # 预建账号被复用，没有第二个开户
 
 
+@pytest.mark.asyncio
 async def test_callback_refuses_to_take_over_local_account(
     client: httpx.AsyncClient, db_session: AsyncSession, sso_settings
 ):
@@ -779,7 +780,39 @@ def test_safe_local_path_keeps(value):
 
 
 def test_safe_local_path_truncates():
-    assert len(sso_module._safe_local_path("/" + "a" * 600)) == 512
+    # 超长不再「截断成 512」而是整条丢弃：截断会让卡在边界上的越权串「看起来」合法
+    # （旧实现 ``[:512]`` 正是这么放过 /a/../… 一类绕过串的）。
+    assert sso_module._safe_local_path("/" + "a" * 600) is None
+
+
+@pytest.mark.asyncio
+async def test_state_cookie_single_slot_second_use_is_rejected(
+    client: httpx.AsyncClient, sso_settings
+):
+    """A-06 已知限制：state 是**单槽** Cookie，同一回跳用两次第二次必然报 state。
+
+    这条用例不是在保护正确性，而是把一个**被判定为可接受降级**的行为固定下来——
+    双击、后退刷新、两个标签页各点一次登录时，第二次会失败，需要再点一次登录。
+    真要修得把 Cookie 值改成「state 列表」编码，本轮明确不做；没有这条断言，以后
+    有人顺手「优化」成多槽时不会有任何提示，也就没人会去同步前端与文档。
+    """
+    _install_iam(_iam_handler())
+    # 走真实的 ``/authorize`` 取 state：Cookie 由服务端 Set-Cookie 写入，浏览器（这里由
+    # httpx 的 cookie jar 代演）才会在收到删除头时真的把它丢掉；手工 ``cookies.set``
+    # 塞进去的是 host-only 条目，删除头对它不生效，会测出「第二次居然成功」的假结果。
+    authorize = await client.get("/api/v1/auth/sso/authorize?next=/workspace")
+    assert authorize.status_code == 302
+    state = client.cookies.get(STATE_COOKIE, path=STATE_COOKIE_PATH).split("|", 1)[0]
+
+    first = await client.get(f"/api/v1/auth/sso/callback?code=c1&state={state}")
+    assert first.status_code == 303
+    assert first.headers["location"] == "/workspace"
+    # 单槽已被第一次消费：这里不手工清 Cookie，交给浏览器按 Set-Cookie 删除。
+    assert client.cookies.get(STATE_COOKIE, path=STATE_COOKIE_PATH) is None
+
+    second = await client.get(f"/api/v1/auth/sso/callback?code=c1&state={state}")
+    assert second.status_code == 303
+    assert second.headers["location"] == "/login?sso_error=state"
 
 
 # --------------------------------------------------------------------------- #
@@ -1770,15 +1803,15 @@ async def test_refresh_rejects_session_when_iam_refresh_http_401(
 
 
 @pytest.mark.asyncio
-async def test_refresh_grace_passes_on_iam_system_error_9100(
+async def test_refresh_grace_passes_on_iam_request_invalid(
     db_session: AsyncSession, client: httpx.AsyncClient, iam_refresh_settings
 ):
-    """check 2002 + refresh 9100（系统异常）：归入不可达走宽限，锚点不滑动。"""
+    """check 2002 + refresh 1005（规范内的 REQUEST_INVALID）：走宽限、锚点不滑动。"""
     calls: list[str] = []
-    _install_iam(_iam_handler(check_code="2002", refresh_code="9100", calls=calls))
+    _install_iam(_iam_handler(check_code="2002", refresh_code="1005", calls=calls))
     user = await _add_user(
         db_session,
-        username="sso-9100",
+        username="sso-request-invalid",
         auth_source=AuthSource.SSO.value,
         sso_uid=IAM_UID,
     )
@@ -1795,37 +1828,89 @@ async def test_refresh_grace_passes_on_iam_system_error_9100(
         db_session, (jwt_handler.decode_token(_refresh_cookie_value(response)) or {}).get("jti")
     )
     assert new_row is not None
-    # 系统错误码只配「宽限」不配「续命」：锚点保持旧值，故障拖长也不会永久放行。
+    # 请求错误只配「宽限」不配「续命」：锚点保持旧值，故障拖长也不会永久放行。
     assert new_row.iam_checked_at == anchor
 
 
 @pytest.mark.asyncio
-async def test_refresh_grace_passes_on_iam_system_error_9002(
-    db_session: AsyncSession, client: httpx.AsyncClient, iam_refresh_settings
+@pytest.mark.parametrize("code", ["9002", "9100"])
+async def test_refresh_rejects_unknown_result_code_from_check(
+    code: str,
+    db_session: AsyncSession,
+    client: httpx.AsyncClient,
+    iam_refresh_settings,
 ):
-    """check 与 refresh 都回 9002（参数错误）：配置问题不踢人，按不可达宽限放行。"""
+    """表外码出现在 check 阶段：HTTP 200 的未知业务码 fail-closed，不被宽限吃掉。"""
     calls: list[str] = []
-    _install_iam(_iam_handler(check_code="9002", refresh_code="9002", calls=calls))
+    _install_iam(_iam_handler(check_code=code, refresh_code=code, calls=calls))
     user = await _add_user(
         db_session,
-        username="sso-9002",
+        username=f"sso-unknown-check-{code}",
         auth_source=AuthSource.SSO.value,
         sso_uid=IAM_UID,
     )
-    anchor = utcnow() - timedelta(minutes=10)
-    token = await _seed_sso_session(db_session, user, checked_at=anchor)
+    token = await _seed_sso_session(db_session, user)
 
     response = await client.post(
         "/api/v1/auth/refresh", cookies={"cpumodel_refresh": token}
     )
 
-    assert response.status_code == 200, response.text
-    assert calls == ["checkAccessToken", "refreshToken"]
-    new_row = await get_refresh_token(
-        db_session, (jwt_handler.decode_token(_refresh_cookie_value(response)) or {}).get("jti")
+    assert response.status_code == 401, response.text
+    assert response.json()["code"] == 40103
+    assert response.json()["detail"] == {"reason": "iam_session_expired"}
+    # 判死在 check：既没进续期，也没被宽限放行。
+    assert calls == ["checkAccessToken"]
+
+    headers = _set_cookie_headers(response)
+    for name in AUTH_COOKIE_NAMES:
+        assert name in headers
+        assert "max-age=0" in headers[name]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", ["9002", "9100"])
+async def test_refresh_rejects_unknown_result_code_from_renewal(
+    code: str,
+    db_session: AsyncSession,
+    client: httpx.AsyncClient,
+    iam_refresh_settings,
+):
+    """表外码出现在续期阶段：同样 fail-closed，并结束会话、清票据。"""
+    calls: list[str] = []
+    _install_iam(_iam_handler(check_code="2002", refresh_code=code, calls=calls))
+    user = await _add_user(
+        db_session,
+        username=f"sso-unknown-renew-{code}",
+        auth_source=AuthSource.SSO.value,
+        sso_uid=IAM_UID,
     )
-    assert new_row is not None
-    assert new_row.iam_checked_at == anchor
+    token = await _seed_sso_session(db_session, user)
+    old_jti = (jwt_handler.decode_token(token) or {}).get("jti")
+
+    response = await client.post(
+        "/api/v1/auth/refresh", cookies={"cpumodel_refresh": token}
+    )
+
+    assert response.status_code == 401, response.text
+    assert response.json()["code"] == 40103
+    assert response.json()["detail"] == {"reason": "iam_session_expired"}
+    assert calls == ["checkAccessToken", "refreshToken"]
+
+    headers = _set_cookie_headers(response)
+    for name in AUTH_COOKIE_NAMES:
+        assert name in headers
+        assert "max-age=0" in headers[name]
+
+    rows = (
+        await db_session.execute(
+            select(RefreshToken).where(RefreshToken.user_id == user.id)
+        )
+    ).scalars().all()
+    created = [row for row in rows if row.jti != old_jti]
+    assert len(created) == 1
+    assert created[0].revoked_at is not None
+    assert created[0].iam_access_token_enc is None
+    assert created[0].iam_refresh_token_enc is None
 
 
 @pytest.mark.asyncio
@@ -1950,7 +2035,10 @@ async def test_refresh_skips_iam_when_client_unavailable(
 async def test_refresh_reuse_detection_consumes_iam_refresh_only_once(
     db_session: AsyncSession, client: httpx.AsyncClient, iam_refresh_settings
 ):
-    """两个标签同时刷新：只有轮换成功的那个会消费甲方单次 refreshToken。"""
+    """同一张旧票三段：窗口内第二次是并发落败（409），窗口外第三次才是真复用（401）。
+
+    甲方单次 refreshToken 只允许消费一次；并发落败方既不消费 IAM，也不吊销赢家的新行。
+    """
     refreshes: list[str] = []
     _install_iam(_iam_handler(refresh_calls=refreshes))
     user = await _add_user(
@@ -1961,16 +2049,32 @@ async def test_refresh_reuse_detection_consumes_iam_refresh_only_once(
     )
     old_jti = (jwt_handler.decode_token(token) or {}).get("jti")
 
+    # 1. 第一个标签页刷新成功：只有它消费了一次甲方 refreshToken。
     first = await client.post("/api/v1/auth/refresh", cookies={"cpumodel_refresh": token})
     assert first.status_code == 200
     assert len(refreshes) == 1
     new_jti = (jwt_handler.decode_token(_refresh_cookie_value(first)) or {}).get("jti")
 
+    # 2. 竞态窗口内第二个标签页拿着同一张旧票：409 / 40104，不消费 IAM、不吊销赢家。
     second = await client.post("/api/v1/auth/refresh", cookies={"cpumodel_refresh": token})
-    assert second.status_code == 401
+    assert second.status_code == 409
+    assert second.json()["code"] == 40104
+    assert second.json()["detail"]["reason"] == "token_rotated"
     assert len(refreshes) == 1
-    reused = await get_refresh_token(db_session, old_jti)
-    rolled = await get_refresh_token(db_session, new_jti)
+    assert second.headers.get_list("set-cookie") == []
+    winner = await db_session.get(RefreshToken, new_jti, populate_existing=True)
+    assert winner is not None and winner.revoked_at is None
+
+    # 3. 把旧行的吊销时间推到竞态窗口之外：同一张旧票变成真复用，401 且全端吊销。
+    old_row = await db_session.get(RefreshToken, old_jti, populate_existing=True)
+    old_row.revoked_at = utcnow() - timedelta(seconds=11)
+    await db_session.commit()
+
+    third = await client.post("/api/v1/auth/refresh", cookies={"cpumodel_refresh": token})
+    assert third.status_code == 401
+    assert len(refreshes) == 1
+    reused = await db_session.get(RefreshToken, old_jti, populate_existing=True)
+    rolled = await db_session.get(RefreshToken, new_jti, populate_existing=True)
     assert reused is not None and reused.revoked_at is not None
     assert rolled is not None and rolled.revoked_at is not None
 

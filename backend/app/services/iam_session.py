@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -25,7 +26,14 @@ from cryptography.fernet import InvalidToken
 
 from app.common.secret_crypto import decrypt_secret, encrypt_secret
 from app.common.time import utcnow
-from app.services.iam_client import IamError
+from app.services.iam_client import (
+    _SESSION_ENDPOINTS,
+    IAM_RESULT_CODES,
+    IamError,
+    IamResultCategory,
+    codes_of_category,
+    iam_result_category,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - 仅类型检查
     from app.services.iam_client import IamClient
@@ -41,28 +49,21 @@ IAM_REFRESH_TOKEN_ENC = "iam_refresh_token_enc"
 IAM_ACCESS_EXPIRES_AT = "iam_access_expires_at"
 IAM_CHECKED_AT = "iam_checked_at"
 
-#: 甲方《统一认证接口规范 v1》4.1 错误码表中「用户票据失效」的码。
+#: 会话判定用的两个派生集合，**只能从 ``iam_client.IAM_RESULT_CODES`` 派生**。
 #:
-#: * ``2002``：accessToken 不正确或已过期；
-#: * ``1025``：refreshToken 不正确或已过期。
+#: 这里不再手写码表：语义、分类、规范出处都在 ``iam_client.IAM_RESULT_CODES`` 里，
+#: 本模块只消费 ``category``。新增/调整结果码时改那一张表，不要在这里加字面量。
 #:
-#: 只有这两个码能证明「这名用户的这张票据不能再用」，据此结束平台会话。
-_TICKET_INVALID_CODES = frozenset({"2002", "1025"})
-
-#: 同一张错误码表里「平台或对方配置/服务异常」的码（语义见右侧注释）：
-#:
-#: * ``1005``：appId 非法；
-#: * ``1008``：缺少 clientSecret；
-#: * ``1009``：appId 与 clientSecret 不匹配；
-#: * ``1010``：缺少 code；
-#: * ``1012``：缺少 grantType；
-#: * ``9002``：参数错误；
-#: * ``9100``：系统异常。
-#:
-#: 这些错误与「用户票据」无关：一次配置事故若按票据失效处理，等于把全员踢下线。
-_SYSTEM_ERROR_CODES = frozenset(
-    {"1005", "1008", "1009", "1010", "1012", "9002", "9100"}
-)
+#: * ``ticket_invalid``（``2002`` accessToken 过期、``1025`` refreshToken 过期、
+#:   ``1014`` code 非法，规范 4.1.3.6 / 4.1.4.5 / 4.1.5.5）——票据不能再用，结束会话；
+#: * ``request_invalid``（``1001``/``1005``/``1008``/``1009``/``1010``/``1012``/
+#:   ``1024``/``2001``/``2006``，规范 4.1.3 ~ 4.1.5 的参数与配置错误）——是我方
+#:   请求或配置错了，与用户票据无关，按不可达走宽限，**绝不能判死**；
+#: * ``success``（``9001``）与 ``other``（``3002``，GLO 专用）都不判死：
+#:   ``other`` 类只可能是「已知但与会话无关」的码，把它当垃圾桶塞新码会直接踢人，
+#:   所以 ``other`` 永远返回 UNAVAILABLE 并打 ERROR。
+_TICKET_INVALID_CODES = codes_of_category(IamResultCategory.TICKET_INVALID)
+_REQUEST_INVALID_CODES = codes_of_category(IamResultCategory.REQUEST_INVALID)
 
 
 class IamTicketDecryptError(RuntimeError):
@@ -182,52 +183,108 @@ def seal_ticket_columns(tickets: IamTickets) -> dict[str, object]:
 def _classify_iam_error(exc: IamError, phase: str) -> IamSessionResult:
     """把 ``IamError`` 分成「IAM 不可达」与「票据失效」两类。
 
-    判定口径按甲方《统一认证接口规范 v1》4.1 错误码表，顺序匹配：
+    五步顺序即策略，每一步都写进 ``reason`` 便于排障：
 
-    1. HTTP 408 / 429 / >=500 → 不可达：限流、超时、服务端故障都是暂时性的，
-       按票据失效处理会把一次抖动变成全体重登；
-    2. HTTP 401 / 403：
-       * ``phase == "check"`` → 不可达。accessToken 过期时 IAM 完全可能直接回
-         401/403（而不是业务码 2002），此刻判死会把「续期即可自愈」的用户踢下线；
-         调用方 ``validate_iam_session`` 已在 check 阶段拦下这种错误并继续走
-         refreshToken 分支——票据真被吊销时续期也会被拒，安全边界没有放宽。
-         本函数这里只做兜底，正常流程走不到；
-       * ``phase == "refresh"`` → 票据失效：连续期凭证都被拒，说明甲方已吊销会话；
-    3. 其它 HTTP 4xx（如 400）→ 不可达：与我们拼的参数有关，不是用户票据的问题；
-    4. 传输层失败（``IamError.is_transport_error``，即 ``code is None``，覆盖
-       连不上/超时/TLS/响应不是 JSON 以及「既无状态也无业务码」的理论分支）→
-       不可达，由调用方按宽限期决定放行还是拒绝；
-    5. ``code in _TICKET_INVALID_CODES``（2002/1025）→ 票据失效；
-    6. ``code in _SYSTEM_ERROR_CODES``（appId/clientSecret/参数/系统异常）→
-       不可达。这些码说明**我们或对方的配置/服务出了问题**，与用户票据无关；
-       若按票据失效处理，一次配置事故（比如轮换了 clientSecret 却漏改环境变量）
-       就会让所有在线用户被迫重新登录——把用户当成了配置错误的代价；
-    7. 其它未知业务码 → 票据失效（fail-closed）。既然无法证明票据仍然有效，就
-       宁可要求重新登录；同时必须用 ``logger.error`` 带上 ``phase`` 与 ``code``，
-       让甲方新增的错误码在联调时立刻暴露，而不是被静默归入某个已知分支。
+    1. HTTP >= 500 / 408 / 429 → 不可达：限流、超时、服务端故障都是暂时性的，
+       判死会把一次抖动变成全体重登；
+    2. 命中 ``iam_client.IAM_RESULT_CODES`` → 按表里的 ``category``（只有第 ① 步
+       没命中时才走到这里，所以表内码在 5xx 上不生效）：``ticket_invalid`` 判死；
+       ``request_invalid`` 不可达且 ERROR；``success`` 不可达且 ERROR（见 D1 说明）；
+       ``other`` 只在「与会话接口不相交」时按仅注销处理（不可达 + ERROR）；
+    3. 有状态码（表外）：``401``/``403`` 时 ``check`` 阶段不可达（accessToken 过期
+       时对方完全可能直接回 401/403），``refresh`` 阶段判死（连续期凭证都被拒，
+       说明甲方已吊销会话）；其它 ``4xx`` 不可达——那是我们拼的参数有问题；
+    4. ``code is None`` → 不可达（连不上/超时/TLS/响应不是 JSON/字段结构不合规）；
+    5. 其余（带业务码但表里没有）→ 判死（fail-closed）且打 ERROR。
 
-    注意：``IamError.is_transport_error`` 的定义是 ``code is None``，HTTP 层的
-    错误同样满足它，所以必须先按 ``http_status`` 分流，不能把它放在最前面。
+    不变量（评审先读这一段）：
+
+    * **规范码集合内只变宽松**。相对改造前：``1001``/``1024``/``2001``/``2006``
+      由「未知码 DEAD」变为 ``UNAVAILABLE``；``1005``/``1008``/``1009``/``1010``/
+      ``1012`` 原本就在系统错误集合里，结论不变；``2002``/``1025`` 仍判死；
+      ``1014`` 由「未知码 DEAD」变为显式 ``ticket_invalid``，结论不变。没有任何
+      规范码从 UNAVAILABLE 变成 DEAD。
+    * **旧代码里那两个非规范码已退出码表**（其中一个只是示例 ``userId`` 的子串，
+      被误读成了错误码）。它们不属于规范码集合，删除后按「表外未知码 → DEAD」
+      处理，相对改造前是**收紧**；仍在使用它们的测试夹具由并行任务迁移。
+    * **``9001`` 不判死**：成功码出现在异常里说明调用方判断写错了，按「意外成功」
+      走不可达并打 ERROR（``unexpected_success``），不让一行代码 bug 引发全员重登。
+    * **``other`` 类永不为它判死**：当前只有 ``3002``（GLO 专用，缺 url 参数）。
+    * **同一 ``code`` 的结论与 ``phase`` 无关**；``phase`` 只影响「没有业务码」的
+      401/403 分流与 ``reason`` 前缀。
+    * **4xx 上表内码优先于状态码，5xx 相反**：``400 + {"code":"1025"}`` 必须判死，
+      不能因为状态码落到宽限；``500 + {"code":"1025"}`` 则先被第 ① 步判成不可用
+      （``*_unavailable``），业务码不参与判定——对方服务本身出问题时，体里带什么码
+      都不足信。表外码只在 HTTP 200 上 fail-closed 判死。
+    * 未知码 fail-closed 是**正确策略**，不得改成宽限。
     """
     status = exc.http_status
-    if status is not None:
-        if status in (408, 429) or status >= 500:
-            logger.warning(
-                "统一认证暂时不可用 phase=%s http_status=%s", phase, status
+
+    # ① 对方服务端故障 / 限流：暂时性。
+    if status is not None and (status >= 500 or status in (408, 429)):
+        logger.warning("统一认证暂时不可用 phase=%s http_status=%s", phase, status)
+        return IamSessionResult(
+            IamSessionStatus.UNAVAILABLE, None, f"{phase}_unavailable"
+        )
+
+    # ② 表内业务码：结论只由 code 决定，与状态码、phase 无关。
+    if exc.code is not None:
+        code = str(exc.code)
+        category = iam_result_category(code)
+        if category is IamResultCategory.TICKET_INVALID:
+            logger.warning("统一认证判定票据失效 phase=%s code=%s", phase, code)
+            return IamSessionResult(
+                IamSessionStatus.DEAD, None, f"{phase}_code_{code}"
+            )
+        if category is IamResultCategory.REQUEST_INVALID:
+            logger.error(
+                "统一认证请求/配置错误，按不可达处理 phase=%s code=%s", phase, code
             )
             return IamSessionResult(
-                IamSessionStatus.UNAVAILABLE, None, f"{phase}_unavailable"
+                IamSessionStatus.UNAVAILABLE, None, f"{phase}_request_error_{code}"
             )
+        if category is IamResultCategory.SUCCESS:
+            # D1：已知的「成功」不能按未知码 fail-closed，那是调用方的 bug，不是票据的。
+            logger.error(
+                "统一认证成功码出现在异常路径，按不可达处理 phase=%s code=%s",
+                phase,
+                code,
+            )
+            return IamSessionResult(
+                IamSessionStatus.UNAVAILABLE, None, f"{phase}_unexpected_success"
+            )
+        if category is IamResultCategory.OTHER:
+            row = IAM_RESULT_CODES[code]
+            if row.endpoints.isdisjoint(_SESSION_ENDPOINTS):
+                logger.error(
+                    "统一认证返回与会话无关的结果码，按不可达处理 phase=%s code=%s",
+                    phase,
+                    code,
+                )
+                return IamSessionResult(
+                    IamSessionStatus.UNAVAILABLE, None, f"{phase}_logout_only_{code}"
+                )
+            # 当前没有这种码；真出现也不判死——other 类不是垃圾桶。
+            logger.error(
+                "统一认证返回语义未定的结果码，按不可达处理 phase=%s code=%s",
+                phase,
+                code,
+            )
+            return IamSessionResult(
+                IamSessionStatus.UNAVAILABLE, None, f"{phase}_other_{code}"
+            )
+
+    # ③ 表外 + 有状态码：只按「哪个阶段、哪种状态」分流。
+    if status is not None:
         if status in (401, 403):
             if phase == "check":
-                # 兜底：正常流程里 validate_iam_session 已改为继续尝试续期。
                 logger.warning(
                     "统一认证校验返回鉴权失败，不直接判死 phase=%s http_status=%s",
                     phase,
                     status,
                 )
                 return IamSessionResult(
-                    IamSessionStatus.UNAVAILABLE, None, f"{phase}_auth_rejected"
+                    IamSessionStatus.UNAVAILABLE, None, "check_auth_rejected"
                 )
             logger.warning(
                 "统一认证续期被拒，判定票据失效 phase=%s http_status=%s",
@@ -239,29 +296,18 @@ def _classify_iam_error(exc: IamError, phase: str) -> IamSessionResult:
             )
         logger.warning("统一认证返回非预期状态 phase=%s http_status=%s", phase, status)
         return IamSessionResult(
-            IamSessionStatus.UNAVAILABLE, None, f"{phase}_unavailable"
+            IamSessionStatus.UNAVAILABLE, None, f"{phase}_http_{status}"
         )
 
-    if exc.is_transport_error:
-        logger.warning(
-            "统一认证不可达 phase=%s error=%s", phase, type(exc).__name__
-        )
+    # ④ 没拿到业务码：传输类失败，或 200 但字段结构不合规。
+    if exc.code is None:
+        logger.warning("统一认证不可达 phase=%s error=%s", phase, type(exc).__name__)
         return IamSessionResult(
             IamSessionStatus.UNAVAILABLE, None, f"{phase}_unavailable"
         )
 
+    # ⑤ 表外未知业务码：fail-closed，并必须用 ERROR 把新码暴露给联调。
     code = str(exc.code)
-    if code in _TICKET_INVALID_CODES:
-        logger.warning("统一认证判定票据失效 phase=%s code=%s", phase, code)
-        return IamSessionResult(IamSessionStatus.DEAD, None, f"{phase}_code_{code}")
-    if code in _SYSTEM_ERROR_CODES:
-        logger.error(
-            "统一认证配置/系统错误，按不可达处理 phase=%s code=%s", phase, code
-        )
-        return IamSessionResult(
-            IamSessionStatus.UNAVAILABLE, None, f"{phase}_unavailable"
-        )
-    # 未知业务码：fail-closed，且必须用 error 级日志把新码暴露给联调。
     logger.error("统一认证返回未知业务码，按票据失效处理 phase=%s code=%s", phase, code)
     return IamSessionResult(IamSessionStatus.DEAD, None, f"{phase}_code_{code}")
 
@@ -278,6 +324,33 @@ async def validate_iam_session(
     tickets: IamTickets,
     *,
     now: Optional[datetime] = None,
+    budget_seconds: Optional[float] = None,
+) -> IamSessionResult:
+    """校验统一票据，整段（check + 续期）受 ``budget_seconds`` 总预算约束。
+
+    为什么需要总预算：单次 IAM 调用各有 ``SSO_TIMEOUT_SECONDS``（默认 5 秒），但一次
+    续期**最多串行两次**（先 ``checkAccessToken``，必要时再 ``refreshToken``），最坏
+    就是 10 秒。这个最坏值必须小于前端并发刷新的 handoff 等待
+    （``frontend/src/api/request.ts`` 的 ``REFRESH_HANDOFF_MAX_WAIT_MS = 6000``）：
+    否则抢到刷新权的标签页还在等 IAM，落败方已经等满 6 秒，拿着旧 access 重放，
+    被 401 踢回登录页——409 竞态修好了，用户照样掉线。超预算按「不可达」处理
+    （走宽限期），与超时的归类一致，不对票据做任何推断。
+    """
+    if not budget_seconds or budget_seconds <= 0:
+        return await _validate_iam_session_flow(client, tickets, now=now)
+    try:
+        async with asyncio.timeout(budget_seconds):
+            return await _validate_iam_session_flow(client, tickets, now=now)
+    except TimeoutError:
+        logger.warning("统一认证会话校验超出总预算 %.1fs，按不可达处理", budget_seconds)
+        return IamSessionResult(IamSessionStatus.UNAVAILABLE, None, "budget_exceeded")
+
+
+async def _validate_iam_session_flow(
+    client: "IamClient",
+    tickets: IamTickets,
+    *,
+    now: Optional[datetime] = None,
 ) -> IamSessionResult:
     """用甲方 IAM 判断平台会话挂着的统一票据是否还能用。
 
@@ -285,14 +358,18 @@ async def validate_iam_session(
 
     1. access 与 refresh 都没有 → ``DEAD(missing)``；
     2. access 未过期（剩余寿命 > ``IAM_ACCESS_SKEW_SECONDS``）→ ``checkAccessToken``：
-       有效即 ``ALIVE``；对方明确答「无效」（业务码或 HTTP 401/403）则落到 3，
-       即先给 refreshToken 一次自愈的机会，不在这里结束会话；
-    3. 没有可用的 refreshToken → ``DEAD(access_expired)``；
+       有效即 ``ALIVE``；对方明确答「无效」（业务码 ``ticket_invalid``，如 2002）则
+       落到 3，先给 refreshToken 一次自愈的机会；HTTP 401/403 **且还有 refreshToken**
+       时同样继续走续期；401/403 且**没有** refreshToken 则 ``UNAVAILABLE``
+       （``check_auth_rejected``，吃宽限），不在这里结束会话；
+    3. 没有可用的 refreshToken → 有明确 ``ticket_invalid`` 证据时 ``DEAD
+       (check_ticket_invalid)``，否则（access 本地已过期）``DEAD(access_expired)``；
     4. ``refreshToken`` 续期成功 → ``REFRESHED``；失败则按 ``_classify_iam_error``
        的口径分成「票据失效」「不可达」两类。
 
-    除 check 阶段的 401/403 之外，网络/HTTP 故障都返回 ``UNAVAILABLE``，由调用方按
-    宽限期决定放行还是拒绝——本函数不读配置、不碰数据库，也不在任何日志里输出票据内容。
+    除 check 阶段的 401/403 之外（以及 5xx/408/429 这类对方故障），网络/HTTP 故障
+    都返回 ``UNAVAILABLE``，由调用方按宽限期决定放行还是拒绝——本函数不读配置、
+    不碰数据库，也不在任何日志里输出票据内容。
     """
     current = now or utcnow()
 
@@ -307,11 +384,13 @@ async def validate_iam_session(
         > timedelta(seconds=IAM_ACCESS_SKEW_SECONDS)
     )
 
+    # check 是否已明确回答「这张 accessToken 不可用」；本地过期等分支保持 False。
+    checked_invalid = False
     if access_usable:
         try:
             alive = await client.check_access_token(access_token)
         except IamError as exc:
-            if exc.http_status in (401, 403):
+            if exc.http_status in (401, 403) and tickets.refresh_token:
                 # 甲方可能用 401/403 表示「这张 accessToken 不被认可」，最常见的原因
                 # 是它已经过期。不能在这里判死：继续用 refreshToken 续期，续期成功
                 # 即自愈；票据真被吊销时续期也会被拒，安全性不受影响。
@@ -319,6 +398,9 @@ async def validate_iam_session(
                     "统一认证校验返回 %s，不直接判死，继续尝试续期", exc.http_status
                 )
             else:
+                # 没有 refreshToken 时，check 是唯一证据；401/403 只说明「这次校验
+                # 没被接受」，可能是网关抖动或我方 accessToken 拼错，按不可达走宽限，
+                # 不能落到下面的 access_expired 直接判死。
                 return _classify_iam_error(exc, "check")
         else:
             if alive:
@@ -327,9 +409,18 @@ async def validate_iam_session(
                     replace(tickets, checked_at=current),
                     "alive",
                 )
-            # 业务码非 9001：accessToken 过期或不被认可，尝试用 refreshToken 续期。
+            # 对方明确回答票据失效（业务码 ticket_invalid，如 2002）：先看有没有
+            # refreshToken 能自愈，没有则在下个分支立刻判死。
+            checked_invalid = True
 
     if not tickets.refresh_token:
+        if checked_invalid:
+            # 没有 refreshToken，check 又明确答「这张 accessToken 不可用」：
+            # 这是唯一能立刻生效的证据，按票据失效结束会话。
+            return IamSessionResult(
+                IamSessionStatus.DEAD, None, "check_ticket_invalid"
+            )
+        # accessToken 本地已过期且没有 refreshToken：零出网，直接判死。
         return IamSessionResult(IamSessionStatus.DEAD, None, "access_expired")
 
     try:
@@ -339,9 +430,9 @@ async def validate_iam_session(
 
     refreshed = IamTickets(
         access_token=renewed.access_token,
-        # 对方可能不返回新 refreshToken；此时沿用旧值（它已被消费，下次续期会失败，
-        # 失败即按票据失效处理，不会出现两个有效凭证并存的局面）。
-        refresh_token=renewed.refresh_token or tickets.refresh_token,
+        # 规范 4.1.4.5 要求续期必须返回新的 refreshToken；客户端已把「缺失」抛成
+        # 传输类错误，走到这里一定拿到了新值，不再沿用已被消费的旧票。
+        refresh_token=renewed.refresh_token,
         access_expires_at=_expires_at(current, renewed.expires_in),
         checked_at=current,
     )

@@ -22,6 +22,25 @@ ROTATE_OK = "ok"
 ROTATE_INVALID = "invalid"
 ROTATE_EXPIRED = "expired"
 ROTATE_REUSE = "reuse"
+#: 同一旧 jti 的并发刷新落败方：不是入侵，调用方应回 409 让前端重试。
+ROTATE_RACED = "raced"
+#: 竞态窗口（秒）：旧行在这么久之内被同一用户替换，算并发落败而不是盗用。
+ROTATE_RACE_WINDOW_SECONDS = 10
+
+
+def _is_race_loser(record: RefreshToken, *, now: Optional[datetime] = None) -> bool:
+    """``record`` 是否只是「同一旧 jti 的并发刷新落败者」。
+
+    判据：该行已被替换（``replaced_by`` 非空）**且**吊销发生在
+    ``ROTATE_RACE_WINDOW_SECONDS`` 秒内。``revoked_at`` 是 naive UTC
+    （``app.common.time.utcnow``），这里沿用同一口径，不做时区换算。
+    """
+    if record.revoked_at is None or not record.replaced_by:
+        return False
+    elapsed = ((now or utcnow()) - record.revoked_at).total_seconds()
+    # elapsed 为负说明本机时钟落后于写入端（时钟回拨 / 写者偏快）：
+    # 那仍是「刚被替换」而不是超窗，clamp 到 0，避免把窗口内的落败判成盗用。
+    return max(elapsed, 0.0) <= ROTATE_RACE_WINDOW_SECONDS
 
 
 def expires_at_from_payload(payload: dict) -> datetime:
@@ -108,6 +127,26 @@ async def revoke_all_for_user(db: AsyncSession, user_id: str) -> int:
     return int(result.rowcount or 0)
 
 
+async def _classify_lost_update(
+    db: AsyncSession, *, old_jti: str, user_id: str
+) -> str:
+    """条件 UPDATE 落空后判定「谁先吊销了这一行」。
+
+    返回 ``ROTATE_INVALID``（行不存在/不属于该用户）、``ROTATE_RACED``（同一旧 jti
+    的并发刷新落败，窗口内的正常重复）或 ``ROTATE_REUSE``（窗口外被替换，按盗用处理）。
+    """
+    # rowcount=0 后必须回读数据库：ORM UPDATE 的 synchronize_session 可能已把
+    # revoked_at/replaced_by 就地写进内存对象，普通 db.get 会返回「假装成功」的对象。
+    with db.no_autoflush:
+        current = await db.get(RefreshToken, old_jti, populate_existing=True)
+    if current is None or current.user_id != user_id:
+        return ROTATE_INVALID
+    if current.revoked_at is None:
+        # 无法证明是竞态（触发器/其他列并发/隔离级别看不到赢家）→ fail closed。
+        return ROTATE_REUSE
+    return ROTATE_RACED if _is_race_loser(current) else ROTATE_REUSE
+
+
 async def rotate_refresh_token(
     db: AsyncSession,
     *,
@@ -120,21 +159,27 @@ async def rotate_refresh_token(
 ) -> str:
     """把 ``old_jti`` 轮换成 ``new_jti``。
 
-    返回 ``ROTATE_OK`` 表示成功；``ROTATE_REUSE`` 表示旧 jti 已吊销（疑似复用），
-    调用方应吊销该用户全部 refresh 并 401；``ROTATE_INVALID`` / ``ROTATE_EXPIRED``
-    分别表示不存在/不属于该用户、已过期。
+    返回 ``ROTATE_OK`` 表示成功。并发语义：同一旧 jti 上并发的两个刷新只有一个能拿到
+    ``ROTATE_OK``，另一个返回 ``ROTATE_RACED`` —— 它拿的确实是被替换过的旧票，但替换者
+    是同一用户的另一个窗口，属于正常使用；调用方应回 **HTTP 409 / 业务码 40104** 让
+    前端稍后重试，**不得**当作入侵响应（不得吊销全端、不得清票据、不得回 401）。
+
+    ``ROTATE_REUSE`` 只保留给真正的复用：旧 jti 早已被替换（超出
+    ``ROTATE_RACE_WINDOW_SECONDS``）或 ``replaced_by`` 为空，调用方应吊销该用户全部
+    refresh 并 401。``ROTATE_INVALID`` / ``ROTATE_EXPIRED`` 分别表示不存在/不属于该
+    用户、已过期。
 
     并发保护：吊销用条件 UPDATE（``revoked_at IS NULL``），两个并发 refresh 只有
-    一个能拿到 ``rowcount == 1``，另一个落到 ``ROTATE_REUSE``。
+    一个能拿到 ``rowcount == 1``；落空者回读该行，按 ``_is_race_loser`` 区分竞态与盗用。
 
     统一身份认证票据随会话一起搬家：旧行的四列在同一条 UPDATE 里清空，新行复制
     旧行的值；随后调用方再按 IAM 的校验结果覆盖新行（见 ``update_iam_tickets``）。
     """
-    record = await db.get(RefreshToken, old_jti)
+    record = await db.get(RefreshToken, old_jti, populate_existing=True)
     if record is None or record.user_id != user_id:
         return ROTATE_INVALID
     if record.revoked_at is not None:
-        return ROTATE_REUSE
+        return ROTATE_RACED if _is_race_loser(record) else ROTATE_REUSE
     if record.expires_at is not None and record.expires_at <= utcnow():
         return ROTATE_EXPIRED
 
@@ -159,7 +204,7 @@ async def rotate_refresh_token(
         )
     )
     if not result.rowcount:
-        return ROTATE_REUSE
+        return await _classify_lost_update(db, old_jti=old_jti, user_id=user_id)
 
     db.add(
         RefreshToken(

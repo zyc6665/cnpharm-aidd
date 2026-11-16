@@ -12,6 +12,7 @@
 公开注册已移除；邮箱验证码/自助重置等链路统一停用（HTTP 403 + 业务码 40002）。
 """
 
+import hashlib
 import logging
 from datetime import timedelta
 from typing import Optional
@@ -49,6 +50,7 @@ from app.services.iam_session import (
 )
 from app.services.refresh_token_store import (
     ROTATE_OK,
+    ROTATE_RACED,
     ROTATE_REUSE,
     clear_iam_tickets,
     expires_at_from_payload,
@@ -77,6 +79,51 @@ _DISABLED_MESSAGE = "该功能已停用，请联系管理员"
 #: 统一认证判定会话失效时的业务码（HTTP 401），前端据此清本地状态回登录页。
 IAM_SESSION_EXPIRED_CODE = 40103
 IAM_SESSION_EXPIRED_MESSAGE = "统一认证会话已失效，请重新登录"
+
+#: 并发刷新落败时的业务码（HTTP 409）。注意：**绝不能**用 401 —— main.py 对
+#: ``401 + /auth/refresh`` 无条件清 Cookie，晚到的 401 会删掉赢家刚写入的新 Cookie。
+REFRESH_RACED_CODE = 40104
+REFRESH_RACED_MESSAGE = "会话正在其他窗口刷新，请稍后重试"
+
+#: S-02：轮换出的新会话行已不存在/已吊销（并发登出、管理员踢人、被复用检测连带
+#: 吊销）时的业务码（HTTP 401）。业务码复用 ``40103``（= 统一认证会话失效，见
+#: docs/03-接口/05-API接口规格说明书.md、docs/07-验收/16-用户操作手册.md）：这两件事在
+#: **用户视角是同一件事**——手里的会话不能用了，必须重新登录，前端的处置（清本地状态
+#: 回登录页）也完全一样。40102 已被文档定义为「Token 过期」，不能挪用来表达吊销。
+#: 区分靠 ``detail.reason``：``session_revoked`` = 会话行已被并发吊销；40103 不带
+#: reason 的那条 = IAM 判定票据过期。前端本来就按 reason 分支，因此复用码不影响它。
+#:
+#: 为什么必须是 401 而不是继续 200：此时库里的那一行已经吊销，新令牌**永远刷不动**
+#: 一次；再 200 下发新 Cookie，前端会拿着一个「看起来成功、实际立刻失效」的会话继续
+#: 用，下一次请求才 401，用户看到的是随机掉线。这里当场失败，main.py:181-183 的
+#: 「401 + /auth/refresh 清三枚 Cookie」正好把浏览器里的死会话一起清干净。
+SESSION_REVOKED_CODE = IAM_SESSION_EXPIRED_CODE
+SESSION_REVOKED_MESSAGE = "会话已失效，请重新登录"
+
+
+def _jti_fingerprint(jti: str) -> str:
+    """jti 的日志指纹（sha256 前 12 位）。仅用于日志关联，不可逆推原值。"""
+    return hashlib.sha256(jti.encode("utf-8")).hexdigest()[:12]
+
+
+def _session_revoked() -> BusinessException:
+    """轮换目标行已被吊销：HTTP 401 + 业务码 40103，``detail.reason`` 供前端识别。"""
+    return BusinessException(
+        SESSION_REVOKED_MESSAGE,
+        http_status=401,
+        code=SESSION_REVOKED_CODE,
+        detail={"reason": "session_revoked"},
+    )
+
+
+def _refresh_raced() -> BusinessException:
+    """并发刷新落败：HTTP 409 + 业务码 40104，``detail.reason`` 供前端识别重放。"""
+    return BusinessException(
+        REFRESH_RACED_MESSAGE,
+        http_status=409,
+        code=REFRESH_RACED_CODE,
+        detail={"reason": "token_rotated"},
+    )
 
 
 class RefreshTokenRequest(BaseModel):
@@ -395,6 +442,19 @@ async def refresh_token(
         await revoke_all_for_user(db, str(user.id))
         await db.commit()
         raise UnauthorizedException("刷新令牌已被使用，请重新登录")
+    if rotate_result == ROTATE_RACED:
+        # 409 而不是 401：main.py:182-183 对 401 + /auth/refresh 无条件清 Cookie，
+        # 失败方的 401 会删掉成功方刚写入的新 Cookie。这里不吊销、不清票据、
+        # 不 commit；事务交给 get_db 回滚。
+        logger.warning(
+            "refresh raced event=refresh_raced reason=token_rotated "
+            "user_id=%s old_jti_fp=%s ip=%s ua=%s",
+            user.id,
+            _jti_fingerprint(str(old_jti)),
+            client_ip or "-",
+            (user_agent or "-")[:120],
+        )
+        raise _refresh_raced()
     if rotate_result != ROTATE_OK:
         raise UnauthorizedException("无效的刷新令牌")
 
@@ -414,17 +474,45 @@ async def refresh_token(
             await _end_session_for_iam(db, new_jti)
             raise _iam_session_expired()
 
-        iam_result = await validate_iam_session(iam_client, tickets)
+        # 总预算 = 单次 IAM 超时：check 与 refresh 两次串行不能把一次 /refresh 拖到
+        # 10 秒——那会超过前端并发刷新的 handoff await（6 秒），落败标签页照样掉线。
+        iam_result = await validate_iam_session(
+            iam_client, tickets, budget_seconds=settings.SSO_TIMEOUT_SECONDS
+        )
 
         if iam_result.status is IamSessionStatus.ALIVE and iam_result.tickets:
-            await touch_iam_checked_at(
+            # S-02：``touch_iam_checked_at`` 只对 ``revoked_at IS NULL`` 的行生效，
+            # 返回 False = 刚轮换出的那行已经不在了（并发登出/被踢/复用检测连带吊销）。
+            # 此时不能当成功：先收尾会话，再 401 让 main.py 清掉三枚 Cookie。
+            persisted = await touch_iam_checked_at(
                 db, new_jti, iam_result.tickets.checked_at or utcnow()
             )
+            if not persisted:
+                await _end_session_for_iam(db, new_jti)
+                logger.warning(
+                    "续期落库落空 event=refresh_persist_missed phase=alive "
+                    "user_id=%s new_jti_fp=%s ip=%s",
+                    user.id,
+                    _jti_fingerprint(new_jti),
+                    client_ip or "-",
+                )
+                raise _session_revoked()
             await db.commit()
         elif iam_result.status is IamSessionStatus.REFRESHED and iam_result.tickets:
-            await update_iam_tickets(
+            # 同上：票据写回落空说明会话行已吊销，不能再发新 Cookie。
+            persisted = await update_iam_tickets(
                 db, new_jti, **seal_ticket_columns(iam_result.tickets)
             )
+            if not persisted:
+                await _end_session_for_iam(db, new_jti)
+                logger.warning(
+                    "续期落库落空 event=refresh_persist_missed phase=refreshed "
+                    "user_id=%s new_jti_fp=%s ip=%s",
+                    user.id,
+                    _jti_fingerprint(new_jti),
+                    client_ip or "-",
+                )
+                raise _session_revoked()
             await db.commit()
         elif iam_result.status is IamSessionStatus.UNAVAILABLE and _iam_grace_allows(
             tickets
