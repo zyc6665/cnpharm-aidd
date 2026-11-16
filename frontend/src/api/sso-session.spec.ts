@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   navigateToSso: vi.fn(),
+  navigateToLoginWithError: vi.fn(),
   redirectToLogin: vi.fn()
 }))
 
 vi.mock('@/utils/sso', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/sso')>()
-  return { ...actual, navigateToSso: mocks.navigateToSso }
+  return {
+    ...actual,
+    navigateToSso: mocks.navigateToSso,
+    navigateToLoginWithError: mocks.navigateToLoginWithError
+  }
 })
 
 vi.mock('@/api/auth-redirect', () => ({ redirectToLogin: mocks.redirectToLogin }))
@@ -50,6 +55,7 @@ describe('applySessionInvalid 决策表', () => {
     resetSsoSessionState()
     resetSsoStatusCache()
     mocks.navigateToSso.mockReset()
+    mocks.navigateToLoginWithError.mockReset()
     mocks.redirectToLogin.mockReset()
   })
 
@@ -111,6 +117,14 @@ describe('applySessionInvalid 决策表', () => {
     resetSsoSessionState()
     expect(applySessionInvalid('iam_session_expired', runtime)).toBe('sso')
     expect(mocks.navigateToSso).toHaveBeenCalledTimes(2)
+  })
+
+  it('统一票据失效但状态未知（探测失败）：回登录页并提示 unavailable，不跳 IAM', () => {
+    const action = applySessionInvalid('iam_session_expired', TASKS_RUNTIME)
+
+    expect(action).toBe('login')
+    expect(mocks.navigateToLoginWithError).toHaveBeenCalledWith('/tasks?page=2', 'unavailable')
+    expect(mocks.navigateToSso).not.toHaveBeenCalled()
   })
 
   it('未显式给 ssoEnabled 时从状态缓存取（探测过且启用 → 跳 IAM）', () => {

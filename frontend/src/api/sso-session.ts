@@ -4,6 +4,7 @@ import {
   IAM_SESSION_EXPIRED_REASON,
   buildSsoAuthorizeUrl,
   isLoginLocation,
+  navigateToLoginWithError,
   navigateToSso,
   resolveCurrentLocation
 } from '@/utils/sso'
@@ -69,7 +70,8 @@ export function consumeRefreshFailureReason(): string | null {
  * 1. 本生命周期已跳过一次 → none；
  * 2. 已经在登录页 → none（否则登录页自己 401 会无限跳）；
  * 3. 非 iam_session_expired，或统一认证明确未启用 → 回登录页（带 redirect）；
- * 4. 其余 → 顶层跳统一认证授权入口。
+ * 4. 统一认证状态未知（探测失败）→ 回登录页并提示 sso_error=unavailable；
+ * 5. 明确启用 → 顶层跳统一认证授权入口。
  */
 export function applySessionInvalid(
   reason: string | null,
@@ -87,6 +89,12 @@ export function applySessionInvalid(
   const location = resolveCurrentLocation(runtime.pathname, runtime.search)
   if (reason !== IAM_SESSION_EXPIRED_REASON || runtime.ssoEnabled === false) {
     redirectToLogin(location)
+    return 'login'
+  }
+  // 还没探测出统一认证是否可用（null）：不盲目跳 IAM。IAM 恰好不可用时那样会把用户
+  // 送到甲方错误页，且没有任何回平台的入口；回登录页并给出 sso_error=unavailable。
+  if (runtime.ssoEnabled === null) {
+    navigateToLoginWithError(location, 'unavailable')
     return 'login'
   }
 

@@ -109,9 +109,20 @@ export function buildSsoAuthorizeUrl(
   return `${path}${separator}next=${encodeURIComponent(resolveNextPath(next))}`
 }
 
-/** 全仓唯一的 SSO 顶层跳转出口：换域名/换入口时只改这里 */
+/** 统一认证与登录页两个顶层跳转出口，换域名/换入口时只改这里 */
 export function navigateToSso(url: string): void {
   window.location.assign(url)
+}
+
+/**
+ * 回登录页并带上 `sso_error` 提示（整页跳转）。
+ *
+ * 用于「统一票据失效，但暂时判断不出统一认证是否可用」的降级：直接跳 IAM 可能把
+ * 用户送到甲方错误页且回不来，回登录页至少还有本地账号入口与手动 SSO 按钮。
+ */
+export function navigateToLoginWithError(location: string, errorCode: string): void {
+  const params = new URLSearchParams({ sso_error: errorCode, redirect: location })
+  window.location.assign(`/login?${params.toString()}`)
 }
 
 /** ?sso_error=<码> → i18n 键；未知码与非字符串一律给通用文案 */
