@@ -40,16 +40,26 @@ def _resolve_request_token(
     return None, False
 
 
+def _tokens_equal(left: str, right: str) -> bool:
+    """常量时间令牌比较。
+
+    先编码成字节再比：``secrets.compare_digest`` 对含非 ASCII 的 ``str`` 会抛
+    ``TypeError: comparing strings with non-ASCII characters is not supported``，
+    而这两个值都来自请求，未认证即可把 403 打成 500。
+    """
+    return secrets.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 def _enforce_csrf(request: Request) -> None:
     """Cookie 认证的非安全方法必须携带匹配的 ``X-CSRF-Token``。"""
     if request.method.upper() in _SAFE_METHODS:
         return
-    header_token = request.headers.get(CSRF_HEADER_NAME)
-    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME) or ""
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME) or ""
     if (
         not header_token
         or not cookie_token
-        or not secrets.compare_digest(header_token, cookie_token)
+        or not _tokens_equal(header_token, cookie_token)
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

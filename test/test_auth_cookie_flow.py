@@ -161,6 +161,34 @@ async def test_cookie_post_without_csrf_header_is_forbidden(
 
 
 @pytest.mark.asyncio
+async def test_non_ascii_csrf_header_is_forbidden_not_server_error(
+    api_client: httpx.AsyncClient,
+):
+    """含非 ASCII 的 CSRF 头必须回 403。
+
+    回归：``secrets.compare_digest`` 对非 ASCII 的 ``str`` 抛 TypeError，未认证即可把
+    一次 CSRF 拒绝打成 500。httpx 只允许 ascii 的 str 头，因此这里传原始字节，
+    由 ASGI 侧按 latin-1 解码成非 ASCII 字符串（与真实报文一致）。
+    """
+    await _login(api_client)
+    response = await api_client.post(
+        "/api/v1/auth/logout",
+        headers={b"X-CSRF-Token": bytes([0xC3, 0xA9])},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "CSRF 校验失败"
+
+
+def test_csrf_token_compare_handles_non_ascii():
+    """两侧都可能是非 ASCII，比较函数本身不得抛错。"""
+    from app.auth.dependencies import _tokens_equal
+
+    assert _tokens_equal("中", "中") is True
+    assert _tokens_equal("中", "文") is False
+    assert _tokens_equal("abc", "abc") is True
+
+
+@pytest.mark.asyncio
 async def test_cookie_post_with_csrf_header_succeeds(api_client: httpx.AsyncClient):
     await _login(api_client)
     csrf_token = api_client.cookies.get(CSRF_COOKIE)

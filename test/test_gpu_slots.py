@@ -629,6 +629,23 @@ async def test_report_endpoint_rejects_wrong_token(slot_api_client, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_report_endpoint_rejects_non_ascii_token_without_crashing(
+    slot_api_client, monkeypatch
+):
+    """非 ASCII 的 agent token 回 401。
+
+    回归：``hmac.compare_digest`` 对含非 ASCII 的 ``str`` 抛 TypeError，未认证即可把
+    上报通道打成 500。
+    """
+    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
+    response = await slot_api_client.post(
+        "/api/v1/gpu/slots/report",
+        json={"nodeId": "n1", "slotId": "s1", "state": "IDLE", "deviceCount": 8},
+        headers={b"X-DRP-Agent-Token": bytes([0xC3, 0xA9])},
+    )
+    assert response.status_code == 401, response.text
+
+
 async def test_report_endpoint_records_state(slot_api_client, monkeypatch):
     monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
     response = await slot_api_client.post(

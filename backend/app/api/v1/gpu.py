@@ -448,7 +448,8 @@ async def report_slot_state(
             detail="未配置 DRP_NODE_AGENT_REPORT_TOKEN，卡位状态上报通道未启用",
         )
     provided = (x_drp_agent_token or "").strip()
-    if not hmac.compare_digest(provided, expected):
+    # 编码后再比：str 版 compare_digest 遇到非 ASCII 会抛 TypeError，未认证即可打成 500
+    if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="卡位状态上报凭据无效")
 
     try:
