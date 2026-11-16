@@ -9,7 +9,6 @@ import type {
   UserInfo,
   LoginParams,
   LoginResponse,
-  AuthTokens,
   SsoStatus
 } from '@/types/models'
 
@@ -17,11 +16,6 @@ import type {
 // 认证信息由后端通过 httpOnly Cookie 下发，响应里即使带 token 前端也忽略。
 export const login = (params: LoginParams): Promise<ApiResponse<LoginResponse>> => {
   return post<LoginResponse>('/auth/login', params)
-}
-
-// 刷新会话：读取 refresh Cookie 并重设 Cookie，前端不接触 token。
-export const refreshToken = (): Promise<ApiResponse<AuthTokens | { access_token?: string }>> => {
-  return post<AuthTokens | { access_token?: string }>('/auth/refresh')
 }
 
 // 登出（后端清除 Cookie）
