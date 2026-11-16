@@ -2,7 +2,7 @@
 """用户相关Schema"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import UserStatisticsResponse
@@ -53,7 +53,9 @@ class UserResponse(TimestampMixin):
     """用户响应（email 可为空：LDAP 用户不落邮箱）"""
     id: str
     username: str
-    auth_source: str
+    # 只允许三种认证源：写死枚举，脏数据在序列化时就会炸，不会悄悄漏到前端。
+    # 与 ``app.models.users.AuthSource`` 以及 ``frontend/src/types/models.d.ts`` 同口径。
+    auth_source: Literal["local", "ldap", "sso"]
     email: Optional[str] = None
     last_login_at: Optional[datetime] = None
     display_name: Optional[str]

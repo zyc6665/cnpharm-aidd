@@ -502,3 +502,297 @@ async def test_admin_create_user_rejects_unknown_auth_source(
     )
 
     assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# D-06：sso_uid 绑定/解绑（统一身份标识的唯一写入口）
+# --------------------------------------------------------------------------- #
+class _FakeAdminAudit:
+    """只收管理操作：这些用例关心的是「sso_uid 变更进审计」这件事本身。"""
+
+    def __init__(self):
+        self.operations = []
+
+    def log_admin_operation(self, **kwargs):
+        self.operations.append(kwargs)
+
+    def log_admin_delete(self, **kwargs):
+        self.operations.append(kwargs)
+
+
+@pytest.fixture
+def admin_audit(monkeypatch):
+    from app.api.v1 import users as admin_module
+
+    fake = _FakeAdminAudit()
+    monkeypatch.setattr(admin_module, "get_audit_logger", lambda: fake)
+    return fake
+
+
+async def _make_sso_user(
+    db: AsyncSession,
+    *,
+    email: str,
+    auth_source: str = AuthSource.SSO.value,
+    sso_uid: str | None = None,
+) -> User:
+    """直接落库预置账号：走 HTTP 建号的话 sso 账号还得先有认证源，绕一圈没意义。"""
+    user = User(
+        email=email,
+        display_name=email.split("@", 1)[0],
+        auth_source=auth_source,
+        sso_uid=sso_uid,
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest.mark.asyncio
+async def test_admin_bind_sso_uid_on_sso_account(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+):
+    """sso 账号可以绑定统一身份标识，并把 before/after 落进同一条审计。"""
+    from app.logging.audit import AuditAction
+
+    user = await _make_sso_user(db_session, email="bind@example.com")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "iam-1"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(user)
+    assert user.sso_uid == "iam-1"
+    audit = admin_audit.operations[-1]
+    assert audit["changes"]["sso_uid"] == {"before": None, "after": "iam-1"}
+    assert audit["reason"] == "sso_uid_bind"
+    assert audit["action"] == AuditAction.ADMIN_USER_UPDATE
+
+
+@pytest.mark.asyncio
+async def test_admin_unbind_sso_uid_with_blank(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+):
+    """空串/纯空白 = 解绑，且必须落 NULL —— 落 '' 会撞部分唯一索引。"""
+    user = await _make_sso_user(db_session, email="unbind@example.com", sso_uid="iam-1")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "   "},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(user)
+    assert user.sso_uid is None
+    audit = admin_audit.operations[-1]
+    assert audit["reason"] == "sso_uid_unbind"
+    # 解绑也要留 before/after：只记 reason 的话，事后查不出解掉的是哪个 uid。
+    assert audit["changes"]["sso_uid"] == {"before": "iam-1", "after": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("auth_source", [AuthSource.LOCAL.value, AuthSource.LDAP.value])
+async def test_admin_rejects_sso_uid_on_non_sso_account(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+    auth_source: str,
+):
+    """非 sso 账号（local / ldap）不得挂 sso_uid：否则同时具备口令与 SSO 两条入口。"""
+    user = await _make_sso_user(
+        db_session,
+        email=f"{auth_source}-bind@example.com",
+        auth_source=auth_source,
+    )
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "iam-2"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == 40002
+    assert "认证源" in payload["message"]
+    await db_session.refresh(user)
+    assert user.sso_uid is None
+
+
+@pytest.mark.asyncio
+async def test_admin_noop_blank_sso_uid_on_local_account(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+):
+    """解绑 no-op 不该被认证源拦：local 账号本来就没有 sso_uid。"""
+    user = await _make_sso_user(
+        db_session, email="local-noop@example.com", auth_source=AuthSource.LOCAL.value
+    )
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": ""},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert "reason" not in admin_audit.operations[-1]
+
+
+@pytest.mark.asyncio
+async def test_admin_duplicate_sso_uid_returns_40002(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+):
+    """一个 sso_uid 只能绑一个账号：预检冲突用 400+40002（不是 409）。"""
+    await _make_sso_user(db_session, email="owner@example.com", sso_uid="iam-a")
+    user = await _make_sso_user(db_session, email="dup@example.com", sso_uid="iam-b")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "iam-a"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == 40002
+    assert "已绑定其他账号" in payload["message"]
+    await db_session.refresh(user)
+    assert user.sso_uid == "iam-b"
+
+
+@pytest.mark.asyncio
+async def test_admin_sso_uid_max_length(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """列宽是 String(128)：超长必须在 schema 层 422，不能等到落库报错。"""
+    user = await _make_sso_user(db_session, email="toolong@example.com")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "x" * 129},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 422
+
+    # 上限是 128，不是 127：边界两侧都要钉，别把合法 uid 判死。
+    at_limit = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "y" * 128},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert at_limit.status_code == 200
+    await db_session.refresh(user)
+    assert user.sso_uid == "y" * 128
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_without_sso_uid_keeps_binding(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+):
+    """没传 sso_uid 就不该动它，也不该在审计里冒出 sso_uid 键。"""
+    user = await _make_sso_user(db_session, email="keep@example.com", sso_uid="iam-1")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"status": UserStatus.DISABLED.value},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(user)
+    assert user.sso_uid == "iam-1"
+    assert "sso_uid" not in admin_audit.operations[-1]["changes"]
+
+
+@pytest.mark.asyncio
+async def test_admin_sso_uid_integrity_error_maps_to_40002(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_audit,
+    monkeypatch,
+):
+    """预检与写入之间有并发窗口：flush 撞唯一索引也要转成 400+40002，而不是 500。"""
+    from app.api.v1 import users as admin_module
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(admin_module, "ensure_sso_uid_unique", _noop)
+    await _make_sso_user(db_session, email="taken@example.com", sso_uid="taken")
+    user = await _make_sso_user(db_session, email="race@example.com")
+
+    response = await api_client.patch(
+        f"/api/v1/users/admin/{user.id}",
+        json={"sso_uid": "taken"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 40002
+
+
+# --------------------------------------------------------------------------- #
+# D-07：建号用户名口径与 SSO 认人口径同宽（64）
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_admin_create_username_64_accepted_65_rejected(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """建号侧边界：64 字符能建、65 字符被 schema 拒绝。
+
+    登录侧见 ``test_sso_governance.py::test_64_char_preseeded_username_can_login``。
+    两侧必须同宽：建得进却登不进（旧 ``_USERNAME_MAX_LENGTH=56``）等于白建。
+    """
+    username_64 = "u" * 64
+    created = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": username_64,
+            "email": "boundary-64@example.com",
+            "auth_source": "sso",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert created.status_code == 201
+    result = await db_session.execute(select(User).where(User.username == username_64))
+    assert result.scalar_one().username == username_64
+
+    username_65 = "v" * 65
+    rejected = await api_client.post(
+        "/api/v1/users/admin",
+        json={
+            "username": username_65,
+            "email": "boundary-65@example.com",
+            "auth_source": "sso",
+            "role": UserRole.USER.value,
+            "status": UserStatus.ACTIVE.value,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert rejected.status_code == 422
+    result = await db_session.execute(select(User).where(User.username == username_65))
+    assert result.scalar_one_or_none() is None

@@ -1,9 +1,10 @@
 # backend/app/api/v1/users.py
 """用户管理接口"""
 
-from typing import Optional, List, Literal
+from typing import Any, Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_, delete, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
@@ -15,7 +16,7 @@ from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_association
-from app.models.users import User, UserRole, UserStatus
+from app.models.users import AuthSource, User, UserRole, UserStatus
 from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import (
@@ -74,6 +75,16 @@ class AdminUserUpdate(BaseModel):
     phone: Optional[str] = None
     role: Optional[str] = Field(None, description="角色: user, admin")
     status: Optional[str] = Field(None, description="状态: active, disabled, pending")
+    # D-06：统一身份标识（IAM userId）。仅 auth_source=sso 的账号可写；
+    # 空串/纯空白 = 解绑。这是 sso_uid 唯一的写入口——此前只能改库，于是
+    # 「auth_source 是 local 但 sso_uid 已填」的脏数据没人能合法修掉。
+    # **解绑 ≠ 吊销**：清空只断开绑定关系，同一 IAM 用户下次登录会按用户名重新
+    # 回填（认证源仍是 sso）。要阻止其登录请把 status 置 disabled。
+    sso_uid: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="统一身份认证标识（IAM userId），空=解绑（解绑后同一 IAM 用户再登录会自动重新绑定；要禁止登录请停用账号）",
+    )
 
     @field_validator("email", mode="before")
     @classmethod
@@ -81,6 +92,19 @@ class AdminUserUpdate(BaseModel):
         """前端清空邮箱会下发空串；归一为 None，避免触发唯一/格式校验。"""
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("sso_uid", mode="before")
+    @classmethod
+    def _blank_sso_uid_to_none(cls, value):
+        """空串视为解绑：必须落 NULL，不能落 ''。
+
+        ``uq_users_sso_uid`` 是 ``WHERE sso_uid IS NOT NULL`` 的部分唯一索引：
+        写 ``''`` 会让第二个解绑的人直接撞索引，而且 ``_find_by_sso_uid`` 用
+        ``sso_uid == ''`` 还能命中一个「已解绑」的账号。
+        """
+        if isinstance(value, str):
+            return value.strip() or None
         return value
 
 
@@ -223,6 +247,24 @@ async def ensure_username_unique(
     result = await db.execute(select(User.id).where(*filters).limit(1))
     if result.first():
         raise BusinessException("该用户名已被使用", http_status=400, code=40002)
+
+
+async def ensure_sso_uid_unique(
+    db: AsyncSession, sso_uid: str, exclude_user_id: Optional[str] = None
+) -> None:
+    """统一身份标识只能绑定一个账号；冲突 400+40002（与用户名/邮箱同口径）。
+
+    为什么不返回 409：本仓的 409 专指「可重试的并发/乐观锁」（refresh 复用、
+    幂等键冲突、版本冲突），客户端看到 409 会倾向自动重试；「这个 uid 已被别人
+    绑定」重试多少次都不会变，是参数/业务错误，走 400 + 40002。
+    """
+    filters = [User.sso_uid == sso_uid]
+    if exclude_user_id:
+        filters.append(User.id != exclude_user_id)
+
+    result = await db.execute(select(User.id).where(*filters).limit(1))
+    if result.first():
+        raise BusinessException("该统一身份标识已绑定其他账号", http_status=400, code=40002)
 
 
 async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> None:
@@ -611,6 +653,7 @@ async def admin_update_user(
     - phone: 手机号
     - role: 角色
     - status: 状态
+    - sso_uid: 统一身份标识（仅 sso 账号；空 = 解绑）
     """
     result = await db.execute(
         select(User)
@@ -645,20 +688,65 @@ async def admin_update_user(
     if "email" in update_data and update_data["email"]:
         await ensure_user_email_unique(db, update_data["email"], exclude_user_id=user_id)
 
+    # D-06：审计要 before/after，快照必须在 setattr 之前抓。
+    sso_uid_before = user.sso_uid
+
+    if "sso_uid" in update_data:
+        new_sso_uid = update_data["sso_uid"]
+        if new_sso_uid is not None and new_sso_uid != user.sso_uid:
+            if user.auth_source != AuthSource.SSO.value:
+                # 只有 sso 账号能挂统一身份标识：本地账号若同时带上 sso_uid，
+                # 就既能口令登录又能 SSO 登录，且 IAM 全局登出传导不到平台会话。
+                # 文案必须给出**可执行**的出路：认证源在建号时确定，本接口不允许
+                # 修改（改 auth_source 等于换掉账号的凭据体系，属于新建账号的语义）。
+                raise BusinessException(
+                    "该账号的认证源不是统一身份认证，无法绑定统一身份标识；如需统一身份认证登录，请新建认证源为 sso 的账号",
+                    http_status=400,
+                    code=40002,
+                )
+            await ensure_sso_uid_unique(db, new_sso_uid, exclude_user_id=user_id)
+
     # 更新用户信息
     for key, value in update_data.items():
         setattr(user, key, value)
 
     user.updated_at = utcnow()
+    try:
+        # 预检与写入之间仍有并发窗口：把 uq_users_sso_uid 的冲突收窄到这一步，
+        # 别让它一路走到 commit 才变成 500。
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "sso_uid" in str(getattr(exc, "orig", exc)).lower():
+            raise BusinessException(
+                "该统一身份标识已绑定其他账号", http_status=400, code=40002
+            ) from exc
+        raise
     await db.commit()
 
-    get_audit_logger().log_admin_operation(
+    # 审计仍是一条 ADMIN_USER_UPDATE（不新增枚举，下游按 action 聚合报表）：
+    # sso_uid 的改动以 before/after 塞进 changes，并给出稳定的 reason 词。
+    audit_changes: dict[str, Any] = dict(update_data)
+    sso_uid_after = update_data.get("sso_uid", sso_uid_before)
+    sso_uid_changed = "sso_uid" in update_data and sso_uid_after != sso_uid_before
+    audit_reason: Optional[str] = None
+    if sso_uid_changed:
+        audit_changes["sso_uid"] = {"before": sso_uid_before, "after": sso_uid_after}
+        audit_reason = (
+            "sso_uid_unbind" if sso_uid_before and not sso_uid_after else "sso_uid_bind"
+        )
+
+    audit_kwargs: dict[str, Any] = dict(
         admin_id=str(admin_user.id),
         action=AuditAction.ADMIN_USER_UPDATE,
         target_type=ResourceType.USER,
         target_id=user_id,
-        changes=dict(update_data),
+        changes=audit_changes,
     )
+    if audit_reason:
+        # 没有变更就不传 reason：否则审计里会出现「reason: null」与「未传」两种形态。
+        audit_kwargs["reason"] = audit_reason
+    get_audit_logger().log_admin_operation(**audit_kwargs)
 
     refreshed_result = await db.execute(
         select(User)
