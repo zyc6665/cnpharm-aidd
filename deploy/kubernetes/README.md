@@ -275,3 +275,31 @@ kubectl -n sciminer-model-jobs auth can-i get secrets \
 ```
 
 最后一条应返回 `no`。在执行 Worker 示例清单完成镜像、数据库、Redis、MinIO 和 Secret 配置前，不要部署它；当前宿主机 API 继续保持 `EXECUTOR_ENABLED_K8S=false`。不要只因为 namespace 和 RBAC 已创建就开启任务调度。
+
+### 6.1 后端 SSO 配置必须由 API 的 Deployment / Secret 注入
+
+本目录只保留集群内执行 Worker 的清单，**没有 API（后端）Deployment**——后端跑在宿主机上，
+它的环境变量不走本目录。所以统一身份认证的配置不在 YAML 里逐项列，上线前必须由后端的
+Deployment / Secret 或宿主机的 `.env` 注入下面 17 项（16 个 `SSO_*` + 密钥轮换列表）：
+
+```text
+SSO_ENABLED                    SSO_DEFAULT_ROLE              SSO_STATE_TTL_SECONDS
+SSO_AUTO_PROVISION             SSO_USERNAME_CLAIM            SSO_OFFLINE_GRACE_SECONDS
+SSO_ALLOWED_UNIT_CODES         SSO_VALIDATE_ON_REFRESH       SSO_LOGOUT_REDIRECT_URI
+SSO_BASE_URL                   SSO_TIMEOUT_SECONDS           SETTINGS_ENCRYPTION_KEYS
+SSO_APP_ID                     SSO_TLS_VALIDATE
+SSO_CLIENT_SECRET
+SSO_REDIRECT_URI               SSO_SUCCESS_PATH
+```
+
+三项注意：`SSO_AUTO_PROVISION` 默认 `false`，开启前先确认甲方应用的可见范围；
+`SSO_ALLOWED_UNIT_CODES` 对所有 SSO 登录生效（空=不限制），是准入闸不是实时吊销；
+`SSO_CLIENT_SECRET` 与 `SETTINGS_ENCRYPTION_KEYS` 属于密钥材料，只进 Secret，不进
+ConfigMap 与 Git。
+
+注入后自检（`SSO_ENABLED=true` 时缺 `SSO_BASE_URL`/`SSO_APP_ID`/`SSO_CLIENT_SECRET`/`SSO_REDIRECT_URI` 任一，后端**启动即失败**；其余 `SSO_*` 是可选项，缺失走默认值，不会报错——别把「能启动」当成「配置正确」）：
+
+```bash
+kubectl -n sciminer-system exec deploy/sciminer-api -- printenv | grep -E '^(SSO_|SETTINGS_ENCRYPTION_KEYS=)'
+```
+

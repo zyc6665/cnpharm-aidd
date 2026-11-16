@@ -225,6 +225,21 @@ jobs:
       - name: 校验生产 compose 配置
         run: docker compose -f deploy/compose/docker-compose.prod.yml config --quiet
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 校验渲染后的后端环境能被配置层解析
+        # `config --quiet` 只证明 YAML 与必填变量齐全，它不 import 应用。B-01 就是这样漏出去的：
+        # `SSO_ALLOWED_UNIT_CODES: ${VAR:-}` 渲染成空串，compose 校验通过，后端一启动即
+        # `SettingsError` 退出（backend/worker/beat 全部起不来）。这里把渲染结果真喂给
+        # `app.config`，让「能渲染但起不来」在 CI 就红。
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check pydantic pydantic-settings python-dotenv
+          docker compose -f deploy/compose/docker-compose.prod.yml config --format json > compose-config.json
+          python scripts/check_compose_env.py compose-config.json
+
       - name: 构建后端镜像
         run: docker compose -f deploy/compose/docker-compose.prod.yml build backend
 
