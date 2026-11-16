@@ -9,12 +9,12 @@ import re
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Annotated, Optional, List, Literal
 from urllib.parse import urlparse, urlsplit
 
 from dotenv import load_dotenv
 from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 logger = logging.getLogger(__name__)
@@ -210,7 +210,7 @@ class Settings(BaseSettings):
     # ==================== 主机白名单 / 反向代理 / 文档开关 ====================
     # TrustedHostMiddleware 的白名单。开发环境默认放行任意 Host；预发布/生产
     # 必须显式配置具体域名（生产缺省或为 "*" 时拒绝启动，见下方校验）。
-    ALLOWED_HOSTS: List[str] = ["*"]
+    ALLOWED_HOSTS: Annotated[List[str], NoDecode] = ["*"]
     # 是否暴露 /docs、/redoc、/openapi.json。None 表示按环境推导：
     # development 打开，预发布/生产关闭。
     ENABLE_DOCS: Optional[bool] = None
@@ -237,6 +237,17 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
+    # 加密密钥轮换：逗号分隔，**第一个是当前加密钥**，其余只用于解密。
+    # 留空则退回 SETTINGS_ENCRYPTION_KEY 单钥行为（既有部署不受影响）。
+    # 轮换步骤：1) 新钥置于首位、旧钥保留 → 部署（新旧密文都能解）；
+    #           2) 等旧密文自然过期（≥ REFRESH_TOKEN_EXPIRE_DAYS）后再删旧钥。
+#: 为什么是 ``NoDecode``：pydantic-settings 对 ``List[str]`` 这类复杂字段会**先**
+#: 走 ``json.loads``，相等时机早于 ``field_validator(mode="before")``。于是
+#: ``SSO_ALLOWED_UNIT_CODES=U1,U2`` 或 compose 里的 ``${VAR:-}``（空串）都会在
+#: 配置解析阶段直接抛 ``SettingsError``，进程起不来——而下面的解析器本就是为
+#: 「逗号分隔」写的，永远收不到值。``NoDecode`` 关掉这一步，把原始字符串交给
+#: 解析器，两种写法（JSON 数组 / 逗号分隔 / 空串）才都能用。
+    SETTINGS_ENCRYPTION_KEYS: Annotated[List[str], NoDecode] = []
 
     # ==================== Cookie 认证配置 ====================
     # 令牌优先通过 httpOnly Cookie 下发。COOKIE_SECURE=False 仅适合本地 http 开发；
@@ -276,9 +287,19 @@ class Settings(BaseSettings):
     SSO_REDIRECT_URI: str = ""
     # 单点登录成功后的前端落地路径（相对平台根）。
     SSO_SUCCESS_PATH: str = "/workspace"
-    # 首次登录是否自动开户。关闭时未开通的账号一律拒绝：303 回跳
-    # /login?sso_error=not_provisioned（前端提示「尚未开通平台账号」）。
-    SSO_AUTO_PROVISION: bool = True
+    # 开户/登录准入白名单：逗号分隔的甲方 unitCode 列表，空 = 不限制。
+    # 非空时，IAM getUserInfo 返回的 orgs[].unitCode 必须至少命中一个，否则拒绝
+    # **登录**（不只是拒绝开户）——已开过号的账号同样要过这道闸，否则白名单只能
+    # 拦新人，拦不住存量。判定位置：app/api/v1/auth_sso.py 的 _resolve_user 入口
+    # （callback 阶段）。大小写敏感（unitCode 是甲方主数据）。续期阶段不判定：
+    # refresh 只调 checkAccessToken、不回传 orgs，所以它是准入闸而非实时吊销。
+    SSO_ALLOWED_UNIT_CODES: Annotated[List[str], NoDecode] = []
+    # 自动开户开关。**默认关闭**：甲方应用可见范围内任何人都能点「统一认证登录」，
+    # 打开本开关等于把平台建号权交给 IAM 的可见范围。开启前必须确认甲方应用的
+    # 可见范围（应用授权了哪些部门/人员），必要时同时配置 SSO_ALLOWED_UNIT_CODES。
+    # 关闭时：仅管理员预建的 sso 账号（sso_uid 为空、按用户名首次回填）能登录，
+    # 其余统一认证用户 303 回跳 /login?sso_error=not_provisioned。
+    SSO_AUTO_PROVISION: bool = False
     # 自动开户时的默认角色；权限仍由平台管理员后续调整。
     SSO_DEFAULT_ROLE: Literal["user", "admin"] = "user"
     # 用户名口径：userName=统一认证登录名；employeeNo=员工号（需甲方开通该字段）。
@@ -346,6 +367,14 @@ class Settings(BaseSettings):
             # 宽限期长于平台 refresh 本身的寿命没有意义，还会掩盖配置错误。
             raise ValueError(
                 "SSO_OFFLINE_GRACE_SECONDS must not exceed refresh token lifetime"
+            )
+
+        if self.SSO_ALLOWED_UNIT_CODES and not self.SSO_ENABLED:
+            # 允许「先摆配置后开开关」：不报错，只提示这份白名单当前不生效。
+            # 位置刻意放在下面 ``redirect`` 早退之前——登出回跳留空时那个分支会
+            # 直接 return，放它后面这条提示永远不会触发。
+            logger.warning(
+                "SSO_ALLOWED_UNIT_CODES 已配置但 SSO_ENABLED=false，白名单当前不生效"
             )
 
         redirect = (self.SSO_LOGOUT_REDIRECT_URI or "").strip()
@@ -445,18 +474,36 @@ class Settings(BaseSettings):
             self.SETTINGS_ENCRYPTION_KEY = None
 
         if self.ENVIRONMENT in {"staging", "production"}:
-            if not self.SETTINGS_ENCRYPTION_KEY:
-                raise ValueError(
-                    f"SETTINGS_ENCRYPTION_KEY must be configured in {self.ENVIRONMENT} environment"
-                )
-            if len(self.SETTINGS_ENCRYPTION_KEY) < 32:
-                raise ValueError(
-                    f"SETTINGS_ENCRYPTION_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
-                )
-            if self.SETTINGS_ENCRYPTION_KEY == self.JWT_SECRET_KEY:
-                raise ValueError(
-                    f"SETTINGS_ENCRYPTION_KEY must differ from JWT_SECRET_KEY in {self.ENVIRONMENT} environment"
-                )
+            if not self.SETTINGS_ENCRYPTION_KEYS:
+                # 单钥路径：行为与改造前逐字一致
+                if not self.SETTINGS_ENCRYPTION_KEY:
+                    raise ValueError(
+                        f"SETTINGS_ENCRYPTION_KEY must be configured in {self.ENVIRONMENT} environment"
+                    )
+                if len(self.SETTINGS_ENCRYPTION_KEY) < 32:
+                    raise ValueError(
+                        f"SETTINGS_ENCRYPTION_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
+                    )
+                if self.SETTINGS_ENCRYPTION_KEY == self.JWT_SECRET_KEY:
+                    raise ValueError(
+                        f"SETTINGS_ENCRYPTION_KEY must differ from JWT_SECRET_KEY in {self.ENVIRONMENT} environment"
+                    )
+            else:
+                # 列表路径：只配列表、不配单键是合法部署——轮换时运维只想维护一份
+                # 密钥清单，不该被迫在两处保持一致。首项是加密钥，故逐项都要过硬。
+                for key in self.SETTINGS_ENCRYPTION_KEYS:
+                    if _looks_like_placeholder_secret(key):
+                        raise ValueError(
+                            f"SETTINGS_ENCRYPTION_KEYS must not use a placeholder/example value in {self.ENVIRONMENT} environment"
+                        )
+                    if len(key) < 32:
+                        raise ValueError(
+                            f"SETTINGS_ENCRYPTION_KEYS entries must be at least 32 characters long in {self.ENVIRONMENT} environment"
+                        )
+                    if key == self.JWT_SECRET_KEY:
+                        raise ValueError(
+                            f"SETTINGS_ENCRYPTION_KEYS entries must differ from JWT_SECRET_KEY in {self.ENVIRONMENT} environment"
+                        )
 
         if self.ENVIRONMENT in {"staging", "production"}:
             for origin in self.CORS_ORIGINS:
@@ -862,8 +909,8 @@ class Settings(BaseSettings):
     TOOL_PACKAGE_V1_ENABLED: Optional[bool] = None
     LEGACY_AIDD_API_ENABLED: Optional[bool] = None
     # 生产/预发布灰度账号。全局新入口关闭时，仅这些内部账号可访问。
-    AIDD_ROLLOUT_USER_EMAILS: List[str] = []
-    AIDD_ROLLOUT_USER_IDS: List[str] = []
+    AIDD_ROLLOUT_USER_EMAILS: Annotated[List[str], NoDecode] = []
+    AIDD_ROLLOUT_USER_IDS: Annotated[List[str], NoDecode] = []
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod
@@ -894,6 +941,76 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
+
+    @field_validator("SSO_ALLOWED_UNIT_CODES", mode="before")
+    @classmethod
+    def _parse_sso_allowed_unit_codes(cls, value):
+        """逗号分隔/JSON 数组 -> 去空白、去空项、去重（保序）；超限启动即失败。
+
+        为什么在 init 阶段就把条数与单值长度卡死：白名单是「准入边界」，配错了
+        最常见的表现是「所有人登录失败」——那种故障必须在部署时立刻暴露，
+        而不是等第一个用户点登录才在请求链路里发现。
+        """
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                value = json.loads(stripped)
+            else:
+                value = stripped.split(",")
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("SSO_ALLOWED_UNIT_CODES must be a comma-separated list")
+        # 条数上限按**原始条目**计（去重前）：配置里写了 65 项本身就说明配错了，
+        # 靠去重把它压成 1 条等于静默接受一份明显不对的配置。
+        entries: List[str] = []
+        for item in value:
+            code = str(item).strip()
+            if not code:
+                continue
+            if len(code) > 64:
+                raise ValueError(
+                    "SSO_ALLOWED_UNIT_CODES entries must be at most 64 characters"
+                )
+            entries.append(code)
+        if len(entries) > 64:
+            raise ValueError("SSO_ALLOWED_UNIT_CODES must contain at most 64 unit codes")
+        codes: List[str] = []
+        seen = set()
+        for code in entries:
+            if code in seen:
+                continue
+            seen.add(code)
+            codes.append(code)
+        return codes
+
+    @field_validator("SETTINGS_ENCRYPTION_KEYS", mode="before")
+    @classmethod
+    def _parse_settings_encryption_keys(cls, value):
+        """逗号分隔/JSON 数组 -> 去空白、去空项、去重（保序）。
+
+        空值是合法状态（= 退回 ``SETTINGS_ENCRYPTION_KEY`` 单钥路径），不报错。
+        """
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                value = json.loads(stripped)
+            else:
+                value = stripped.split(",")
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("SETTINGS_ENCRYPTION_KEYS must be a comma-separated list")
+        keys: List[str] = []
+        for item in value:
+            key = str(item).strip()
+            if key and key not in keys:
+                keys.append(key)
+        return keys
 
     def aidd_feature_flags(self) -> list[dict[str, object]]:
         """返回首月 AIDD 发布门禁的解析状态，用于管理员审计。"""

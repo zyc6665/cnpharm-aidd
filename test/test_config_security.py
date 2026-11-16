@@ -720,3 +720,156 @@ class TestSsoSessionSettings:
         assert "SSO_OFFLINE_GRACE_SECONDS=86400" in contents
         assert "SSO_LOGOUT_REDIRECT_URI=https://aidd.example.internal/login?sso_logout=1" in contents
         assert "0 表示严格失败关闭" in contents
+
+
+class TestSsoAdmissionWhitelist:
+    """G-01：自动开户默认关 + unitCode 白名单解析。"""
+
+    def test_auto_provision_defaults_to_off(self):
+        assert Settings.model_fields["SSO_AUTO_PROVISION"].default is False
+        assert Settings(ENVIRONMENT="development").SSO_AUTO_PROVISION is False
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            (" A , ,B,A ", ["A", "B"]),
+            ('["U1", " U2 ", "U1"]', ["U1", "U2"]),
+        ],
+    )
+    def test_allowed_unit_codes_parses_csv_and_json(self, raw, expected):
+        assert (
+            Settings(ENVIRONMENT="development", SSO_ALLOWED_UNIT_CODES=raw).SSO_ALLOWED_UNIT_CODES
+            == expected
+        )
+
+    def test_allowed_unit_codes_rejects_oversize(self):
+        with pytest.raises(ValueError, match="at most 64"):
+            Settings(
+                ENVIRONMENT="development",
+                SSO_ALLOWED_UNIT_CODES=",".join(["U"] * 65),
+            )
+        with pytest.raises(ValueError, match="at most 64"):
+            Settings(ENVIRONMENT="development", SSO_ALLOWED_UNIT_CODES="x" * 65)
+
+    def test_allowed_unit_codes_accepts_upper_boundaries(self):
+        """上限的两侧都要钉：64 项、单项 64 字符都合法，别把边界内的配置判死。"""
+        codes = [f"U{i}" for i in range(64)]
+        settings = Settings(
+            ENVIRONMENT="development", SSO_ALLOWED_UNIT_CODES=",".join(codes)
+        )
+        assert settings.SSO_ALLOWED_UNIT_CODES == codes
+
+        single = "x" * 64
+        parsed = Settings(
+            ENVIRONMENT="development", SSO_ALLOWED_UNIT_CODES=single
+        ).SSO_ALLOWED_UNIT_CODES
+        assert parsed == [single]
+
+    def test_whitelist_without_sso_enabled_logs_warning(self, caplog):
+        with caplog.at_level("WARNING"):
+            Settings(ENVIRONMENT="development", SSO_ALLOWED_UNIT_CODES=["U1"])
+        assert "SSO_ALLOWED_UNIT_CODES" in caplog.text
+
+    def test_whitelist_with_sso_enabled_does_not_warn(self, caplog):
+        """反向钉子：别把 warning 写成无条件。"""
+        with caplog.at_level("WARNING"):
+            Settings(
+                ENVIRONMENT="development",
+                SSO_ENABLED=True,
+                SSO_BASE_URL="https://sso.example.internal",
+                SSO_APP_ID="app",
+                SSO_CLIENT_SECRET="secret",
+                SSO_REDIRECT_URI="https://platform.example/api/v1/auth/sso/callback",
+                SSO_ALLOWED_UNIT_CODES=["U1"],
+            )
+        assert "SSO_ALLOWED_UNIT_CODES 已配置但 SSO_ENABLED=false" not in caplog.text
+
+
+class TestSettingsEncryptionKeyRotation:
+    """G-05：只配 SETTINGS_ENCRYPTION_KEYS 列表也必须能启动。"""
+
+    def _kwargs(self, **overrides):
+        kwargs = dict(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            CORS_ORIGINS=["https://sciminer.example.com"],
+            JWT_SECRET_KEY="j" * 32,
+            SETTINGS_ENCRYPTION_KEY="",
+            **_production_runtime_settings("production"),
+        )
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_production_accepts_keys_list_without_single_key(self):
+        """轮换期运维只想维护一份清单：单键留空不该拦启动。"""
+        settings = Settings(**self._kwargs(SETTINGS_ENCRYPTION_KEYS=["a" * 32, "b" * 32]))
+        assert settings.SETTINGS_ENCRYPTION_KEYS == ["a" * 32, "b" * 32]
+
+    def test_production_rejects_short_key_in_list(self):
+        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEYS"):
+            Settings(**self._kwargs(SETTINGS_ENCRYPTION_KEYS=["a" * 20]))
+
+    def test_production_rejects_placeholder_key_in_list(self):
+        # 用 _PLACEHOLDER_SECRET_MARKERS 里真实存在的标记（"your-secret-"）；
+        # 别自造 "your-encryption-key-..." 那种标记——它不在名单里，用例会假绿。
+        placeholder = "your-secret-" + "x" * 22
+        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEYS"):
+            Settings(**self._kwargs(SETTINGS_ENCRYPTION_KEYS=[placeholder]))
+
+    def test_production_rejects_key_equal_to_jwt(self):
+        """列表里混进 JWT 密钥等于把两种用途的钥材混用。"""
+        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEYS"):
+            Settings(**self._kwargs(SETTINGS_ENCRYPTION_KEYS=["j" * 32]))
+
+    def test_keys_list_parses_strips_and_dedupes(self):
+        """去空白/空项/重复，但**保序**：首钥必须仍是加密钥，不能被去重打乱。"""
+        settings = Settings(
+            ENVIRONMENT="development",
+            SETTINGS_ENCRYPTION_KEYS=" new , ,old,new ",
+        )
+        assert settings.SETTINGS_ENCRYPTION_KEYS == ["new", "old"]
+
+
+class TestListConfigFromEnvironment:
+    """真实启动路径：值由环境变量注入（compose / .env），不是 ``Settings(...)`` 实参。
+
+    回归护栏（B-01）：这两个字段曾经声明为裸 ``List[str]``，而 pydantic-settings 的
+    EnvSettingsSource 会**先**按 JSON 解码（``json.loads``），CSV 文本根本到不了
+    ``mode="before"`` 的解析器；空串同样在解码阶段就抛 ``SettingsError``。后果是
+
+    * ``SSO_ALLOWED_UNIT_CODES=A,B`` 启动即失败；
+    * ``SSO_ALLOWED_UNIT_CODES=`` 启动即失败，而 compose 注入的正是空串
+      （``SSO_ALLOWED_UNIT_CODES: ${SSO_ALLOWED_UNIT_CODES:-}``）——默认生产编排起不来；
+    * ``SETTINGS_ENCRYPTION_KEYS=new,old`` 启动即失败，而轮换文档就这么写。
+
+    修法是给字段加 ``Annotated[..., NoDecode]``，让原始字符串交给解析器。下面的用例
+    都走 **env 注入**路径（``monkeypatch.setenv`` + ``Settings()``），因为 ``Settings(**kw)``
+    走 init source，绕过了这段解码——那是本缺陷当初逃过全量测试的原因。
+    """
+
+    def test_env_accepts_csv_whitelist(self, monkeypatch):
+        monkeypatch.setenv("SSO_ALLOWED_UNIT_CODES", "A,B")
+        assert Settings(ENVIRONMENT="development").SSO_ALLOWED_UNIT_CODES == ["A", "B"]
+
+    def test_env_accepts_empty_whitelist(self, monkeypatch):
+        """compose 的 ``${VAR:-}`` 会注入空串；空串必须等价于「不限制」。"""
+        monkeypatch.setenv("SSO_ALLOWED_UNIT_CODES", "")
+        assert Settings(ENVIRONMENT="development").SSO_ALLOWED_UNIT_CODES == []
+
+    def test_env_accepts_csv_encryption_keys(self, monkeypatch):
+        monkeypatch.setenv("SETTINGS_ENCRYPTION_KEYS", "new,old")
+        settings = Settings(ENVIRONMENT="development")
+        assert settings.SETTINGS_ENCRYPTION_KEYS == ["new", "old"]
+
+    def test_env_accepts_json_arrays(self, monkeypatch):
+        """原有 JSON 写法必须继续可用（生产 .env / compose 里普遍是这种）。"""
+        monkeypatch.setenv("SSO_ALLOWED_UNIT_CODES", '["U1", "U2"]')
+        monkeypatch.setenv("SETTINGS_ENCRYPTION_KEYS", '["k1", "k2"]')
+        settings = Settings(ENVIRONMENT="development")
+        assert settings.SSO_ALLOWED_UNIT_CODES == ["U1", "U2"]
+        assert settings.SETTINGS_ENCRYPTION_KEYS == ["k1", "k2"]
+
+    def test_env_accepts_csv_allowed_hosts(self, monkeypatch):
+        """同一处修复覆盖既有字段：``ALLOWED_HOSTS`` 早有 CSV 解析器，却从未被调用。"""
+        monkeypatch.setenv("ALLOWED_HOSTS", "a.example,b.example")
+        assert Settings(ENVIRONMENT="development").ALLOWED_HOSTS == ["a.example", "b.example"]
