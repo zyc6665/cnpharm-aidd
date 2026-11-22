@@ -30,17 +30,12 @@ from app.database.base import Base
 from app.database.session import get_db
 from app.gpu import slots as slot_module
 from app.gpu.allocator import GPUAllocator
-from app.gpu.node_agent import AgentJobRequest, NodeAgentClient, NodeAgentError
 from app.gpu.slots import (
-    SLOT_STATE_BUSY,
-    SLOT_STATE_FAULT,
     SLOT_STATE_FREE,
     SlotConfigError,
     load_slot_registry,
     load_slot_states,
     parse_slot_document,
-    record_slot_state,
-    schedulable_node_view,
     slot_view,
 )
 from app.models.gpu import GPUAllocation, GPUAllocationStatus
@@ -297,82 +292,12 @@ def test_slots_for_model_includes_generic_slots(patched_slots_yaml):
 
 
 @pytest.mark.asyncio
-async def test_record_slot_state_marks_fault_when_device_count_is_not_one():
-    record = await record_slot_state(
-        node_id="dcu-node-a",
-        slot_id="A1",
-        state=SLOT_STATE_BUSY,
-        device_count=0,
-        cache_client=get_cache_backend("memory"),
-    )
-    assert record["state"] == SLOT_STATE_FAULT
-    assert "device_count()=0" in record["message"]
-
-
-@pytest.mark.asyncio
-async def test_record_slot_state_keeps_state_when_device_count_is_one():
-    record = await record_slot_state(
-        node_id="dcu-node-a",
-        slot_id="A1",
-        state=SLOT_STATE_BUSY,
-        device_count=1,
-        cache_client=get_cache_backend("memory"),
-    )
-    assert record["state"] == SLOT_STATE_BUSY
-
-
-@pytest.mark.asyncio
-async def test_record_slot_state_rejects_unknown_state():
-    with pytest.raises(SlotConfigError):
-        await record_slot_state(
-            node_id="n",
-            slot_id="A1",
-            state="IDLE",
-            cache_client=get_cache_backend("memory"),
-        )
-
-
-@pytest.mark.asyncio
 async def test_load_slot_states_defaults_to_free(patched_slots_yaml):
     patched_slots_yaml(DCU_SLOTS_YAML)
     registry = load_slot_registry()
     states = await load_slot_states(registry, cache_client=get_cache_backend("memory"))
     assert set(states) == {"dcu-node-a/A1", "dcu-node-a/A2", "nvidia-node-b/B1"}
     assert {record["state"] for record in states.values()} == {SLOT_STATE_FREE}
-
-
-@pytest.mark.asyncio
-async def test_schedulable_node_view_excludes_non_free_slots(patched_slots_yaml):
-    patched_slots_yaml(DCU_SLOTS_YAML)
-    registry = load_slot_registry()
-    cache = get_cache_backend("memory")
-    await record_slot_state(
-        node_id="dcu-node-a", slot_id="A1", state=SLOT_STATE_BUSY, cache_client=cache
-    )
-
-    nodes = await schedulable_node_view(registry, cache_client=cache)
-    by_id = {node["id"]: node for node in nodes}
-    assert set(by_id) == {"dcu-node-a", "nvidia-node-b"}
-    assert [gpu["slot_id"] for gpu in by_id["dcu-node-a"]["gpus"]] == ["A2"]
-    assert by_id["dcu-node-a"]["agent_endpoint"] == "http://dcu-a.local:8780"
-    assert by_id["dcu-node-a"]["gpus"][0]["accelerator_model"] == "Hygon K100-AI"
-
-
-@pytest.mark.asyncio
-async def test_slot_view_reports_states(patched_slots_yaml):
-    patched_slots_yaml(DCU_SLOTS_YAML)
-    registry = load_slot_registry()
-    cache = get_cache_backend("memory")
-    await record_slot_state(
-        node_id="nvidia-node-b", slot_id="B1", state=SLOT_STATE_FAULT, cache_client=cache
-    )
-
-    states = await load_slot_states(registry, cache_client=cache)
-    nodes = slot_view(registry, states)
-    nvidia = next(node for node in nodes if node["nodeId"] == "nvidia-node-b")
-    assert nvidia["schedulableSlotCount"] == 0
-    assert nvidia["slots"][0]["state"] == SLOT_STATE_FAULT
-    assert nvidia["slots"][0]["schedulable"] is False
 
 
 # ---------------------------------------------------------------- 分配器
@@ -495,93 +420,7 @@ async def test_allocator_falls_back_to_local_probe_without_slots(db_session, pat
     assert await allocator._get_slot_nodes() == []
 
 
-# ---------------------------------------------------------------- Agent 客户端
-
-
-@pytest.mark.asyncio
-async def test_agent_client_submits_job():
-    captured: dict[str, object] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["url"] = str(request.url)
-        captured["body"] = json.loads(request.content.decode("utf-8"))
-        captured["auth"] = request.headers.get("authorization")
-        return httpx.Response(200, json={"jobId": "job-123"})
-
-    client = NodeAgentClient(
-        "http://dcu-a.local:8780",
-        token="secret-token",
-        transport=httpx.MockTransport(handler),
-    )
-    job_id = await client.submit(
-        AgentJobRequest(
-            task_id="task-1",
-            slot_id="A1",
-            image="harbor.local/drp/compute-boltz2:2.0.1-dtk26.04",
-            model_entry=("/opt/model/run.sh", "--task", "task-1"),
-            env={"DRP_DEVICE": "cuda:0"},
-            docker_args=("--device=/dev/kfd",),
-            max_minutes=240,
-        )
-    )
-
-    assert job_id == "job-123"
-    assert captured["url"] == "http://dcu-a.local:8780/api/v1/jobs"
-    assert captured["auth"] == "Bearer secret-token"
-    body = captured["body"]
-    assert body["taskId"] == "task-1"
-    assert body["slotId"] == "A1"
-    assert body["modelEntry"] == ["/opt/model/run.sh", "--task", "task-1"]
-    assert body["maxMinutes"] == 240
-
-
-@pytest.mark.asyncio
-async def test_agent_client_cancel_and_status():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith(":cancel"):
-            return httpx.Response(200, json={"ok": True})
-        return httpx.Response(
-            200,
-            json={
-                "jobId": "job-9",
-                "state": "succeeded",
-                "slotId": "A3",
-                "progress": 100,
-                "exitCode": 0,
-                "deviceCount": 1,
-            },
-        )
-
-    client = NodeAgentClient("http://agent.local:8780", transport=httpx.MockTransport(handler))
-    await client.cancel("job-9", reason="用户取消")
-    status = await client.status("job-9")
-
-    assert status.job_id == "job-9"
-    assert status.state == "SUCCEEDED"
-    assert status.terminal is True
-    assert status.device_count == 1
-
-
-@pytest.mark.asyncio
-async def test_agent_client_requires_endpoint(monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_BASE_URL", None, raising=False)
-    client = NodeAgentClient(None)
-    assert client.configured is False
-    with pytest.raises(NodeAgentError, match="未配置"):
-        await client.status("job-1")
-
-
-@pytest.mark.asyncio
-async def test_agent_client_surfaces_http_errors():
-    client = NodeAgentClient(
-        "http://agent.local:8780",
-        transport=httpx.MockTransport(lambda request: httpx.Response(503, text="busy")),
-    )
-    with pytest.raises(NodeAgentError, match="503"):
-        await client.status("job-1")
-
-
-# ---------------------------------------------------------------- 上报端点
+# ---------------------------------------------------------------- 卡位视图端点
 
 
 @pytest_asyncio.fixture
@@ -605,89 +444,6 @@ async def test_slot_view_endpoint_lists_declared_slots(slot_api_client):
     assert payload["nodeCount"] == 2
     assert payload["slotCount"] == 3
     assert payload["schedulableSlotCount"] == 3
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_is_disabled_without_token(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", None, raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={"nodeId": "dcu-node-a", "slotId": "A1", "state": "BUSY"},
-    )
-    assert response.status_code == 503
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_rejects_wrong_token(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={"nodeId": "dcu-node-a", "slotId": "A1", "state": "BUSY"},
-        headers={"X-DRP-Agent-Token": "nope"},
-    )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_records_state(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={
-            "nodeId": "dcu-node-a",
-            "slotId": "A1",
-            "state": "BUSY",
-            "deviceCount": 1,
-        },
-        headers={"X-DRP-Agent-Token": "report-secret"},
-    )
-    assert response.status_code == 200
-    assert response.json()["state"] == "BUSY"
-
-    view = await slot_api_client.get("/api/v1/gpu/slots")
-    node = next(n for n in view.json()["data"]["nodes"] if n["nodeId"] == "dcu-node-a")
-    slot = next(s for s in node["slots"] if s["slotId"] == "A1")
-    assert slot["state"] == "BUSY"
-    assert slot["schedulable"] is False
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_flags_fault_on_bad_device_count(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={
-            "nodeId": "dcu-node-a",
-            "slotId": "A1",
-            "state": "BUSY",
-            "deviceCount": 0,
-        },
-        headers={"X-DRP-Agent-Token": "report-secret"},
-    )
-    assert response.status_code == 200
-    assert response.json()["state"] == SLOT_STATE_FAULT
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_rejects_undeclared_slot(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={"nodeId": "dcu-node-a", "slotId": "Z9", "state": "FREE"},
-        headers={"X-DRP-Agent-Token": "report-secret"},
-    )
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_report_endpoint_rejects_unknown_state(slot_api_client, monkeypatch):
-    monkeypatch.setattr(settings, "DRP_NODE_AGENT_REPORT_TOKEN", "report-secret", raising=False)
-    response = await slot_api_client.post(
-        "/api/v1/gpu/slots/report",
-        json={"nodeId": "dcu-node-a", "slotId": "A1", "state": "IDLE"},
-        headers={"X-DRP-Agent-Token": "report-secret"},
-    )
-    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------- 随仓交付的声明文件

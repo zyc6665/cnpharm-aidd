@@ -27,7 +27,6 @@ nodes:
   - nodeId: dcu-node-01
     hostname: dcu01.drp.local
     # 平台 → Agent 主通道（docs/13 §4.2：8780/TCP）
-    agentEndpoint: http://dcu01.drp.local:8780
     accelerator:
       # 只用于页面展示与追溯包里的「执行环境」，不参与调度
       model: Hygon K100-AI
@@ -141,7 +140,6 @@ nodes:
   # docs/09 §5.6 迁移纪律 ③：dev4090 的数据不得作为耗时基线与容差签字依据。
   - nodeId: dev-4090-node
     hostname: dev4090.drp.local
-    agentEndpoint: http://dev4090.drp.local:8780
     accelerator:
       model: NVIDIA RTX 4090
       count: 8
