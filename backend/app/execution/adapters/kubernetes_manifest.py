@@ -37,7 +37,7 @@ def build_kubernetes_job_manifest(
     container: dict[str, Any] = {
         "name": "tool",
         "image": image,
-        "resources": _container_resources(resources),
+        "resources": _container_resources(resources, config.gpu_resource_name),
     }
 
     command = runtime.get("entrypoint") or runtime.get("command")
@@ -93,6 +93,12 @@ def build_kubernetes_job_manifest(
         pod_spec["volumes"] = weight_volumes
     if config.image_pull_secret_ref:
         pod_spec["imagePullSecrets"] = [{"name": config.image_pull_secret_ref}]
+    # 资源池定向与污点容忍都是部署侧受控配置（K8S_ADAPTER_*），平台统一注入；
+    # 工具与租户不感知节点拓扑。
+    if config.node_selector:
+        pod_spec["nodeSelector"] = dict(config.node_selector)
+    if config.tolerations:
+        pod_spec["tolerations"] = [dict(item) for item in config.tolerations]
 
     job_spec: dict[str, Any] = {
         "backoffLimit": 0,
@@ -185,7 +191,10 @@ def _resource_values(resources: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _container_resources(resources: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _container_resources(
+    resources: dict[str, Any],
+    gpu_resource_name: str = "nvidia.com/gpu",
+) -> dict[str, dict[str, str]]:
     requests: dict[str, str] = {}
     limits: dict[str, str] = {}
     cpu = resources.get("cpu")
@@ -201,8 +210,8 @@ def _container_resources(resources: dict[str, Any]) -> dict[str, dict[str, str]]
         limits["memory"] = normalized_memory
     gpu_count = int(resources.get("gpu_count") or 0)
     if gpu_count > 0:
-        requests["nvidia.com/gpu"] = str(gpu_count)
-        limits["nvidia.com/gpu"] = str(gpu_count)
+        requests[gpu_resource_name] = str(gpu_count)
+        limits[gpu_resource_name] = str(gpu_count)
     if not requests:
         raise KubernetesManifestError("resource request must include CPU, memory, or GPU")
     return {"requests": requests, "limits": limits}

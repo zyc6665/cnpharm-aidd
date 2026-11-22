@@ -145,6 +145,33 @@ def test_v2_manifest_rejects_output_roles_from_another_artifact_type():
     assert "Unknown file role" in str(exc_info.value)
 
 
+def test_v2_manifest_allows_weights_free_package_for_weight_in_image_models():
+    """权重随镜像打包是默认形态：weights 缺省的包必须通过校验。"""
+    raw = _v2_manifest()
+    raw["runtime"].pop("weights")
+
+    manifest = ToolPackageManifest.model_validate(raw)
+    result = validate_tool_package(manifest)
+
+    assert manifest.runtime.weights is None
+    assert result.is_valid is True
+
+
+def test_v2_manifest_weights_free_package_does_not_require_weights_cache_key():
+    raw = _v2_manifest()
+    raw["runtime"].pop("weights")
+    raw["runtime"]["cache_policy"]["key_fields"] = [
+        "metadata.slug",
+        "metadata.version",
+        "runtime.artifacts.selected.digest_or_sha256",
+    ]
+
+    manifest = ToolPackageManifest.model_validate(raw)
+    result = validate_tool_package(manifest)
+
+    assert result.is_valid is True
+
+
 def test_v2_manifest_requires_runtime_env_metadata():
     raw = _v2_manifest()
     raw.pop("runtime")

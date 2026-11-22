@@ -191,10 +191,16 @@ MSIGN 支持两种批量入口（迁移 `20261031_10` / `20261031_11`，工具�
 | `boltz2-affinity-prediction` | `aidd/compute-boltz2-affinity@sha256:d380abc4…` | GPU | 蛋白序列（`parameters.sequence`）+ `ligand_smiles`（CSV，按行逐配体推理） | `molecule_table@1`（亲和力/概率/置信度/iptm）+ `run_report@1` |
 | `therapainter-peptide-prediction` | `aidd/compute-therapainter@sha256:61d2d408…` | GPU（CPU 可降级） | `parameters.sequence`（多肽序列，多行/FASTA，可批量） | `molecule_table@1`（活性/MIC/毒性）+ `run_report@1` |
 
-Boltz-2 权重以 hostPath 只读挂载：宿主
+Boltz-2 权重当前仍以 hostPath 只读挂载：宿主
 `/data/zhouyc/k8s-model-build/boltz2_cache` → 容器 `/opt/boltz2_cache`（conf / aff /
-mols 三件，约 6.2 GB），因此需要能调度到该宿主的 nodeSelector；
-`runtime.weights.mounts` 已写在迁移 `20261031_13` 的工具配置里。
+mols 三件，约 6.2 GB），`runtime.weights.mounts` 已写在迁移 `20261031_13` 的工具配置里。
+
+> **权重形态决策（2026-11 执行通道收敛）**：此后模型权重**随镜像打包**为默认形态，
+> ToolPackage v2 的 `runtime.weights` 允许缺省。存量 Boltz-2 的 hostPath 挂载
+> 在「重新构建带权重的镜像 → 新 digest 重新注册 → smoke → promote」流程中自然替换。
+> 多节点定位不再依赖「钉权重宿主」：需要资源池定向（GPU/CPU 池分离、污点容忍）
+> 时，用平台级配置 `K8S_ADAPTER_NODE_SELECTOR_JSON` / `K8S_ADAPTER_TOLERATIONS_JSON`
+> 统一注入，工具配置不感知节点拓扑。
 
 Boltz-2 纯离线单序列：镜像内生成 `>query\n<SEQ>` 的 A3M 文件并在 YAML 里
 `msa: <path>` 引用（`msa: empty` 会被 Boltz-2 判为非法）。镜像未装

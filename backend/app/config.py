@@ -662,6 +662,14 @@ class Settings(BaseSettings):
     K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: str = "inputs"
     K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX: str = "executions"
     K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: str = "/tmp/sciminer-k8s-artifacts"
+    # 多节点算力集群的调度定位（docs/24 §10）。权重随镜像打包后不再需要「钉权重宿主」，
+    # 但资源池定向（GPU/CPU 池分离、GPU 节点污点容忍）仍靠这两个部署侧配置；
+    # 工具只引用资源档位，不感知节点拓扑，平台统一从环境注入。
+    K8S_ADAPTER_NODE_SELECTOR_JSON: Optional[str] = None
+    K8S_ADAPTER_TOLERATIONS_JSON: Optional[str] = None
+    # GPU 扩展资源名：NVIDIA 集群为 nvidia.com/gpu；海光 DCU 集群切换为
+    # device plugin 暴露的资源名（如 hygon.com/dcu）。
+    K8S_ADAPTER_GPU_RESOURCE_NAME: str = "nvidia.com/gpu"
 
     IMAGE_REGISTRY_ENDPOINT: str = "http://sciminer-registry.sciminer-storage.svc.cluster.local:5000"
     IMAGE_REGISTRY_IMAGE_PREFIX: str = "sciminer-registry.sciminer-storage.svc.cluster.local:5000"

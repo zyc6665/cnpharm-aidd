@@ -77,9 +77,30 @@ def test_build_kubernetes_tool_config_binds_digest_variant_and_profile():
         "runtime": {
             "image": "registry.example/managed-model:1.0.0@sha256:" + "b" * 64,
             "entrypoint": ["runner/platform_run_v2.sh"],
+            "weights": {
+                "manifest_uri": "artifacts://weights.json",
+                "manifest_sha256": "d" * 64,
+                "mounts": [],
+            },
         },
         "resource_profile": "gpu-large",
     }
+
+
+def test_build_kubernetes_tool_config_omits_weights_for_weight_in_image_packages():
+    """权重随镜像打包是默认形态：weights 缺省的包不得产出 weights 配置。"""
+    from app.tool_packages.kubernetes_binding import build_kubernetes_tool_config
+
+    manifest = _manifest()
+    manifest.runtime.weights = None
+
+    config = build_kubernetes_tool_config(
+        manifest,
+        variant_name="nvidia-cuda",
+        resource_profile="gpu-large",
+    )
+
+    assert "weights" not in config["runtime"]
 
 
 def test_build_kubernetes_tool_config_rejects_packages_without_k8s_support():

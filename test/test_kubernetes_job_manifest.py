@@ -99,6 +99,57 @@ def test_render_manifest_normalizes_legacy_lowercase_memory_quantity():
     }
 
 
+def test_render_manifest_places_node_selector_tolerations_and_custom_gpu_resource():
+    from app.execution.adapters.kubernetes import KubernetesJobExecutionConfig
+    from app.execution.adapters.kubernetes_manifest import build_kubernetes_job_manifest
+
+    config = KubernetesJobExecutionConfig(
+        cluster_alias="platform",
+        namespace="model-jobs",
+        credential_ref="platform-k8s",
+        service_account="model-runner",
+        node_selector={"sciminer.io/pool": "gpu"},
+        tolerations=[
+            {"key": "sciminer.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
+        ],
+        gpu_resource_name="hygon.com/dcu",
+    )
+
+    manifest = build_kubernetes_job_manifest(_request(), config)
+
+    pod_spec = manifest["spec"]["template"]["spec"]
+    assert pod_spec["nodeSelector"] == {"sciminer.io/pool": "gpu"}
+    assert pod_spec["tolerations"] == [
+        {"key": "sciminer.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
+    ]
+    container = pod_spec["containers"][0]
+    assert container["resources"]["requests"] == {
+        "cpu": "16",
+        "memory": "64Gi",
+        "hygon.com/dcu": "1",
+    }
+    assert container["resources"]["limits"]["hygon.com/dcu"] == "1"
+
+
+def test_render_manifest_omits_scheduling_fields_by_default():
+    """未配置调度定位时不渲染 nodeSelector/tolerations，保持 manifest 最小化。"""
+    from app.execution.adapters.kubernetes import KubernetesJobExecutionConfig
+    from app.execution.adapters.kubernetes_manifest import build_kubernetes_job_manifest
+
+    config = KubernetesJobExecutionConfig(
+        cluster_alias="platform",
+        namespace="model-jobs",
+        credential_ref="platform-k8s",
+        service_account="model-runner",
+    )
+
+    manifest = build_kubernetes_job_manifest(_request(), config)
+    pod_spec = manifest["spec"]["template"]["spec"]
+
+    assert "nodeSelector" not in pod_spec
+    assert "tolerations" not in pod_spec
+
+
 def test_render_manifest_rejects_mutable_images():
     from app.execution.adapters.kubernetes import KubernetesJobExecutionConfig
     from app.execution.adapters.kubernetes_manifest import (
