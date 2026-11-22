@@ -25,7 +25,6 @@ jsonschema==4.25.1
 
 # HTTP Client
 httpx==0.26.0
-paramiko==5.1.0
 
 # Agent orchestration
 langgraph==0.2.74

@@ -632,9 +632,9 @@ class Settings(BaseSettings):
     RESOURCE_QUOTA_REJECTION_TTL_SECONDS: int = 86400
     WORKER_LISTEN_QUEUES: Optional[str] = None
 
-    # 受控 Job 执行器开关。具体 K8s/SSH adapter 由 worker 启动时注入。
+    # 受控 Job 执行器开关。K8s adapter 由 worker 启动时注入；
+    # SSH 执行通道已退役（2026-11 执行通道收敛），不再提供开关。
     EXECUTOR_ENABLED_K8S: bool = False
-    EXECUTOR_ENABLED_SSH: bool = True
     K8S_ADAPTER_CLUSTER_ALIAS: Optional[str] = None
     K8S_ADAPTER_NAMESPACE: Optional[str] = None
     K8S_ADAPTER_CREDENTIAL_REF: Optional[str] = None

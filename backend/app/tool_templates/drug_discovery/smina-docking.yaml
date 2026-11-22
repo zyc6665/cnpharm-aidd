@@ -7,7 +7,7 @@ metadata:
   version: 1.0.0
   description: Dock prepared ligands with Smina-compatible scoring and minimization options.
   family: drug_discovery
-executor_types: [docker_image, ssh_job, k8s_job]
+executor_types: [docker_image, k8s_job]
 input_schema:
   type: object
   properties:
@@ -85,7 +85,7 @@ resource_profile:
   gpu_memory_gb: 0
   expected_minutes: 30
   timeout_minutes: 180
-  scheduler_hint: ssh
+  scheduler_hint: future_cluster
 sample_inputs:
   - name: smoke
     params: { box_center: [0, 0, 0], box_size: [16, 16, 16], exhaustiveness: 1 }

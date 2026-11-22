@@ -160,7 +160,6 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "MINIO_SECURE": "true",
         "TASK_EXECUTION_BACKEND": "celery",
         "EXECUTOR_ENABLED_K8S": "true",
-        "EXECUTOR_ENABLED_SSH": "true",
         "K8S_ADAPTER_CLUSTER_ALIAS": "platform",
         "K8S_ADAPTER_NAMESPACE": "sciminer-model-jobs",
         "K8S_ADAPTER_CREDENTIAL_REF": "platform-k8s",
@@ -240,7 +239,6 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
             "CELERY_RESULT_BACKEND",
             "MINIO_ACCESS_KEY",
             "MINIO_SECRET_KEY",
-            "SSH_PASSWORD_REF_SSH_4090_ZHOUYC",
         )
     }
     env_by_name = {item["name"]: item for item in container["env"]}

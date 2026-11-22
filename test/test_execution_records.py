@@ -99,7 +99,7 @@ async def test_start_task_execution_record_persists_safe_package_backed_attempt(
         tool_slug="remote-tool",
         tool_version_id="tool-version-1",
         tool_version="1.0.0",
-        tool_type="ssh_job",
+        tool_type="k8s_job",
         attempt_id="attempt-1",
         tool_config={
             "timeout_sec": 600,
@@ -110,7 +110,7 @@ async def test_start_task_execution_record_persists_safe_package_backed_attempt(
     )
 
     assert record is session.records[0]
-    assert record.adapter_type == "remote_job"
+    assert record.adapter_type == "k8s_job"
     assert record.tool_package_version_id == "package-version-1"
     assert record.request_snapshot["task_id"] == "task-1"
     assert record.request_snapshot["parameters"] == {

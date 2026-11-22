@@ -87,7 +87,7 @@ class TaskQueueManager:
                 return TaskQueue.HEAVY_COMPUTE_QUEUE.value
 
         # 4. 普通CPU任务
-        if tool_config.get("type") in ["docker_image", "python_script", "ssh_job", "k8s_job"]:
+        if tool_config.get("type") in ["docker_image", "python_script", "k8s_job"]:
             return TaskQueue.CPU_QUEUE.value
 
         # 5. 默认队列（API调用等）

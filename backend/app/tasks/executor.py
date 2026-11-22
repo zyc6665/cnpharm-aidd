@@ -15,8 +15,6 @@ from app.tasks.executors.errors import (
 from app.tasks.executors.factory import TaskExecutor
 from app.tasks.executors.kubernetes_job import KubernetesJobExecutor
 from app.tasks.executors.python_script import PythonScriptExecutor
-from app.tasks.executors.ssh_job import SSHJobExecutor
-from app.tasks.ssh_transport import ParamikoSSHTransport
 
 __all__ = [
     "BaseExecutor",
@@ -24,10 +22,8 @@ __all__ = [
     "DockerExecutor",
     "GPUAllocationFailed",
     "KubernetesJobExecutor",
-    "ParamikoSSHTransport",
     "PythonScriptExecutor",
     "ResourceAdmissionFailed",
-    "SSHJobExecutor",
     "TaskExecutionError",
     "TaskExecutor",
     "TaskTimeoutError",

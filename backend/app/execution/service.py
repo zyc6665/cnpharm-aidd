@@ -36,11 +36,7 @@ class ExecutionService:
         self._adapters = dict(adapters)
 
     def _adapter(self, adapter_type: str) -> ExecutionPort:
-        normalized_type = {
-            "ssh_job": "ssh",
-            "remote_job": "remote_job",
-        }.get(adapter_type, adapter_type)
-        adapter = self._adapters.get(normalized_type)
+        adapter = self._adapters.get(adapter_type)
         if adapter is None:
             raise UnsupportedExecutionTypeError(f"不支持的执行器类型: {adapter_type}")
         return adapter

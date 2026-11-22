@@ -27,7 +27,6 @@ from app.middleware import RateLimitMiddleware
 from app.middleware.trace import TraceIdMiddleware
 from app.monitoring.prometheus_metrics import PrometheusMiddleware, metrics_endpoint
 from app.services.audit_sink import configure_audit_db_writer
-from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.services.upload_maintenance import upload_sweep_loop
@@ -92,8 +91,6 @@ async def lifespan(app: FastAPI):
         logger.exception("启动期平台工具 seeding 异常（启动继续）")
     managed_runtime = configure_direct_managed_execution_runtime()
     workflow_reconcile_loop.start()
-    if use_direct_task_execution():
-        direct_task_recovery_loop.start()
     # Celery Worker 探测预热（#112）：第一次 `inspect().ping()` 要在探测线程里 import
     # celery/kombu/redis 生态（实测 1.7s），放在请求路径上会把首次 `/health` 拖过预算、
     # 误报 degraded。这里后台跑一次把 import 开销挪走；失败无所谓，`_check_celery` 会再探。
@@ -148,7 +145,6 @@ async def lifespan(app: FastAPI):
     await audit_writer.stop()
     await workflow_reconcile_loop.stop()
     if use_direct_task_execution():
-        await direct_task_recovery_loop.stop()
         await direct_task_runner.shutdown()
     if managed_runtime is not None:
         await managed_runtime.close()

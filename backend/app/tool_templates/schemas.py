@@ -22,10 +22,10 @@ except ImportError:  # pragma: no cover - optional dependency guard
 
 TOOL_TEMPLATE_API_VERSION = "aidd.sciminer/tool-template"
 STANDARD_RESULT_VERSION = "aidd.sciminer/result"
+# SSH 执行通道已退役（2026-11 执行通道收敛）；模板不再声明 ssh_job。
 SUPPORTED_TEMPLATE_EXECUTOR_TYPES = {
     "docker_image",
     "python_script",
-    "ssh_job",
     "k8s_job",
 }
 
@@ -170,7 +170,7 @@ class ToolTemplateImplementation(BaseModel):
     recommended_executor: Literal[
         "docker_image",
         "python_script",
-        "ssh_job",
+        "k8s_job",
     ]
     notes: str | None = Field(default=None, max_length=500)
 
@@ -247,7 +247,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
     api_version: Literal[TOOL_TEMPLATE_API_VERSION]
     kind: Literal["ToolTemplate"]
     metadata: ToolTemplateMetadata
-    executor_types: list[Literal["docker_image", "python_script", "ssh_job", "k8s_job"]] = Field(
+    executor_types: list[Literal["docker_image", "python_script", "k8s_job"]] = Field(
         min_length=1
     )
     input_schema: dict[str, Any]

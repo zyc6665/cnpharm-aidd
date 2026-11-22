@@ -25,7 +25,6 @@ data:
   MINIO_SECURE: "true"
   TASK_EXECUTION_BACKEND: celery
   EXECUTOR_ENABLED_K8S: "true"
-  EXECUTOR_ENABLED_SSH: "true"
   K8S_ADAPTER_CLUSTER_ALIAS: platform
   K8S_ADAPTER_NAMESPACE: sciminer-model-jobs
   K8S_ADAPTER_CREDENTIAL_REF: platform-k8s
@@ -113,7 +112,7 @@ spec:
                   fieldPath: metadata.name
             - name: WORKER_CAPABILITY_JSON
               value: >-
-                {"worker_id":"sciminer-k8s-$(HOSTNAME)","queue":"tool_tasks","executor_types":["k8s_job","ssh_job"],"tiers":["cpu","standard","gpu"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":1,"parallelism":16}
+                {"worker_id":"sciminer-k8s-$(HOSTNAME)","queue":"tool_tasks","executor_types":["k8s_job"],"tiers":["cpu","standard","gpu"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":1,"parallelism":16}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -154,11 +153,6 @@ spec:
                 secretKeyRef:
                   name: sciminer-execution-worker-secrets
                   key: MINIO_SECRET_KEY
-            - name: SSH_PASSWORD_REF_SSH_4090_ZHOUYC
-              valueFrom:
-                secretKeyRef:
-                  name: sciminer-execution-worker-secrets
-                  key: SSH_PASSWORD_REF_SSH_4090_ZHOUYC
           resources:
             requests:
               cpu: "1"

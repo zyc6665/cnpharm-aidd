@@ -67,10 +67,7 @@ class ExecutionRequest(BaseModel):
     executor_type: Literal[
         "container",
         "cli",
-        "remote_job",
-        "ssh",
         "k8s_job",
-        "ssh_job",
     ]
     parameters: dict[str, Any] = Field(default_factory=dict)
     inputs: list[ExecutionInput] = Field(default_factory=list)

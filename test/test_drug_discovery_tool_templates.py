@@ -166,13 +166,12 @@ def test_heavy_template_projects_resource_profile_to_existing_tool_fields():
 
     config = build_tool_import_config_from_template(
         template,
-        executor_type="ssh_job",
+        executor_type="k8s_job",
         executor_config={
-            "host": "gpu-node-01",
-            "username": "runner",
-            "auth_ref": "secret/md-key",
-            "remote_base_dir": "/srv/sciminer/jobs",
-            "entrypoint": "/opt/sciminer/run-md.sh",
+            "runtime": {
+                "image": "registry.example/aidd/compute-gromacs@sha256:" + "a" * 64,
+            },
+            "resource_profile": "gpu-large",
         },
     )
 
@@ -216,7 +215,7 @@ def test_resource_profile_is_exposed_on_tool_contract():
         "expected_minutes": 30,
         "timeout_minutes": 180,
         "parallelism": 1,
-        "scheduler_hint": "ssh",
+        "scheduler_hint": "future_cluster",
     }
 
 

@@ -316,7 +316,7 @@ class TaskExecutor:
         if not self.config.get("gpu_required", False):
             return None
         executor_type = str(self.config.get("type") or "").strip()
-        if executor_type in {"k8s_job", "ssh_job"}:
+        if executor_type in {"k8s_job"}:
             return None
         from app.database.session import get_async_session
 

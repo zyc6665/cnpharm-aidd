@@ -572,7 +572,7 @@ def test_lvpocket_legacy_artifact_only_contract_is_workflow_executable():
         id="tool-lvpocket",
         slug="lvpocket-pocket-prediction",
         name="LVpocket",
-        description="Legacy LVpocket ssh_job tool with artifact-only workflow metadata",
+        description="LVpocket k8s_job tool with artifact-only workflow metadata",
         status="published",
         is_public=True,
         current_version=SimpleNamespace(
@@ -581,8 +581,12 @@ def test_lvpocket_legacy_artifact_only_contract_is_workflow_executable():
             is_active=True,
             deprecated=False,
             config={
-                "type": "ssh_job",
+                "type": "k8s_job",
                 "timeout_sec": 3600,
+                "runtime": {
+                    "image": "registry.example/aidd/compute-lvpocket@sha256:" + "a" * 64,
+                },
+                "resource_profile": "gpu-large",
                 "artifacts": {
                     "inputs": [
                         {

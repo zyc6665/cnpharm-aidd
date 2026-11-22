@@ -20,7 +20,7 @@ class ToolType(str, enum.Enum):
     """工具类型"""
     DOCKER_IMAGE = "docker_image"
     PYTHON_SCRIPT = "python_script"
-    SSH_JOB = "ssh_job"
+    # ssh_job 已退役（2026-11 执行通道收敛，统一 k8s_job）；历史数据存纯字符串列，不受枚举影响。
 
 
 class ToolProviderType(str, enum.Enum):
