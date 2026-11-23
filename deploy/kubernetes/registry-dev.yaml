@@ -5,12 +5,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sciminer-registry-data
-  namespace: sciminer-storage
+  name: aidd-registry-data
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: image-registry
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: image-registry
 spec:
   accessModes:
     - ReadWriteOnce
@@ -22,11 +22,11 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sciminer-registry
-  namespace: sciminer-storage
+  name: aidd-registry
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
 spec:
   replicas: 1
   strategy:
@@ -34,12 +34,12 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: registry
-      app.kubernetes.io/part-of: sciminer
+      app.kubernetes.io/part-of: aidd
   template:
     metadata:
       labels:
         app.kubernetes.io/name: registry
-        app.kubernetes.io/part-of: sciminer
+        app.kubernetes.io/part-of: aidd
     spec:
       securityContext:
         runAsNonRoot: true
@@ -65,7 +65,7 @@ spec:
             # - name: REGISTRY_AUTH
             #   value: htpasswd
             # - name: REGISTRY_AUTH_HTPASSWD_REALM
-            #   value: sciminer-registry
+            #   value: aidd-registry
             # - name: REGISTRY_AUTH_HTPASSWD_PATH
             #   value: /auth/htpasswd
           ports:
@@ -98,21 +98,21 @@ spec:
       volumes:
         - name: registry-data
           persistentVolumeClaim:
-            claimName: sciminer-registry-data
+            claimName: aidd-registry-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-registry
-  namespace: sciminer-storage
+  name: aidd-registry
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
 spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: registry
       port: 5000

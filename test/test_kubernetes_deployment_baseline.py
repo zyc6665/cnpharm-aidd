@@ -29,25 +29,25 @@ def test_execution_rbac_is_namespace_scoped_and_has_no_wildcards():
         for item in _resources("namespace.yaml")
         if item["kind"] == "Namespace"
     }
-    assert {"sciminer-system", "sciminer-model-jobs", "sciminer-storage"} <= namespaces
+    assert {"aidd-system", "aidd-model-jobs", "aidd-storage"} <= namespaces
 
     worker = _resource(
         "execution-rbac.yaml",
         "ServiceAccount",
-        "sciminer-execution-worker",
+        "aidd-execution-worker",
     )
-    assert worker["metadata"]["namespace"] == "sciminer-system"
+    assert worker["metadata"]["namespace"] == "aidd-system"
 
     runner = _resource("execution-rbac.yaml", "ServiceAccount", "model-runner")
-    assert runner["metadata"]["namespace"] == "sciminer-model-jobs"
+    assert runner["metadata"]["namespace"] == "aidd-model-jobs"
     assert runner["automountServiceAccountToken"] is False
 
     role = _resource(
         "execution-rbac.yaml",
         "Role",
-        "sciminer-execution-worker",
+        "aidd-execution-worker",
     )
-    assert role["metadata"]["namespace"] == "sciminer-model-jobs"
+    assert role["metadata"]["namespace"] == "aidd-model-jobs"
     resources = {
         resource
         for rule in role["rules"]
@@ -61,25 +61,25 @@ def test_execution_rbac_is_namespace_scoped_and_has_no_wildcards():
     binding = _resource(
         "execution-rbac.yaml",
         "RoleBinding",
-        "sciminer-execution-worker",
+        "aidd-execution-worker",
     )
-    assert binding["metadata"]["namespace"] == "sciminer-model-jobs"
+    assert binding["metadata"]["namespace"] == "aidd-model-jobs"
     assert binding["roleRef"] == {
         "apiGroup": "rbac.authorization.k8s.io",
         "kind": "Role",
-        "name": "sciminer-execution-worker",
+        "name": "aidd-execution-worker",
     }
     assert binding["subjects"] == [
         {
             "kind": "ServiceAccount",
-            "name": "sciminer-execution-worker",
-            "namespace": "sciminer-system",
+            "name": "aidd-execution-worker",
+            "namespace": "aidd-system",
         }
     ]
 
 
 def test_dev_minio_uses_secret_credentials_and_persistent_storage():
-    deployment = _resource("minio-dev.yaml", "Deployment", "sciminer-minio")
+    deployment = _resource("minio-dev.yaml", "Deployment", "aidd-minio")
     container = deployment["spec"]["template"]["spec"]["containers"][0]
     assert "latest" not in container["image"]
     assert container["image"].startswith("docker.1panel.live/minio/minio@sha256:")
@@ -87,14 +87,14 @@ def test_dev_minio_uses_secret_credentials_and_persistent_storage():
     env_by_name = {item["name"]: item for item in container["env"]}
     for name in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"):
         assert env_by_name[name]["valueFrom"]["secretKeyRef"]["name"] == (
-            "sciminer-minio-credentials"
+            "aidd-minio-credentials"
         )
 
     pvc = _resource("minio-dev.yaml", "PersistentVolumeClaim", "minio-data")
     assert pvc["spec"]["storageClassName"] == "local-path"
     assert pvc["spec"]["resources"]["requests"]["storage"] == "20Gi"
 
-    service = _resource("minio-dev.yaml", "Service", "sciminer-minio")
+    service = _resource("minio-dev.yaml", "Service", "aidd-minio")
     assert service["spec"]["type"] == "ClusterIP"
     assert {port["port"] for port in service["spec"]["ports"]} == {9000, 9001}
 
@@ -104,7 +104,7 @@ def test_dev_registry_exposure_is_disabled_by_default():
     service = _resource(
         "registry-dev-nodeport.yaml",
         "Service",
-        "sciminer-registry-nodeport",
+        "aidd-registry-nodeport",
     )
     assert service["spec"]["type"] == "ClusterIP"
     assert all("nodePort" not in port for port in service["spec"]["ports"])
@@ -142,39 +142,39 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
     config = _resource(
         "execution-worker.example.yaml",
         "ConfigMap",
-        "sciminer-execution-worker-config",
+        "aidd-execution-worker-config",
     )
-    assert config["metadata"]["namespace"] == "sciminer-system"
+    assert config["metadata"]["namespace"] == "aidd-system"
     assert config["data"] == {
         "ENVIRONMENT": "production",
         "DEBUG": "false",
-        "CORS_ORIGINS": '["https://sciminer.example.invalid"]',
-        "ALLOWED_HOSTS": '["sciminer.example.invalid"]',
+        "CORS_ORIGINS": '["https://aidd.example.invalid"]',
+        "ALLOWED_HOSTS": '["aidd.example.invalid"]',
         "CACHE_BACKEND": "redis",
-        "REDIS_HOST": "sciminer-redis.sciminer-system.svc.cluster.local",
+        "REDIS_HOST": "aidd-redis.aidd-system.svc.cluster.local",
         "REDIS_PORT": "6379",
         "REDIS_DB": "0",
         "STORAGE_BACKEND": "minio",
-        "MINIO_ENDPOINT": "sciminer-minio.sciminer-storage.svc.cluster.local:9000",
+        "MINIO_ENDPOINT": "aidd-minio.aidd-storage.svc.cluster.local:9000",
         "MINIO_BUCKET": "scitool-files",
         "MINIO_SECURE": "true",
         "TASK_EXECUTION_BACKEND": "celery",
         "EXECUTOR_ENABLED_K8S": "true",
         "K8S_ADAPTER_CLUSTER_ALIAS": "platform",
-        "K8S_ADAPTER_NAMESPACE": "sciminer-model-jobs",
+        "K8S_ADAPTER_NAMESPACE": "aidd-model-jobs",
         "K8S_ADAPTER_CREDENTIAL_REF": "platform-k8s",
         "K8S_ADAPTER_SERVICE_ACCOUNT": "model-runner",
-        "K8S_ADAPTER_JOB_NAME_PREFIX": "sciminer",
+        "K8S_ADAPTER_JOB_NAME_PREFIX": "aidd",
         "K8S_ADAPTER_API_SERVER": "https://kubernetes.default.svc",
         "K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS": "30",
         "K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT": (
-            "https://sciminer-minio.sciminer-storage.svc.cluster.local:9000"
+            "https://aidd-minio.aidd-storage.svc.cluster.local:9000"
         ),
         "K8S_ADAPTER_OBJECT_STORAGE_BUCKET": "scitool-files",
-        "K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF": "sciminer-minio-client",
+        "K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF": "aidd-minio-client",
         "K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX": "inputs",
         "K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX": "executions",
-        "K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT": "/tmp/sciminer-k8s-artifacts",
+        "K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT": "/tmp/aidd-k8s-artifacts",
         "K8S_ADAPTER_NODE_SELECTOR_JSON": "",
         "K8S_ADAPTER_TOLERATIONS_JSON": "",
         "K8S_ADAPTER_GPU_RESOURCE_NAME": "nvidia.com/gpu",
@@ -193,15 +193,15 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
     deployment = _resource(
         "execution-worker.example.yaml",
         "Deployment",
-        "sciminer-execution-worker",
+        "aidd-execution-worker",
     )
-    assert deployment["metadata"]["namespace"] == "sciminer-system"
+    assert deployment["metadata"]["namespace"] == "aidd-system"
     pod_spec = deployment["spec"]["template"]["spec"]
-    assert pod_spec["serviceAccountName"] == "sciminer-execution-worker"
+    assert pod_spec["serviceAccountName"] == "aidd-execution-worker"
     assert pod_spec["automountServiceAccountToken"] is True
     container = pod_spec["containers"][0]
     assert container["image"] == (
-        "registry.example.com/sciminer/backend@sha256:"
+        "registry.example.com/aidd/backend@sha256:"
         "REPLACE_WITH_BACKEND_IMAGE_DIGEST"
     )
     assert "latest" not in container["image"]
@@ -221,7 +221,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "gpu_queue,maintenance,monitoring"
     ) in container["args"]
     assert container["envFrom"] == [
-        {"configMapRef": {"name": "sciminer-execution-worker-config"}}
+        {"configMapRef": {"name": "aidd-execution-worker-config"}}
     ]
     secret_env = {
         item["name"]: item["valueFrom"]["secretKeyRef"]
@@ -229,7 +229,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         if "secretKeyRef" in item.get("valueFrom", {})
     }
     assert secret_env == {
-        name: {"name": "sciminer-execution-worker-secrets", "key": name}
+        name: {"name": "aidd-execution-worker-secrets", "key": name}
         for name in (
             "DATABASE_URL",
             "JWT_SECRET_KEY",
@@ -246,7 +246,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "fieldRef": {"fieldPath": "metadata.name"}
     }
     assert env_by_name["WORKER_CAPABILITY_JSON"]["value"].startswith(
-        '{"worker_id":"sciminer-k8s-$(HOSTNAME)"'
+        '{"worker_id":"aidd-k8s-$(HOSTNAME)"'
     )
     assert {volume["name"] for volume in pod_spec["volumes"]} == {
         "k8s-artifacts"
@@ -260,11 +260,11 @@ def test_dev_data_services_are_pinned_and_host_reachable():
     postgres = _resource(
         "data-services-dev.yaml",
         "Deployment",
-        "sciminer-postgres",
+        "aidd-postgres",
     )
-    redis = _resource("data-services-dev.yaml", "Deployment", "sciminer-redis")
-    assert postgres["metadata"]["namespace"] == "sciminer-system"
-    assert redis["metadata"]["namespace"] == "sciminer-system"
+    redis = _resource("data-services-dev.yaml", "Deployment", "aidd-redis")
+    assert postgres["metadata"]["namespace"] == "aidd-system"
+    assert redis["metadata"]["namespace"] == "aidd-system"
 
     postgres_container = postgres["spec"]["template"]["spec"]["containers"][0]
     redis_container = redis["spec"]["template"]["spec"]["containers"][0]
@@ -282,12 +282,12 @@ def test_dev_data_services_are_pinned_and_host_reachable():
     postgres_service = _resource(
         "data-services-dev.yaml",
         "Service",
-        "sciminer-postgres",
+        "aidd-postgres",
     )
     redis_service = _resource(
         "data-services-dev.yaml",
         "Service",
-        "sciminer-redis",
+        "aidd-redis",
     )
     assert postgres_service["spec"]["type"] == "ClusterIP"
     assert redis_service["spec"]["type"] == "ClusterIP"
@@ -295,13 +295,13 @@ def test_dev_data_services_are_pinned_and_host_reachable():
     assert all("nodePort" not in port for port in redis_service["spec"]["ports"])
 
     for filename, deployment_name in (
-        ("data-services-dev.yaml", "sciminer-postgres"),
-        ("data-services-dev.yaml", "sciminer-redis"),
+        ("data-services-dev.yaml", "aidd-postgres"),
+        ("data-services-dev.yaml", "aidd-redis"),
     ):
         deployment = _resource(filename, "Deployment", deployment_name)
         container = deployment["spec"]["template"]["spec"]["containers"][0]
         assert container["env"][0]["valueFrom"]["secretKeyRef"]["name"].startswith(
-            "sciminer-"
+            "aidd-"
         )
 
 
@@ -336,10 +336,10 @@ def test_hybrid_deployment_guide_documents_the_single_apply_entrypoint():
 def test_dev_workloads_run_non_root_and_drop_capabilities():
     """数据面工作负载必须具备基础 Pod/容器安全上下文。"""
     targets = (
-        ("data-services-dev.yaml", "sciminer-postgres"),
-        ("data-services-dev.yaml", "sciminer-redis"),
-        ("minio-dev.yaml", "sciminer-minio"),
-        ("registry-dev.yaml", "sciminer-registry"),
+        ("data-services-dev.yaml", "aidd-postgres"),
+        ("data-services-dev.yaml", "aidd-redis"),
+        ("minio-dev.yaml", "aidd-minio"),
+        ("registry-dev.yaml", "aidd-registry"),
     )
     for filename, name in targets:
         deployment = _resource(filename, "Deployment", name)
@@ -363,16 +363,16 @@ def test_dev_network_policies_default_deny_and_allow_only_required_ports():
         by_name.setdefault(policy["metadata"]["name"], []).append(policy)
 
     for name in (
-        "sciminer-default-deny-data",
-        "sciminer-default-deny-storage",
-        "sciminer-allow-data-ingress",
-        "sciminer-allow-storage-ingress",
-        "sciminer-allow-dns-egress",
+        "aidd-default-deny-data",
+        "aidd-default-deny-storage",
+        "aidd-allow-data-ingress",
+        "aidd-allow-storage-ingress",
+        "aidd-allow-dns-egress",
     ):
         assert name in by_name
 
-    for policy in by_name["sciminer-default-deny-data"] + by_name[
-        "sciminer-default-deny-storage"
+    for policy in by_name["aidd-default-deny-data"] + by_name[
+        "aidd-default-deny-storage"
     ]:
         assert set(policy["spec"]["policyTypes"]) == {"Ingress", "Egress"}
         assert "ingress" not in policy["spec"]
@@ -380,7 +380,7 @@ def test_dev_network_policies_default_deny_and_allow_only_required_ports():
 
     allowed_ports = {
         port["port"]
-        for name in ("sciminer-allow-data-ingress", "sciminer-allow-storage-ingress")
+        for name in ("aidd-allow-data-ingress", "aidd-allow-storage-ingress")
         for policy in by_name[name]
         for rule in policy["spec"]["ingress"]
         for port in rule["ports"]

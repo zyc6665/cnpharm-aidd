@@ -16,9 +16,9 @@ if [ -f "$SECRETS_FILE" ]; then
 else
   PGPW=$(openssl rand -hex 24)
   REDISPW=$(openssl rand -hex 24)
-  MINIOUSER=sciminer-admin
+  MINIOUSER=aidd-admin
   MINIOPW=$(openssl rand -hex 24)
-  ADMIN_EMAIL=admin@sciminer.com
+  ADMIN_EMAIL=admin@aidd.example.com
   ADMIN_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=')
   umask 077
   cat > "$SECRETS_FILE" <<EOF
@@ -33,7 +33,7 @@ fi
 
 # 兼容早期生成、尚未包含管理员字段的密码文件
 if [ -z "${ADMIN_EMAIL:-}" ]; then
-  ADMIN_EMAIL=admin@sciminer.com
+  ADMIN_EMAIL=admin@aidd.example.com
   echo "ADMIN_EMAIL=$ADMIN_EMAIL" >> "$SECRETS_FILE"
 fi
 if [ -z "${ADMIN_PASSWORD:-}" ]; then
@@ -46,15 +46,15 @@ echo "== namespaces =="
 kubectl apply -f deploy/kubernetes/namespace.yaml
 
 echo "== secrets =="
-kubectl -n sciminer-system create secret generic sciminer-postgres-credentials \
+kubectl -n aidd-system create secret generic aidd-postgres-credentials \
   --from-literal=POSTGRES_DB=scitool \
   --from-literal=POSTGRES_USER=scitool \
   --from-literal=POSTGRES_PASSWORD="$PGPW" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n sciminer-system create secret generic sciminer-redis-credentials \
+kubectl -n aidd-system create secret generic aidd-redis-credentials \
   --from-literal=REDIS_PASSWORD="$REDISPW" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n sciminer-storage create secret generic sciminer-minio-credentials \
+kubectl -n aidd-storage create secret generic aidd-minio-credentials \
   --from-literal=MINIO_ROOT_USER="$MINIOUSER" \
   --from-literal=MINIO_ROOT_PASSWORD="$MINIOPW" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -65,9 +65,9 @@ kubectl apply -f deploy/kubernetes/minio-dev.yaml
 kubectl apply -f deploy/kubernetes/minio-dev-nodeport.yaml
 
 echo "== rollout =="
-kubectl -n sciminer-system rollout status deployment/sciminer-postgres --timeout=300s
-kubectl -n sciminer-system rollout status deployment/sciminer-redis --timeout=300s
-kubectl -n sciminer-storage rollout status deployment/sciminer-minio --timeout=300s
+kubectl -n aidd-system rollout status deployment/aidd-postgres --timeout=300s
+kubectl -n aidd-system rollout status deployment/aidd-redis --timeout=300s
+kubectl -n aidd-storage rollout status deployment/aidd-minio --timeout=300s
 
 echo "== port-forward =="
 mkdir -p "$PF_DIR"
@@ -84,10 +84,10 @@ start_pf() { # name ns svc local remote
   echo $! > "$PF_DIR/$name.pid"
   echo "  $name -> 127.0.0.1:$local"
 }
-start_pf postgres sciminer-system sciminer-postgres 15432 5432
-start_pf redis    sciminer-system sciminer-redis    16379 6379
-start_pf minio    sciminer-storage sciminer-minio   19000 9000
-start_pf minio-ui sciminer-storage sciminer-minio   19001 9001
+start_pf postgres aidd-system aidd-postgres 15432 5432
+start_pf redis    aidd-system aidd-redis    16379 6379
+start_pf minio    aidd-storage aidd-minio   19000 9000
+start_pf minio-ui aidd-storage aidd-minio   19001 9001
 sleep 3
 
 echo "== 生成 backend/.env（仅当不存在） =="

@@ -6,12 +6,12 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-default-deny-data
-  namespace: sciminer-system
+  name: aidd-default-deny-data
+  namespace: aidd-system
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["database", "broker"]
   policyTypes:
@@ -21,12 +21,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-default-deny-storage
-  namespace: sciminer-storage
+  name: aidd-default-deny-storage
+  namespace: aidd-storage
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["object-storage", "image-registry"]
   policyTypes:
@@ -36,12 +36,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-allow-data-ingress
-  namespace: sciminer-system
+  name: aidd-allow-data-ingress
+  namespace: aidd-system
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["database", "broker"]
   policyTypes:
@@ -50,10 +50,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: sciminer-system
+              kubernetes.io/metadata.name: aidd-system
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: sciminer-model-jobs
+              kubernetes.io/metadata.name: aidd-model-jobs
       ports:
         - protocol: TCP
           port: 5432
@@ -63,12 +63,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-allow-storage-ingress
-  namespace: sciminer-storage
+  name: aidd-allow-storage-ingress
+  namespace: aidd-storage
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["object-storage", "image-registry"]
   policyTypes:
@@ -77,10 +77,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: sciminer-system
+              kubernetes.io/metadata.name: aidd-system
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: sciminer-model-jobs
+              kubernetes.io/metadata.name: aidd-model-jobs
       ports:
         - protocol: TCP
           port: 9000
@@ -92,12 +92,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-allow-dns-egress
-  namespace: sciminer-system
+  name: aidd-allow-dns-egress
+  namespace: aidd-system
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["database", "broker"]
   policyTypes:
@@ -116,12 +116,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sciminer-allow-dns-egress
-  namespace: sciminer-storage
+  name: aidd-allow-dns-egress
+  namespace: aidd-storage
 spec:
   podSelector:
     matchExpressions:
-      - key: sciminer.io/purpose
+      - key: aidd.io/purpose
         operator: In
         values: ["object-storage", "image-registry"]
   policyTypes:

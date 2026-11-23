@@ -18,7 +18,7 @@ Windows（平台部署机）
     vite dev                 127.0.0.1:5173
 
 4090（纯计算节点，k3s）
-  sciminer-storage ns:  registry:30500 + PVC sciminer-registry-data(40Gi)   ← 唯一保留的镜像落点
+  aidd-storage ns:  registry:30500 + PVC aidd-registry-data(40Gi)   ← 唯一保留的镜像落点
   cnpharm-aidd ns:      空命名空间 + ServiceAccount model-runner（供 Job 提交）
   hostPath 权重缓存:    /data/zhouyc/model-cache/...、/data/zhouyc/k8s-model-build/...
 ```

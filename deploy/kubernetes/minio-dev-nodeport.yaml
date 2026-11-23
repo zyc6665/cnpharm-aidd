@@ -1,21 +1,21 @@
 # 已弃用的开发访问入口：仅保留兼容占位，默认 kustomization 不再引用。
 # 需要从宿主访问 MinIO API/Console 时：
-#   kubectl -n sciminer-storage port-forward svc/sciminer-minio 9000:9000 9001:9001
+#   kubectl -n aidd-storage port-forward svc/aidd-minio 9000:9000 9001:9001
 # 不要恢复 NodePort 暴露对象存储控制台。
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-minio-nodeport
-  namespace: sciminer-storage
+  name: aidd-minio-nodeport
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: development-access
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: development-access
 spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: api
       port: 9000

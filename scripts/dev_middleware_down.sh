@@ -19,5 +19,5 @@ if [ "${1:-}" = "--purge" ]; then
   kubectl delete -f deploy/kubernetes/minio-dev-nodeport.yaml --ignore-not-found
   kubectl delete -f deploy/kubernetes/minio-dev.yaml --ignore-not-found
   kubectl delete -f deploy/kubernetes/data-services-dev.yaml --ignore-not-found
-  echo "如需连数据一起删除：kubectl -n sciminer-system delete pvc --all && kubectl -n sciminer-storage delete pvc --all"
+  echo "如需连数据一起删除：kubectl -n aidd-system delete pvc --all && kubectl -n aidd-storage delete pvc --all"
 fi

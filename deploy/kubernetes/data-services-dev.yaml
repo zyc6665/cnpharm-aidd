@@ -1,16 +1,16 @@
 # 单节点 K3s 开发数据服务。
 # Secret 不写入此文件；请按 README 创建：
-#   sciminer-system/sciminer-postgres-credentials
-#   sciminer-system/sciminer-redis-credentials
+#   aidd-system/aidd-postgres-credentials
+#   aidd-system/aidd-redis-credentials
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sciminer-postgres-data
-  namespace: sciminer-system
+  name: aidd-postgres-data
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: database
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: database
 spec:
   accessModes:
     - ReadWriteOnce
@@ -22,12 +22,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sciminer-postgres
-  namespace: sciminer-system
+  name: aidd-postgres
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: database
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: database
 spec:
   replicas: 1
   strategy:
@@ -35,13 +35,13 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: postgres
-      app.kubernetes.io/part-of: sciminer
+      app.kubernetes.io/part-of: aidd
   template:
     metadata:
       labels:
         app.kubernetes.io/name: postgres
-        app.kubernetes.io/part-of: sciminer
-        sciminer.io/purpose: database
+        app.kubernetes.io/part-of: aidd
+        aidd.io/purpose: database
     spec:
       terminationGracePeriodSeconds: 60
       securityContext:
@@ -63,17 +63,17 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-postgres-credentials
+                  name: aidd-postgres-credentials
                   key: POSTGRES_DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-postgres-credentials
+                  name: aidd-postgres-credentials
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-postgres-credentials
+                  name: aidd-postgres-credentials
                   key: POSTGRES_PASSWORD
           ports:
             - name: postgres
@@ -109,24 +109,24 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: sciminer-postgres-data
+            claimName: aidd-postgres-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-postgres
-  namespace: sciminer-system
+  name: aidd-postgres
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: database
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: database
 spec:
   # 开发集群也不向宿主机暴露数据库端口；本机访问请使用：
-  #   kubectl -n sciminer-system port-forward svc/sciminer-postgres 5432:5432
+  #   kubectl -n aidd-system port-forward svc/aidd-postgres 5432:5432
   type: ClusterIP
   selector:
     app.kubernetes.io/name: postgres
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: postgres
       port: 5432
@@ -135,12 +135,12 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sciminer-redis-data
-  namespace: sciminer-system
+  name: aidd-redis-data
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: redis
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: broker
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: broker
 spec:
   accessModes:
     - ReadWriteOnce
@@ -152,12 +152,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sciminer-redis
-  namespace: sciminer-system
+  name: aidd-redis
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: redis
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: broker
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: broker
 spec:
   replicas: 1
   strategy:
@@ -165,13 +165,13 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: redis
-      app.kubernetes.io/part-of: sciminer
+      app.kubernetes.io/part-of: aidd
   template:
     metadata:
       labels:
         app.kubernetes.io/name: redis
-        app.kubernetes.io/part-of: sciminer
-        sciminer.io/purpose: broker
+        app.kubernetes.io/part-of: aidd
+        aidd.io/purpose: broker
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -198,7 +198,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-redis-credentials
+                  name: aidd-redis-credentials
                   key: REDIS_PASSWORD
           ports:
             - name: redis
@@ -234,24 +234,24 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: sciminer-redis-data
+            claimName: aidd-redis-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-redis
-  namespace: sciminer-system
+  name: aidd-redis
+  namespace: aidd-system
   labels:
     app.kubernetes.io/name: redis
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: broker
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: broker
 spec:
   # 本机访问请使用：
-  #   kubectl -n sciminer-system port-forward svc/sciminer-redis 6379:6379
+  #   kubectl -n aidd-system port-forward svc/aidd-redis 6379:6379
   type: ClusterIP
   selector:
     app.kubernetes.io/name: redis
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: redis
       port: 6379
