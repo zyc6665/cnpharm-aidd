@@ -37,9 +37,7 @@ describe('resolveMolstarHierarchyPreset', () => {
     expect(resolveMolstarHierarchyPreset('cartoon')).toBe('polymer-cartoon')
     expect(resolveMolstarHierarchyPreset('surface')).toBe('molecular-surface')
     expect(resolveMolstarHierarchyPreset('ball-and-stick')).toBe('atomic-detail')
-    expect(resolveMolstarHierarchyPreset('sticks')).toBe('atomic-detail')
     expect(resolveMolstarHierarchyPreset('spacefill')).toBe('atomic-detail')
-    expect(resolveMolstarHierarchyPreset('points')).toBe('atomic-detail')
   })
 
   it('maps representations to concrete Mol* BuiltIn representation types', () => {
@@ -82,7 +80,6 @@ describe('PyMOL-like toolbar options & artifact mode inference', () => {
     ])
     expect(resolveMolstarRepresentationOptions('molecule')).toEqual([
       'ball-and-stick',
-      'sticks',
       'spacefill',
       'surface',
     ])

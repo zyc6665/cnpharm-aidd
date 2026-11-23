@@ -1,5 +1,5 @@
 export type MolstarViewerMode = 'molecule' | 'protein' | 'pocket' | 'docking'
-export type MolstarRepresentation = 'cartoon' | 'surface' | 'sticks' | 'ball-and-stick' | 'spacefill' | 'points'
+export type MolstarRepresentation = 'cartoon' | 'surface' | 'ball-and-stick' | 'spacefill'
 export type MolstarBackground = 'dark' | 'white'
 export type MolstarColorTheme =
   | 'default'
@@ -96,7 +96,6 @@ const PROTEIN_REPRESENTATIONS: readonly MolstarRepresentation[] = [
 
 const MOLECULE_REPRESENTATIONS: readonly MolstarRepresentation[] = [
   'ball-and-stick',
-  'sticks',
   'spacefill',
   'surface',
 ]

@@ -131,11 +131,11 @@ test('结果可视化应修复内置全屏入口，而不是额外包一层自�
 test('口袋受体应使用 polymer-cartoon 表示且不复用球棍默认视图', () => {
   const viewerSource = readSource('src/components/tasks/MoleculeViewer.vue')
 
-  assert.equal(viewerSource.includes("entry.role === 'receptor'"), true)
+  assert.equal(viewerSource.includes("role === 'receptor'"), true)
   assert.equal(viewerSource.includes("representationPreset: 'polymer-cartoon'"), true)
   assert.equal(viewerSource.includes("plugin.builders.structure.hierarchy.applyPreset"), true)
-  assert.equal(viewerSource.includes("resolveMolstarHierarchyPreset(viewerPreset.value.primaryRepresentation)"), true)
-  assert.equal(viewerSource.includes("entry.role === 'ligand' && viewerPreset.value.primaryRepresentation === 'ball-and-stick'"), true)
+  assert.equal(viewerSource.includes("resolveMolstarHierarchyPreset(initialRep)"), true)
+  assert.match(viewerSource, /entry\.role === 'ligand'\s*\?\s*'ball-and-stick'/)
 })
 
 test('带 QED 排名的 SDF 输出应按分数降序截取 Top 10', () => {

@@ -143,6 +143,10 @@ vi.mock('@/domain/tasks', async importOriginal => {
   const actual = await importOriginal<typeof import('@/domain/tasks')>()
   return {
     ...actual,
+    createNormalizedSdfObjectUrl: vi.fn(async (url: string) => ({
+      url: `blob:normalized:${url}`,
+      revoke: vi.fn(),
+    })),
     extractPolymerSequenceFromStructure: () => mockState.extractedChains,
   }
 })
@@ -166,6 +170,37 @@ function buildProteinScene(): VisualizationScene {
     unsupportedOutputFiles: [],
     hasRenderableOutput: true,
     selectedOutputKey: 'protein-1',
+  }
+}
+
+function buildDockingScene(): VisualizationScene {
+  return {
+    entries: [
+      {
+        key: 'receptor-1',
+        url: '/api/v1/files/receptor/download',
+        label: 'receptor.pdb',
+        source: 'input',
+        role: 'receptor',
+        format: 'pdb',
+        extension: '.pdb',
+      },
+      {
+        key: 'ligand-1',
+        url: '/api/v1/files/pose1/download',
+        label: 'pose_1.sdf',
+        source: 'output',
+        role: 'ligand',
+        format: 'sdf',
+        extension: '.sdf',
+      },
+    ],
+    inputEntries: [],
+    outputEntries: [],
+    supportedOutputFiles: [],
+    unsupportedOutputFiles: [],
+    hasRenderableOutput: true,
+    selectedOutputKey: 'ligand-1',
   }
 }
 
@@ -253,5 +288,42 @@ describe('MoleculeViewer', () => {
     await flushPromises()
     expect(mockState.tryCreateComponentFromExpression).toHaveBeenCalled()
     expect(mockState.addRepresentation).toHaveBeenCalled()
+  })
+
+  it('renders docking receptor as polymer-cartoon and non-primary SDF ligand as atomic-detail', async () => {
+    const wrapper = mount(MoleculeViewer, {
+      props: {
+        scene: buildDockingScene(),
+        mode: 'docking',
+        variant: 'full',
+      },
+      global: {
+        stubs: {
+          ASpin: true,
+          AAlert: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.viewer-mode').text()).toBe('docking')
+    expect(mockState.applyPreset).toHaveBeenCalledTimes(2)
+    expect(mockState.applyPreset).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      'default',
+      expect.objectContaining({
+        representationPreset: 'polymer-cartoon',
+      }),
+    )
+    expect(mockState.applyPreset).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'default',
+      expect.objectContaining({
+        representationPreset: 'atomic-detail',
+      }),
+    )
   })
 })

@@ -233,12 +233,8 @@ function representationLabel(rep: MolstarRepresentation): string {
       return t('tasks.visualizationSurface')
     case 'ball-and-stick':
       return t('tasks.visualizationBallAndStick')
-    case 'sticks':
-      return t('tasks.visualizationSticks')
     case 'spacefill':
       return t('tasks.visualizationSpacefill')
-    case 'points':
-      return t('tasks.visualizationPoints')
   }
 }
 
@@ -403,18 +399,12 @@ async function loadEntryStructure(
   }
 
   const primaryTarget = isPrimaryTargetEntry(entry.role)
-  const initialRep = primaryTarget
+  const initialRep: MolstarRepresentation = primaryTarget
     ? activeRepresentation.value
-    : entry.role === 'receptor'
-      ? viewerPreset.value.primaryRepresentation
-      : entry.role === 'ligand' && viewerPreset.value.primaryRepresentation === 'ball-and-stick'
-        ? viewerPreset.value.primaryRepresentation
-        : viewerPreset.value.primaryRepresentation
-  const presetName = initialRep === 'spacefill'
-    ? 'atomic-detail'
-    : initialRep === viewerPreset.value.primaryRepresentation
-      ? resolveMolstarHierarchyPreset(viewerPreset.value.primaryRepresentation)
-      : resolveMolstarHierarchyPreset(initialRep)
+    : entry.role === 'ligand'
+      ? 'ball-and-stick'
+      : viewerPreset.value.primaryRepresentation
+  const presetName = resolveMolstarHierarchyPreset(initialRep)
   const themeParams = primaryTarget
     ? resolveColorPresetParams(entry.role, activeColorTheme.value)
     : undefined
