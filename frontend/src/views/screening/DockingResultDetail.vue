@@ -265,7 +265,7 @@ onMounted(() => {
 
       <a-card :title="t('screening.detail.viewer')">
         <div data-testid="docking-detail-viewer">
-          <MoleculeViewer v-if="scene" :scene="scene" variant="full" />
+          <MoleculeViewer v-if="scene" :scene="scene" mode="docking" variant="full" />
           <a-empty v-else :description="t('screening.detail.noStructure')" />
         </div>
       </a-card>

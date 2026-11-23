@@ -10,6 +10,19 @@
       <a-alert type="error" show-icon message="3D 结构加载失败" :description="error" />
     </div>
 
+    <div class="pocket-controls" role="group" :aria-label="t('tasks.visualizationPocketControls')">
+      <label class="pocket-control">
+        <span>{{ t('tasks.visualizationProteinRepresentation') }}</span>
+        <select v-model="pocketRepresentation" :disabled="loading || Boolean(error)" :aria-label="t('tasks.visualizationProteinRepresentation')">
+          <option value="cartoon">{{ t('tasks.visualizationCartoon') }}</option>
+          <option value="surface">{{ t('tasks.visualizationSurface') }}</option>
+        </select>
+      </label>
+      <button class="pocket-reset" type="button" :disabled="loading || Boolean(error)" @click="focusPocket">
+        {{ t('tasks.visualizationResetView') }}
+      </button>
+    </div>
+
     <div class="pocket-legend">
       <span class="legend-item"><i class="dot dot--pocket" />口袋残基</span>
       <span class="legend-item"><i class="dot dot--focus" />选中残基（球棍）</span>
@@ -22,11 +35,20 @@
 import 'molstar/build/viewer/molstar.css'
 
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { MolstarRepresentation } from '@/domain/tasks'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { Asset } from 'molstar/lib/mol-util/assets'
-import { Color } from 'molstar/lib/mol-util/color'
+import { createMolstarViewer, createRevocableResourceRegistry, disposeMolstarViewer } from './molstar-viewer-kernel'
+import { DEFAULT_CO_LIGAND_RESIDUE_ID, resolveMolstarPocketSelection, resolveMolstarViewerPreset } from '@/domain/tasks'
 import { Sphere3D } from 'molstar/lib/mol-math/geometry'
 import { Vec3 } from 'molstar/lib/mol-math/linear-algebra'
+
+const { t } = useI18n()
+const pocketPreset = resolveMolstarViewerPreset('pocket')
+const coLigandResidueId = DEFAULT_CO_LIGAND_RESIDUE_ID
+const pocketRepresentation = ref<MolstarRepresentation>(pocketPreset.primaryRepresentation)
+const renderResourcesRegistry = createRevocableResourceRegistry()
 
 const props = withDefaults(
   defineProps<{
@@ -71,27 +93,12 @@ async function ensureViewer() {
   creating = (async () => {
     const host = containerRef.value
     if (!host) return
-    const { Viewer } = await import('molstar/lib/apps/viewer/app')
-    viewer = await Viewer.create(host, {
-      layoutIsExpanded: false,
-      layoutShowControls: false,
-      collapseLeftPanel: true,
-      collapseRightPanel: true,
-      viewportShowControls: false,
-      viewportShowExpand: false,
-      viewportShowToggleFullscreen: false,
-      viewportShowSettings: false,
-      viewportShowSelectionMode: false,
-      viewportShowAnimation: false,
-      viewportShowTrajectoryControls: false,
-      viewportShowScreenshotControls: false
+    viewer = await createMolstarViewer(host, {
+      allowNativeFullscreen: false,
+      showControls: pocketPreset.showControls,
+      backgroundColor: pocketPreset.background === 'white' ? 0xffffff : 0x0b1a2e,
     })
     plugin = viewer.plugin
-    try {
-      plugin.canvas3d?.setProps({ renderer: { backgroundColor: Color(0x0b1a2e) } })
-    } catch {
-      /* 背景色设置失败不影响渲染 */
-    }
   })()
   await creating
   creating = null
@@ -116,14 +123,13 @@ async function addComponent(
   return comp
 }
 
-async function buildHighlights() {
+async function buildHighlights(selection = resolveMolstarPocketSelection({ chain: props.chain, residueIds: props.resIds, selectedResidueIds: props.selectedResIds })) {
   if (!structureSel) return
   focusCells = []
 
   const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
-  const chainTest = MS.core.rel.eq([MS.ammp('auth_asym_id'), props.chain])
-
-  const selected = new Set(props.selectedResIds)
+  const chainTest = MS.core.rel.eq([MS.ammp('auth_asym_id'), selection.chain])
+  const selected = new Set(selection.selectedResidueIds)
   const residueExpr = (ids: number[]) =>
     MS.struct.generator.atomGroups({
       'chain-test': chainTest,
@@ -132,10 +138,10 @@ async function buildHighlights() {
 
   // 1) 口袋残基 —— 橙色卡通。选中的残基从中抽出来单独画，否则同一个原子
   // 会被卡通与球棍画两遍，球棍正好埋在丝带里，看起来只是「颜色变了」。
-  const peripheral = props.resIds.filter((id) => !selected.has(id))
+  const peripheral = selection.residueIds.filter((id) => !selected.has(id))
   if (peripheral.length) {
     const comp = await addComponent(MS, residueExpr(peripheral), 'pocket-residues', '口袋残基', {
-      type: 'cartoon',
+      type: pocketRepresentation.value,
       color: 'uniform',
       colorParams: { value: 0xff7a45 }
     })
@@ -143,10 +149,10 @@ async function buildHighlights() {
   }
 
   // 2) 选中残基 —— 球棍模型，点哪个显示哪个；没有选中就一个球棍都不画
-  if (props.selectedResIds.length) {
+  if (selection.selectedResidueIds.length) {
     const comp = await addComponent(
       MS,
-      residueExpr(props.selectedResIds),
+      residueExpr([...selection.selectedResidueIds]),
       'focus-residue',
       '选中残基',
       {
@@ -159,7 +165,7 @@ async function buildHighlights() {
   }
 
   // 3) 共晶配体（AN2, 601）—— 按元素着色
-  const ligandExpr = residueExpr([601])
+  const ligandExpr = residueExpr([coLigandResidueId])
   const lig = await addComponent(MS, ligandExpr, 'co-ligand', '共晶配体', {
     type: 'spacefill',
     color: 'element-symbol',
@@ -197,12 +203,12 @@ function cellBoundingSphere(cells: any[]) {
   return { center, radius }
 }
 
-async function computePocketSphere(url: string, resIds: number[], chain: string) {
+async function computePocketSphere(url: string, selection: { chain: string; residueIds: readonly number[] }) {
   try {
     const text = await (await fetch(url)).text()
-    const set = new Set(resIds.map((n) => String(n)))
+    const set = new Set(selection.residueIds.map((n) => String(n)))
     // 共晶配体（601）一并纳入，保证口袋与配体都在视野内
-    set.add('601')
+    set.add(String(coLigandResidueId))
     let minx = Infinity, miny = Infinity, minz = Infinity
     let maxx = -Infinity, maxy = -Infinity, maxz = -Infinity
     let any = false
@@ -211,7 +217,7 @@ async function computePocketSphere(url: string, resIds: number[], chain: string)
       const resSeq = line.slice(22, 26).trim()
       if (!set.has(resSeq)) continue
       const ch = line.slice(21, 22).trim() || 'A'
-      if (chain && ch !== chain) continue
+      if (selection.chain && ch !== selection.chain) continue
       const x = parseFloat(line.slice(30, 38))
       const y = parseFloat(line.slice(38, 46))
       const z = parseFloat(line.slice(46, 54))
@@ -300,6 +306,7 @@ async function render(options: { keepCamera?: boolean } = {}) {
     loading.value = true
   }
   error.value = ''
+  renderResourcesRegistry.clear()
   const savedCamera = silent ? plugin?.canvas3d?.camera.state : null
   try {
     if (!props.pdbUrl) {
@@ -320,18 +327,23 @@ async function render(options: { keepCamera?: boolean } = {}) {
       representationPreset: 'polymer-cartoon'
     })
     structureSel = preset?.structure ?? null
-    localSphere = await computePocketSphere(props.pdbUrl, props.resIds, props.chain)
+    const selection = resolveMolstarPocketSelection({ chain: props.chain, residueIds: props.resIds, selectedResidueIds: props.selectedResIds })
+    localSphere = await computePocketSphere(props.pdbUrl, selection)
 
     await recolorCartoon()
-    await buildHighlights()
-    await fadeCartoon()
+    await buildHighlights(selection)
+    if (pocketRepresentation.value === 'cartoon') {
+      await fadeCartoon()
+    }
     viewer?.handleResize()
     if (savedCamera) {
       // 选中集变化时相机原样恢复：用户刚拖到的角度不该被一次高亮刷新夺走
       plugin.canvas3d?.camera.setState(savedCamera, 0)
     } else {
-      window.setTimeout(focusPocket, 400)
-      window.setTimeout(focusPocket, 1500)
+      const focusSoon = window.setTimeout(focusPocket, 400)
+      const focusLater = window.setTimeout(focusPocket, 1500)
+      renderResourcesRegistry.add(() => window.clearTimeout(focusSoon))
+      renderResourcesRegistry.add(() => window.clearTimeout(focusLater))
     }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
@@ -362,6 +374,8 @@ watch(
   { deep: true }
 )
 
+watch(pocketRepresentation, () => { if (plugin) void render({ keepCamera: true }) })
+
 watch(
   () => props.selectedResIds,
   () => {
@@ -372,9 +386,10 @@ watch(
 )
 
 onUnmounted(() => {
+  renderResourcesRegistry.clear()
   resizeObserver?.disconnect()
   resizeObserver = null
-  viewer?.dispose()
+  disposeMolstarViewer(viewer)
   viewer = null
   plugin = null
   structureSel = null
@@ -417,6 +432,65 @@ onUnmounted(() => {
 .pocket-overlay--error {
   background: rgba(6, 16, 29, 0.9);
   padding: 24px;
+}
+
+.pocket-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pocket-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(207, 224, 247, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 20, 36, 0.72);
+  color: #cfe0f7;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.pocket-control select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.pocket-control option {
+  color: #10233d;
+}
+
+.pocket-reset {
+  position: relative;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 5px 10px;
+  border: 1px solid rgba(207, 224, 247, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 20, 36, 0.72);
+  color: #cfe0f7;
+  cursor: pointer;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.pocket-reset:hover:not(:disabled) {
+  border-color: #22d3ee;
+  color: #fff;
+}
+
+.pocket-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .pocket-legend {

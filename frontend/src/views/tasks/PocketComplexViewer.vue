@@ -23,6 +23,7 @@
     <MoleculeViewer
       v-if="scene && voxelReady"
       :scene="scene"
+      mode="protein"
       :voxel-grid="voxelGrid"
     />
     <a-spin v-else-if="scene" size="small" :tip="t('tasks.resultPage.pocketComplexLoading')" />
