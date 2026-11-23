@@ -9,6 +9,7 @@ import {
   normalizeWorkflowSemanticType,
 } from '@/workflow/semantic-types'
 import { isFileSchemaProperty, type UploadedToolFile } from './detail-schema'
+import { isToolPackageApiVersion } from '@/domain/contract-versions'
 
 export type StandardArtifactInputSlot = ArtifactInputSlot
 
@@ -165,7 +166,7 @@ function resolveEmbeddedManifest(tool?: Tool | null): UnknownRecord | null {
 }
 
 function resolveSlotsFromManifest(manifest: UnknownRecord | null): StandardArtifactInputSlot[] {
-  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package') {
+  if (!manifest || !isToolPackageApiVersion(manifest.api_version)) {
     return []
   }
 
@@ -328,7 +329,7 @@ export function resolveToolPackageParameterSchema(tool?: Tool | null): ToolSchem
   }
 
   const manifest = resolveEmbeddedManifest(tool)
-  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package') {
+  if (!manifest || !isToolPackageApiVersion(manifest.api_version)) {
     return null
   }
 

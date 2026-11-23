@@ -28,7 +28,7 @@ function makeTool(config: Record<string, unknown>): Tool {
 }
 
 const manifest = {
-  api_version: 'aidd.sciminer/tool-package',
+  api_version: 'aidd.platform/tool-package',
   artifacts: {
     inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
     outputs: [],

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { buildOutputOverview } from './output-summary'
 
 const STANDARD_RESULT = {
-  result_version: 'aidd.sciminer/result',
+  result_version: 'aidd.platform/result',
   metrics: { ligand_count: 2, best_affinity_pred_value: -9.5601, failed_count: 0 },
   summary: { note: 'ok', detail: { ignored: true } },
   artifacts: {
@@ -47,7 +47,7 @@ test('产物清单带类型、文件数与主文件', () => {
 
 test('产物名缺失时退化可读，不把键名原样丢出来', () => {
   const overview = buildOutputOverview({
-    result_version: 'aidd.sciminer/result',
+    result_version: 'aidd.platform/result',
     artifacts: { pocket_residues_json: { files: [] } },
   })
   assert.equal(overview.artifacts[0]!.name, 'Pocket residues json')
