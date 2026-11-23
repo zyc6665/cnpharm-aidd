@@ -105,7 +105,7 @@ def test_production_settings_reject_local_runtime_backends() -> None:
     base_kwargs = {
         "ENVIRONMENT": "production",
         "DEBUG": False,
-        "CORS_ORIGINS": ["https://sciminer.example.com"],
+        "CORS_ORIGINS": ["https://aidd.example.com"],
         "JWT_SECRET_KEY": "j" * 32,
         "SETTINGS_ENCRYPTION_KEY": "e" * 32,
         "DATABASE_URL": "postgresql+asyncpg://scitool:secret@postgres:5432/scitool",
@@ -120,7 +120,7 @@ def test_production_settings_reject_local_runtime_backends() -> None:
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
         "COOKIE_SECURE": True,
-        "ALLOWED_HOSTS": ["sciminer.example.com"],
+        "ALLOWED_HOSTS": ["aidd.example.com"],
     }
     Settings(**base_kwargs)
 

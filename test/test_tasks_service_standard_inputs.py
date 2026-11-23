@@ -62,7 +62,7 @@ def _minimal_validated_tool_package_manifest(
     output_type: str = "molecule_table@1",
 ) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "molp-pc",
@@ -86,7 +86,7 @@ def _minimal_validated_tool_package_manifest(
             "artifacts": {
                 "primary": {
                     "kind": "container",
-                    "image": "registry.example/sciminer/molp-pc:2.0.0",
+                    "image": "registry.example/aidd/molp-pc:2.0.0",
                     "image_digest": "sha256:test",
                 },
                 "fallback": {

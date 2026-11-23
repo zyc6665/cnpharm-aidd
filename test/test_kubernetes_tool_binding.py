@@ -10,7 +10,7 @@ def _manifest():
 
     return ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package",
+            "api_version": "aidd.platform/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": "managed-model",

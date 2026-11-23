@@ -18,6 +18,7 @@ from app.artifact_standards.registry import (
 )
 from app.common.time import utcnow
 from app.execution.standard_contracts import (
+    REQUEST_VERSION,
     StandardExecutionContext,
     StandardExecutionRequest,
     StandardFileRef,
@@ -83,7 +84,7 @@ async def build_standard_execution_request(
         )
 
     return StandardExecutionRequest(
-        request_version="aidd.sciminer/request",
+        request_version=REQUEST_VERSION,
         task=StandardTaskContext(
             id=str(task.id),
             tool_slug=tool_package_manifest.metadata.slug,

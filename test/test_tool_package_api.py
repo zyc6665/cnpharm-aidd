@@ -21,7 +21,7 @@ from app.models.users import User, UserRole, UserStatus
 
 def _manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/v1",
+        "api_version": "aidd.platform/v1",
         "kind": "ToolPackage",
         "metadata": {"slug": "lvpocket", "name": "LVpocket", "version": "1.0.0"},
         "artifacts": {
@@ -58,7 +58,7 @@ def _manifest() -> dict:
 
 def _v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "molp-pc-runtime-test",
@@ -100,7 +100,7 @@ def _v2_manifest() -> dict:
             "artifacts": {
                 "primary": {
                     "kind": "container",
-                    "image": "registry.example/sciminer/molp-pc-runtime:1.0.0",
+                    "image": "registry.example/aidd/molp-pc-runtime:1.0.0",
                     "image_digest": f"sha256:{'d' * 64}",
                     "includes": ["python", "cuda_runtime", "dependencies"],
                 },
@@ -272,7 +272,7 @@ async def test_admin_creates_v2_tool_package_with_runtime_metadata(
     data = created.json()["data"]
     manifest = data["current_version"]["manifest"]
     assert data["slug"] == "molp-pc-runtime-test"
-    assert manifest["api_version"] == "aidd.sciminer/tool-package"
+    assert manifest["api_version"] == "aidd.platform/tool-package"
     assert manifest["runtime"]["artifacts"]["primary"]["image_digest"] == f"sha256:{'d' * 64}"
     assert manifest["runtime"]["weights"]["manifest_sha256"] == "f" * 64
 

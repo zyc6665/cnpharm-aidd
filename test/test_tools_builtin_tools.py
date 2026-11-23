@@ -335,7 +335,7 @@ def test_rdkit_properties_builtin_emits_property_table_and_standard_result(
     assert rows[0]["rdkit_status"] == "ok"
     assert rows[1]["rdkit_status"] == "invalid_smiles"
     assert result.standard_result is not None
-    assert result.standard_result["result_version"] == "aidd.sciminer/result"
+    assert result.standard_result["result_version"] == "aidd.platform/result"
     properties = result.standard_result["artifacts"]["properties"]
     assert properties["type"] == "molecule_table@1"
     assert properties["metadata"]["valid_molecule_count"] == 1
@@ -475,7 +475,7 @@ def test_builtin_protein_preparation_emits_standard_result_v2(
     )
 
     assert result.standard_result is not None
-    assert result.standard_result["result_version"] == "aidd.sciminer/result"
+    assert result.standard_result["result_version"] == "aidd.platform/result"
     prepared = result.standard_result["artifacts"]["prepared_protein"]
     assert prepared["type"] == "protein_structure@1"
     assert prepared["metadata"]["preparation_status"] == "degraded"

@@ -227,7 +227,7 @@ def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
             getattr(
                 settings,
                 "K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT",
-                "/tmp/sciminer-k8s-artifacts",
+                "/tmp/aidd-k8s-artifacts",
             )
         ),
     )

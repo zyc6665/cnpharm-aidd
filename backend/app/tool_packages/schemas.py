@@ -11,8 +11,37 @@ from app.artifact_standards.registry import validate_standard_artifact_roles
 from app.tools.schema_validator import validate_json_schema_definition
 
 
-LEGACY_TOOL_PACKAGE_API_VERSION = "aidd.sciminer/v1"
-TOOL_PACKAGE_API_VERSION = "aidd.sciminer/tool-package"
+LEGACY_TOOL_PACKAGE_API_VERSION = "aidd.platform/v1"
+TOOL_PACKAGE_API_VERSION = "aidd.platform/tool-package"
+
+# 2026-11 命名收敛：平台产出使用 `aidd.platform/*`，旧产品线命名
+# `aidd.sciminer/*` 继续只读接受，避免已签名 manifest 与存量 ToolVersion 失效。
+# 注意：**不要**在入库时改写 api_version——manifest digest 是对整份 JSON 求 sha256，
+# 改写会让签名校验失败；这里只提供比较用的归一化判断。
+LEGACY_TOOL_PACKAGE_API_VERSION_ALIASES = (
+    LEGACY_TOOL_PACKAGE_API_VERSION,
+    "aidd.sciminer/v1",
+)
+TOOL_PACKAGE_API_VERSION_ALIASES = (
+    TOOL_PACKAGE_API_VERSION,
+    "aidd.sciminer/tool-package",
+)
+
+LegacyToolPackageApiVersion = Literal["aidd.platform/v1", "aidd.sciminer/v1"]
+ToolPackageApiVersion = Literal[
+    "aidd.platform/tool-package",
+    "aidd.sciminer/tool-package",
+]
+
+
+def is_tool_package_api_version(value: object) -> bool:
+    """Whether ``value`` is a supported Tool Package v2 api_version (new or legacy)."""
+    return value in TOOL_PACKAGE_API_VERSION_ALIASES
+
+
+def is_legacy_tool_package_api_version(value: object) -> bool:
+    """Whether ``value`` is a supported legacy Tool Package api_version."""
+    return value in LEGACY_TOOL_PACKAGE_API_VERSION_ALIASES
 
 
 class Accelerator(str, Enum):
@@ -249,7 +278,7 @@ class RuntimeEnvManifest(BaseModel):
 class LegacyToolPackageManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_version: Literal[LEGACY_TOOL_PACKAGE_API_VERSION]
+    api_version: LegacyToolPackageApiVersion
     kind: Literal["ToolPackage"]
     metadata: ToolPackageMetadata
     artifacts: ArtifactContract
@@ -259,7 +288,7 @@ class LegacyToolPackageManifest(BaseModel):
 class ToolPackageManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_version: Literal[TOOL_PACKAGE_API_VERSION]
+    api_version: ToolPackageApiVersion
     spec_version: int = 1
     kind: Literal["ToolPackage"]
     metadata: ToolPackageMetadata

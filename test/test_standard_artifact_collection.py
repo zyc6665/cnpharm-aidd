@@ -17,7 +17,7 @@ from app.services.standard_artifact_collection import (  # noqa: E402
 
 def _validated_tool_package_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "pocket-tool",
@@ -71,7 +71,7 @@ def _validated_tool_package_manifest() -> dict:
 
 
 def test_result_payload_accepts_supported_wrappers() -> None:
-    payload = {"result_version": "aidd.sciminer/result", "artifacts": {}}
+    payload = {"result_version": "aidd.platform/result", "artifacts": {}}
 
     standard_result = collected_standard_result_payload(
         {"standard_result": payload}

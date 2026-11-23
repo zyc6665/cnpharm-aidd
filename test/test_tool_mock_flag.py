@@ -91,7 +91,7 @@ async def test_package_declaring_mock_is_marked(db: AsyncSession) -> None:
     config = {
         "type": "k8s_job",
         "tool_package_manifest": {
-            "api_version": "aidd.sciminer/tool-package",
+            "api_version": "aidd.platform/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": "mock-tool",

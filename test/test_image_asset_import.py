@@ -94,7 +94,7 @@ async def test_import_docker_save_pushes_manifest(monkeypatch, tmp_path):
     payload = archive.read_bytes()
     result = await import_docker_save(
         archive,
-        repository="sciminer/example",
+        repository="aidd/example",
         tag="1.0.0",
         archive_sha256=hashlib.sha256(payload).hexdigest(),
         archive_size_bytes=len(payload),
@@ -166,12 +166,12 @@ async def test_import_oci_archive_pushes_manifest(monkeypatch, tmp_path):
     monkeypatch.setattr(
         image_asset_import.settings,
         "IMAGE_REGISTRY_IMAGE_PREFIX",
-        "10.202.2.228:30500/sciminer/",
+        "10.202.2.228:30500/aidd/",
     )
     payload = archive.read_bytes()
     result = await image_asset_import.import_image_archive(
         archive,
-        repository="sciminer/oci-example",
+        repository="aidd/oci-example",
         tag="1.0.0",
         archive_sha256=hashlib.sha256(payload).hexdigest(),
         archive_size_bytes=len(payload),
@@ -179,7 +179,7 @@ async def test_import_oci_archive_pushes_manifest(monkeypatch, tmp_path):
 
     assert result["manifest_digest"] == f"sha256:{manifest_digest}"
     assert result["image_reference"] == (
-        "10.202.2.228:30500/sciminer/oci-example:1.0.0@"
+        "10.202.2.228:30500/aidd/oci-example:1.0.0@"
         f"sha256:{manifest_digest}"
     )
     assert len(pushed) == 3

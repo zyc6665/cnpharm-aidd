@@ -29,10 +29,10 @@ def build_kubernetes_job_manifest(
 
     resources = _resource_values(request.resources)
     labels = {
-        "app.kubernetes.io/managed-by": "sciminer",
-        "sciminer.io/task-id": _label_value(request.task_id or request.idempotency_key),
-        "sciminer.io/attempt-id": _label_value(request.attempt_id or "current"),
-        "sciminer.io/tool-version-id": _label_value(request.tool_version_id or request.tool_package_version_id),
+        "app.kubernetes.io/managed-by": "aidd",
+        "aidd.io/task-id": _label_value(request.task_id or request.idempotency_key),
+        "aidd.io/attempt-id": _label_value(request.attempt_id or "current"),
+        "aidd.io/tool-version-id": _label_value(request.tool_version_id or request.tool_package_version_id),
     }
     container: dict[str, Any] = {
         "name": "tool",
@@ -69,6 +69,9 @@ def build_kubernetes_job_manifest(
     platform_env = _object_storage_env(config, _job_name(config.job_name_prefix, request))
     input_env = _input_env(request)
     platform_env.extend(input_env)
+    # 2026-11 命名收敛：同时注入 AIDD_*（新）与 SCIMINER_*（旧）。
+    # 已构建的模型镜像只认旧名，双写让新旧镜像都能跑；新镜像按新名优先读取。
+    platform_env = _with_legacy_env_aliases(platform_env)
     if platform_env:
         configured_names = {item["name"] for item in container.get("env", [])}
         platform_names = {item["name"] for item in platform_env}
@@ -116,7 +119,7 @@ def build_kubernetes_job_manifest(
             "name": _job_name(config.job_name_prefix, request),
             "namespace": config.namespace,
             "labels": labels,
-            "annotations": {"sciminer.io/idempotency-key": request.idempotency_key},
+            "annotations": {"aidd.io/idempotency-key": request.idempotency_key},
         },
         "spec": job_spec,
     }
@@ -220,7 +223,7 @@ def _container_resources(
 def _job_name(prefix: str, request: ExecutionRequest) -> str:
     identity = f"{request.task_id or request.idempotency_key}:{request.attempt_id or 'current'}"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
-    normalized_prefix = _dns_value(prefix) or "sciminer"
+    normalized_prefix = _dns_value(prefix) or "aidd"
     return f"{normalized_prefix[:50]}-{digest}"[:63].rstrip("-")
 
 
@@ -247,16 +250,16 @@ def _object_storage_env(
         raise KubernetesManifestError("object storage output prefix contains unsafe path segments")
     prefix = "/".join(prefix_parts)
     env: list[dict[str, Any]] = [
-        {"name": "SCIMINER_OBJECT_STORAGE_ENDPOINT", "value": config.object_storage_endpoint},
-        {"name": "SCIMINER_OBJECT_STORAGE_BUCKET", "value": config.object_storage_bucket},
-        {"name": "SCIMINER_EXECUTION_OUTPUT_PREFIX", "value": prefix},
-        {"name": "SCIMINER_RESULT_OBJECT", "value": f"{prefix}/result.json"},
+        {"name": "AIDD_OBJECT_STORAGE_ENDPOINT", "value": config.object_storage_endpoint},
+        {"name": "AIDD_OBJECT_STORAGE_BUCKET", "value": config.object_storage_bucket},
+        {"name": "AIDD_EXECUTION_OUTPUT_PREFIX", "value": prefix},
+        {"name": "AIDD_RESULT_OBJECT", "value": f"{prefix}/result.json"},
     ]
     if config.object_storage_secret_ref:
         env.extend(
             [
                 {
-                    "name": "SCIMINER_OBJECT_STORAGE_ACCESS_KEY",
+                    "name": "AIDD_OBJECT_STORAGE_ACCESS_KEY",
                     "valueFrom": {
                         "secretKeyRef": {
                             "name": config.object_storage_secret_ref,
@@ -265,7 +268,7 @@ def _object_storage_env(
                     },
                 },
                 {
-                    "name": "SCIMINER_OBJECT_STORAGE_SECRET_KEY",
+                    "name": "AIDD_OBJECT_STORAGE_SECRET_KEY",
                     "valueFrom": {
                         "secretKeyRef": {
                             "name": config.object_storage_secret_ref,
@@ -284,11 +287,29 @@ def _input_env(request: ExecutionRequest) -> list[dict[str, str]]:
     payload = [item.model_dump(exclude_none=True) for item in request.inputs]
     return [
         {
-            "name": "SCIMINER_INPUTS_JSON",
+            "name": "AIDD_INPUTS_JSON",
             "value": json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
         },
-        {"name": "SCIMINER_INPUT_MANIFEST", "value": "/workspace/input/manifest.json"},
+        {"name": "AIDD_INPUT_MANIFEST", "value": "/workspace/input/manifest.json"},
     ]
+
+
+def _with_legacy_env_aliases(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Expand platform-injected ``AIDD_*`` vars with legacy ``SCIMINER_*`` aliases.
+
+    已构建镜像只读旧名；双写保证旧镜像无需重建即可继续运行。
+    """
+    expanded: list[dict[str, Any]] = []
+    for entry in entries:
+        expanded.append(entry)
+        name = entry.get("name")
+        if isinstance(name, str) and name.startswith("AIDD_"):
+            legacy = dict(entry)
+            legacy["name"] = "SCIMINER_" + name[len("AIDD_") :]
+            expanded.append(legacy)
+    return expanded
 
 
 def _label_value(value: str) -> str:

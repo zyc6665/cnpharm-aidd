@@ -29,7 +29,7 @@ ROLE_AWARE_INPUT = {
 
 def _minimal_validated_tool_package_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "role-aware-pocket",
@@ -55,7 +55,7 @@ def _minimal_validated_tool_package_manifest() -> dict:
             "artifacts": {
                 "primary": {
                     "kind": "container",
-                    "image": "registry.example/sciminer/role-aware-pocket:1.0.0",
+                    "image": "registry.example/aidd/role-aware-pocket:1.0.0",
                     "image_digest": f"sha256:{'a' * 64}",
                 },
                 "fallback": {

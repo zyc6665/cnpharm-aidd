@@ -23,6 +23,7 @@ from app.execution.records import (
     update_task_execution_record_external_id,
 )
 from app.execution.contracts import ExecutionHandleGone, ExecutionRequest, ExecutionState
+from app.execution.standard_contracts import REQUEST_VERSION
 from app.execution.service import ExecutionService
 from app.services.execution_artifacts import materialize_execution_artifacts
 from app.services.kubernetes_input_staging import stage_kubernetes_inputs
@@ -65,15 +66,21 @@ class KubernetesJobExecutor(BaseExecutor):
             runtime_env = {}
         if not isinstance(runtime_env, dict):
             raise TaskExecutionError("k8s_job 的 runtime.env 必须是对象")
-        if "SCIMINER_REQUEST_JSON" in runtime_env:
-            raise TaskExecutionError("k8s_job 的 runtime.env 不能覆盖 SCIMINER_REQUEST_JSON")
+        for reserved in ("AIDD_REQUEST_JSON", "SCIMINER_REQUEST_JSON"):
+            if reserved in runtime_env:
+                raise TaskExecutionError(
+                    f"k8s_job 的 runtime.env 不能覆盖 {reserved}"
+                )
+        # 双写：新镜像读 AIDD_*，已构建的旧镜像仍读 SCIMINER_*。
+        request_payload = json.dumps(
+            await self._build_request_payload(inputs, parameters),
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
         runtime["env"] = {
             **runtime_env,
-            "SCIMINER_REQUEST_JSON": json.dumps(
-                await self._build_request_payload(inputs, parameters),
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ),
+            "AIDD_REQUEST_JSON": request_payload,
+            "SCIMINER_REQUEST_JSON": request_payload,
         }
         return ExecutionRequest(
             idempotency_key=f"task:{self.task.id}:attempt:{attempt_id}",
@@ -138,7 +145,7 @@ class KubernetesJobExecutor(BaseExecutor):
         request_resources = resources.get("resource_request") or {}
         gpu_count = int(resources.get("gpu_count") or request_resources.get("gpu_count") or 0)
         return {
-            "request_version": "aidd.sciminer/request",
+            "request_version": REQUEST_VERSION,
             "task": {
                 "id": task_id,
                 "tool_slug": tool_slug,

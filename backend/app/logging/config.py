@@ -28,7 +28,7 @@ class LogConfig:
     backup_count: int = 5
     enable_colors: bool = True
     include_hostname: bool = True
-    app_name: str = "sciminer"
+    app_name: str = "aidd"
     environment: str = "development"
 
 
@@ -40,7 +40,7 @@ class CustomJsonFormatter(logging.Formatter):
 
     def __init__(
         self,
-        app_name: str = "sciminer",
+        app_name: str = "aidd",
         environment: str = "development",
         include_hostname: bool = True
     ):
@@ -211,7 +211,7 @@ def setup_logging_from_env() -> None:
         format=os.getenv("LOG_FORMAT", "json"),
         output=os.getenv("LOG_OUTPUT", "console"),
         log_dir=os.getenv("LOG_DIR", "logs"),
-        app_name=os.getenv("APP_NAME", "sciminer"),
+        app_name=os.getenv("APP_NAME", "aidd"),
         environment=os.getenv("ENVIRONMENT", "development")
     )
     setup_logging(config)

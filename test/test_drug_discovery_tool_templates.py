@@ -53,7 +53,7 @@ def test_bundled_drug_discovery_templates_are_valid_and_smoke_testable():
         assert template.agent_capability.inputs
         assert template.agent_capability.outputs
         assert template.resource_profile.timeout_minutes >= template.resource_profile.expected_minutes
-        assert template.smoke_test.expected_result_version == "aidd.sciminer/result"
+        assert template.smoke_test.expected_result_version == "aidd.platform/result"
         assert template.smoke_test.expected_outputs
 
 
@@ -73,7 +73,7 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     config = build_tool_import_config_from_template(
         template,
         executor_type="docker_image",
-        executor_config={"image": "ghcr.io/sciminer/vina:latest", "command": ["/app/run"]},
+        executor_config={"image": "ghcr.io/aidd/vina:latest", "command": ["/app/run"]},
     )
 
     validated = validate_tool_import_config(config)
@@ -87,7 +87,7 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     assert tool_config["implementation"]["runtime"] == "autodock_vina"
     assert tool_config["resource_profile"]["tier"] == "medium"
     assert tool_config["output_schema"]["properties"]["result_version"]["const"] == (
-        "aidd.sciminer/result"
+        "aidd.platform/result"
     )
     assert collect_tool_contract_config_validation_errors(
         tool_slug=validated["slug"],
@@ -101,7 +101,7 @@ def test_docking_template_exports_role_aware_artifact_inputs():
     config = build_tool_import_config_from_template(
         template,
         executor_type="docker_image",
-        executor_config={"image": "ghcr.io/sciminer/vina:latest", "command": ["/app/run"]},
+        executor_config={"image": "ghcr.io/aidd/vina:latest", "command": ["/app/run"]},
     )
     inputs = config["tool_config"]["artifacts"]["inputs"]
 
@@ -132,7 +132,7 @@ def test_ligand_preparation_template_exports_3d_ligand_input_policy():
     config = build_tool_import_config_from_template(
         template,
         executor_type="docker_image",
-        executor_config={"image": "ghcr.io/sciminer/ligand-prep:latest", "command": ["/app/run"]},
+        executor_config={"image": "ghcr.io/aidd/ligand-prep:latest", "command": ["/app/run"]},
     )
 
     assert config["tool_config"]["artifacts"]["inputs"] == [
@@ -185,7 +185,7 @@ def test_resource_profile_is_exposed_on_tool_contract():
     config = build_tool_import_config_from_template(
         template,
         executor_type="docker_image",
-        executor_config={"image": "ghcr.io/sciminer/vina:latest", "command": ["/app/run"]},
+        executor_config={"image": "ghcr.io/aidd/vina:latest", "command": ["/app/run"]},
     )
     tool_config = config["tool_config"]
     tool = SimpleNamespace(
@@ -223,7 +223,7 @@ def test_template_rejects_non_standard_smoke_test_result_version():
     raw = load_tool_template("rdkit-properties").model_dump(mode="json")
     raw["smoke_test"]["expected_result_version"] = "legacy-result.v1"
 
-    with pytest.raises(ValidationError, match="aidd.sciminer/result"):
+    with pytest.raises(ValidationError, match="aidd.platform/result"):
         DrugDiscoveryToolTemplate.model_validate(raw)
 
 

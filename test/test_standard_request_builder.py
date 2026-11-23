@@ -59,7 +59,7 @@ def minimal_runtime_manifest(slug: str) -> dict:
         "artifacts": {
             "primary": {
                 "kind": "container",
-                "image": f"registry.example/sciminer/{slug}:1.0.0",
+                "image": f"registry.example/aidd/{slug}:1.0.0",
                 "image_digest": "sha256:test",
             },
             "fallback": {
@@ -98,7 +98,7 @@ def _manifest(*, inputs: list[dict] | None = None) -> ToolPackageManifest:
     slug = "standard-request-tool"
     return ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package",
+            "api_version": "aidd.platform/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": slug,

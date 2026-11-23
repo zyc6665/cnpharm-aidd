@@ -47,7 +47,7 @@ class PrometheusMetrics:
     - file_storage_used_bytes: 文件存储使用量
     """
 
-    def __init__(self, namespace: str = "sciminer"):
+    def __init__(self, namespace: str = "aidd"):
         """初始化指标收集器
 
         Args:

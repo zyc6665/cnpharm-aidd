@@ -42,7 +42,7 @@ async def import_image_asset(
     max_size = settings.IMAGE_IMPORT_MAX_SIZE_MB * 1024 * 1024
     digest = hashlib.sha256()
     size = 0
-    with tempfile.NamedTemporaryFile(prefix="sciminer-image-", suffix=".tar", delete=False) as staged:
+    with tempfile.NamedTemporaryFile(prefix="aidd-image-", suffix=".tar", delete=False) as staged:
         staged_path = Path(staged.name)
         try:
             while chunk := await archive.read(1024 * 1024):

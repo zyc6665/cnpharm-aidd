@@ -6,7 +6,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION, ToolPackageManifest
+from app.tool_packages.schemas import (
+    ToolPackageManifest,
+    is_tool_package_api_version,
+)
 
 
 class ToolPackageConfigError(ValueError):
@@ -36,7 +39,7 @@ def tool_package_declares_mock(config: object) -> bool:
 
 def validated_tool_package_manifest_data(config: object) -> dict[str, Any] | None:
     manifest = tool_package_manifest_data(config)
-    if manifest is None or manifest.get("api_version") != TOOL_PACKAGE_API_VERSION:
+    if manifest is None or not is_tool_package_api_version(manifest.get("api_version")):
         return None
     return manifest
 

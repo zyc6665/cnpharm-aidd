@@ -245,7 +245,7 @@ async def test_molecule_generation_scoring_keeps_standard_result_v2_schema_clean
     output_result = {
         "success": True,
         "result": {
-            "result_version": "aidd.sciminer/result",
+            "result_version": "aidd.platform/result",
             "artifacts": {},
             "relations": [],
         },
