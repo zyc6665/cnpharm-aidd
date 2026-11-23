@@ -30,7 +30,7 @@
 | `frontend/src/views/`、`components/` | Vue 3 页面与组件（workflow/tasks/tools 三个目录最大） | 按域分（P3 独占 `frontend/`） |
 | `frontend/src/locales/` | 中英双语 `index.ts` 两份 | **汇聚点**（P3），改前先看第 6 节 |
 | `frontend/src/router/index.ts` | 单体路由表 | **汇聚点**（P3） |
-| `deploy/` | compose（dev/prod/k100-test）、k8s 清单、node-agent 部署 | **L2 部署算力**（P4 主责 + P1 复核） |
+| `deploy/` | compose（dev/prod/k100-test）、k8s 清单 | **L2 部署算力**（P4 主责 + P1 复核） |
 | `scripts/` | 校验、迁移、性能、环境脚本 | **契约层**（公共工具；`build-offline-package.sh` 归 P4） |
 | `docs/` | 交付文档集，先看 [docs/README.md](docs/README.md) | 全队 |
 | `test/` | 后端测试 | 全队 |
@@ -150,7 +150,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 ### 6.3 三个业务域在后端没有独立模块
 
-分子设计 / 亲和力 ADMET / 虚拟筛选（D3–D5）共用 `api/v1/tasks.py`、`api/v1/results.py` 与 `tool_templates/`。**前端按域切、后端按模块切**：预测类域的 owner 拥有自己的 views 与 `tool_templates/` 里的 YAML，但不拥有 `tasks.py` / `results.py`。改这两个文件前先在 Issue 里说一声。
+分子设计 / 亲和力 ADMET / 虚拟筛选（D3–D5）共用 `api/v1/tasks.py`、`api/v1/results.py` 与 `tool_templates/`。**前端按域切、后端按模块切**：前端页面归 P3，`tool_templates/` 里的 YAML 归 P4（P1 复核），业务域后端不拥有 `tasks.py` / `results.py`。改这两个文件前先在 Issue 里说一声。
 
 ---
 
@@ -173,7 +173,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 - **Issue 是唯一工作单元**：一个 Issue ≤ 2 天工作量，必须写清需求编号（M1–M7）、验收标准、影响的域。没有 Issue 的 PR 不合并。
 - **PR**：≤ 800 行（除测试与自动生成文件外）、≤ 2 天、只碰一个域；标题 `type(scope): subject`；正文 `Closes #N`；合并方式 squash。
-- **分支**：`feature/` `fix/` `refactor/` `docs/` `release/` `spike/`；**活不过 3 天**；谁后合谁 rebase。
+- **分支**：`{type}/{role}-{issue号}-{简述}`（见 §11.2）；**活不过 3 天**；谁后合谁 rebase。
 - **评审**：1 人通过即可（CODEOWNERS 配好后按域找人）。**不要自己合自己的 PR**。
 - **进度**：看板 5 列（Backlog / Ready / In Progress / In Review / Done），In Progress 每人 ≤ 1；每日在 Discussion 的站会帖回 3 行。
 - **同步**：每天开工先 `git fetch` 看清本地落后多少，落后就 rebase——纪律见第 9 节。

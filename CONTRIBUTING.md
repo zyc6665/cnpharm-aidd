@@ -13,16 +13,16 @@
 | 分支 | 生命周期 | 从哪切 | 合到哪 | 说明 |
 |---|---|---|---|---|
 | `main` | 长期 | — | — | **交付主干**。任何时点都应能构建出可交付版本。受保护，只能经 PR 合入。 |
-| `feature/<模块>-<主题>` | ≤ 5 工作日 | `main` | `main` | 新功能 |
-| `fix/<模块>-<主题>` | ≤ 2 工作日 | `main` | `main` | 缺陷修复 |
-| `refactor/<模块>-<主题>` | ≤ 5 工作日 | `main` | `main` | 不改行为的重构（如 `agents/aidd` 拆包） |
-| `docs/<主题>` | ≤ 2 工作日 | `main` | `main` | 纯文档 |
+| `feature/<role>-<issue号>-<简述>` | ≤ 5 工作日 | `main` | `main` | 新功能 |
+| `fix/<role>-<issue号>-<简述>` | ≤ 2 工作日 | `main` | `main` | 缺陷修复 |
+| `refactor/<role>-<issue号>-<简述>` | ≤ 5 工作日 | `main` | `main` | 不改行为的重构（如服务拆包） |
+| `docs/<role>-<issue号>-<简述>` | ≤ 2 工作日 | `main` | `main` | 纯文档 |
 | `release/standard-v1.0`、`release/full-v2.0` | 交付周期 | `main` | tag（不回 main） | 标准版 / 完整版一次性交付分支，只收回归修复；现场 bugfix 需 cherry-pick 回 `main` |
 | `spike/<主题>` | ≤ 3 工作日 | `main` | **不合** | 技术验证，验证完写结论并删除 |
 
 **为什么主干是 `main` 而不是 `develop`**：中国医药文档 `docs/11` 的 GitLab 流水线按 `main` 为主干设计（`feat/fix ──MR──▶ main`），交付线要能直接对应这份验收文档。产品线的 `develop/beta` 双长期分支模型不适用于 3 个月的交付节奏——多一层集成分支只会让回滚更麻烦。
 
-### 1.3 「标准版 → 完整版」一次性交付
+### 1.2 「标准版 → 完整版」一次性交付
 
 本仓库发版模式是**标准版 → 完整版**私有化离线一次性交付，分支模型如下：
 
@@ -31,17 +31,19 @@
 - **现场 bugfix 回主干**：在发版分支修好后 **`cherry-pick -x` 回 `main`**，避免修复丢失。
 - **产品线 `upstream`（`CPUmodel_V2`）**：**仅 `@zyc6665` 拥有 cherry-pick 权限**，其他人不要操作 `upstream`。
 
-### 1.4 新人只配置 `origin`
+### 1.3 新人只配置 `origin`
 
-新克隆仓库**只配置 `origin`**（团队主仓），不要自行添加 `upstream` 或其它远端。需要与产品线同步时找 P1，由 P1 统一执行 cherry-pick。分支命名统一 `{type}/{role}-{issue号}-{简述}`（`role` ∈ fe/be/ops/arch）。
+新克隆仓库**只配置 `origin`**（团队主仓），不要自行添加 `upstream` 或其它远端。需要与产品线同步时找 P1，由 P1 统一执行 cherry-pick。
 
-### 1.2 命名示例
+### 1.4 命名示例
+
+分支命名统一 `{type}/{role}-{issue号}-{简述}`（`type` ∈ feature/fix/refactor/docs/chore，`role` ∈ fe/be/ops/arch）。
 
 ```bash
-git switch -c feature/target-entity-crud
-git switch -c refactor/aidd-unbundle     # 拆 agents/aidd
-git switch -c fix/task-cancel-race
-git switch -c docs/api-traceability
+git switch -c feature/be-123-target-entity-crud
+git switch -c refactor/be-45-task-service-split
+git switch -c fix/be-88-task-cancel-race
+git switch -c docs/arch-56-api-traceability
 ```
 
 模块名用后端目录或前端页面名：`target` `pocket` `candidate` `task` `workflow` `artifact` `scheduler` `dcu`。**不要**用 `feature/zhangsan-dev`、`feature/test`、`feature/new` 这类无信息量命名。
