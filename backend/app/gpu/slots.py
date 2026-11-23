@@ -23,7 +23,6 @@ from typing import Any, Iterable, Mapping
 
 import yaml
 
-from app.common.time import utcnow
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,8 @@ SLOT_STATES: tuple[str, ...] = (
 # 只有 FREE 能接新任务；BORROWED 在冷却期内不外借（`docs/09` §5.5 状态机）。
 SCHEDULABLE_SLOT_STATES: tuple[str, ...] = (SLOT_STATE_FREE,)
 
-# 卡位状态的缓存键前缀：状态权威在 Agent，平台只做缓存与消费。
+# 卡位状态的缓存键前缀：状态由执行侧写入缓存（Agent 通道已归档后主要是
+# 运维手工/测试注入），平台只做缓存读取与展示。
 SLOT_STATE_CACHE_PREFIX = "gpu:slot:state:"
 
 _DCU_DOCKER_ARGS = ("--device=/dev/kfd", "--device=/dev/dri")
@@ -416,48 +416,6 @@ def _state_cache_key(node_id: str, slot_id: str) -> str:
     return f"{SLOT_STATE_CACHE_PREFIX}{node_id}:{slot_id}"
 
 
-async def record_slot_state(
-    *,
-    node_id: str,
-    slot_id: str,
-    state: str,
-    message: str | None = None,
-    device_count: int | None = None,
-    cache_client: Any = None,
-) -> dict[str, Any]:
-    """登记 Agent 上报的卡位状态（缓存，TTL 由 ``DRP_SLOT_STATE_TTL_SECONDS`` 控制）。
-
-    状态权威在 Agent；平台这一层只是「消费并展示 + 参与调度决策」。
-    ``device_count`` 来自 Agent 就绪自检 ``torch.cuda.device_count()``，不等于 1 时置 FAULT。
-    """
-    normalized = str(state or "").strip().upper()
-    if normalized not in SLOT_STATES:
-        raise SlotConfigError(f"不支持的卡位状态: {state}")
-
-    if device_count is not None and device_count != 1:
-        # 卡位验收铁律：容器内必须恰好看到 1 张卡（docs/09 §5.6 迁移纪律 ⑤）。
-        normalized = SLOT_STATE_FAULT
-        message = message or f"容器内 device_count()={device_count}，卡位验收失败"
-
-    record = {
-        "nodeId": node_id,
-        "slotId": slot_id,
-        "state": normalized,
-        "message": message,
-        "deviceCount": device_count,
-        "updatedAt": utcnow().isoformat(),
-    }
-
-    cache = cache_client
-    if cache is None:
-        from app.cache import get_cache
-
-        cache = get_cache()
-    ttl = int(getattr(settings, "DRP_SLOT_STATE_TTL_SECONDS", 120) or 120)
-    await cache.set(_state_cache_key(node_id, slot_id), record, expire=ttl)
-    return record
-
-
 async def load_slot_states(
     registry: SlotRegistry,
     *,
@@ -600,7 +558,6 @@ __all__ = [
     "load_slot_registry",
     "load_slot_states",
     "parse_slot_document",
-    "record_slot_state",
     "schedulable_node_view",
     "slot_view",
 ]
