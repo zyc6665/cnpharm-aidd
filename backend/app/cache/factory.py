@@ -40,5 +40,21 @@ def get_cache_backend(backend_type: CacheType = None) -> CacheBackend:
         raise ValueError(f"不支持的缓存后端: {backend}")
 
 
+async def reset_cache_backend() -> None:
+    """关闭当前事件循环的 Redis 连接并清空后端单例。
+
+    仅 Redis 后端需要按任务重置；memory 后端是进程内共享状态，不能清空。
+    """
+    if settings.CACHE_BACKEND != "redis":
+        return
+    try:
+        backend = get_cache_backend()
+        close = getattr(backend, "close", None)
+        if close is not None:
+            await close()
+    finally:
+        get_cache_backend.cache_clear()
+
+
 # 便捷访问
 cache = get_cache_backend()

@@ -1,8 +1,11 @@
 # backend/app/cache/redis_backend.py
 """Redis 缓存后端"""
 
-from typing import Optional, Any, List
+import asyncio
 import json
+import threading
+import weakref
+from typing import Optional, Any, List
 
 from app.cache.base import CacheBackend
 from app.config import settings
@@ -28,11 +31,43 @@ class RedisCacheBackend(CacheBackend):
 
         self.url = url or settings.effective_redis_url
         self.prefix = prefix
-        self._redis = redis.from_url(
-            self.url,
-            encoding="utf-8",
-            decode_responses=True
-        )
+        self._redis_module = redis
+        # redis-py 的连接池绑定创建它的事件循环。worker 的维护任务每次
+        # run_coro_sync() 都会新建并关闭一个循环，不能复用上一个循环的客户端；
+        # 这里按事件循环保存客户端，缓存对象本身仍是进程级单例。
+        self._clients: dict[
+            int,
+            tuple[weakref.ReferenceType[asyncio.AbstractEventLoop], Any],
+        ] = {}
+        self._clients_lock = threading.Lock()
+
+    def _redis_for_current_loop(self):
+        """返回当前事件循环专用的 Redis 客户端。"""
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        with self._clients_lock:
+            entry = self._clients.get(loop_id)
+            if entry is not None and entry[0]() is loop:
+                return entry[1]
+
+            # 清理已关闭循环留下的客户端，避免进程长期运行时累积连接池。
+            for stale_id, (loop_ref, _) in list(self._clients.items()):
+                stale_loop = loop_ref()
+                if stale_loop is None or stale_loop.is_closed():
+                    self._clients.pop(stale_id, None)
+
+            client = self._redis_module.from_url(
+                self.url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+            self._clients[loop_id] = (weakref.ref(loop), client)
+            return client
+
+    @property
+    def _redis(self):
+        """当前事件循环绑定的 Redis 客户端（禁止跨循环共享连接池）。"""
+        return self._redis_for_current_loop()
 
     def _make_key(self, key: str) -> str:
         """添加前缀"""
@@ -181,8 +216,21 @@ class RedisCacheBackend(CacheBackend):
         return True
 
     async def close(self):
-        """关闭连接"""
-        await self._redis.close()
+        """关闭当前事件循环使用的连接，不影响其他循环的客户端。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        with self._clients_lock:
+            entry = self._clients.pop(id(loop), None)
+        if entry is None:
+            return
+        client = entry[1]
+        aclose = getattr(client, "aclose", None)
+        if aclose is not None:
+            await aclose()
+        else:
+            await client.close()
 
     # ========== Redis 特有方法 ==========
 
