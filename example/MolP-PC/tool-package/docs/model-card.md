@@ -9,7 +9,7 @@ MolP-PC is the selected V1 delivery tool family for Basic ADMET Prediction and A
 - Tool slug: `molp-pc-property-prediction`
 - Model version: `0.1.1`
 - Endpoint/runtime reference: `local_runtime:molp-pc-property-prediction@0.1.1`
-- Runtime image digest: `registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444`
+- Runtime image digest: `registry.example/aidd/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444`
 - Weights manifest: `artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666`
 
 ## Interpretation Boundary

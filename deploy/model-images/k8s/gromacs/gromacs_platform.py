@@ -455,7 +455,7 @@ def main() -> int:
     write_json(out / "report.json", report)
 
     result = {
-        "result_version": "aidd.sciminer/result",
+        "result_version": "aidd.platform/result",
         "artifacts": {
             "trajectory": {
                 "type": "md_trajectory@1",

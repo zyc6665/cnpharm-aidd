@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: pocket2mol-pocket-ligand-generation
@@ -72,7 +72,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/pocket2mol-runtime:0.1.2
+      image: registry.example/aidd/pocket2mol-runtime:0.1.2
       image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       includes:
         - python

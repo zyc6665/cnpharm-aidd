@@ -1,4 +1,4 @@
-schema_version: sciminer.model-package.v1
+schema_version: aidd.platform/model-package.v1
 slug: example-model-package-template
 name: Example Model Package Template
 version: 0.1.0
@@ -15,7 +15,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/example-model-runtime:0.1.0
+      image: registry.example/aidd/example-model-runtime:0.1.0
       image_digest: sha256:<fill-in-image-digest>
       includes:
         - python

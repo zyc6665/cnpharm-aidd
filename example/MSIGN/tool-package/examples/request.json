@@ -1,5 +1,5 @@
 {
-  "request_version": "aidd.sciminer/request",
+  "request_version": "aidd.platform/request",
   "task": {
     "id": "example-task",
     "tool_slug": "msign-affinity-prediction",

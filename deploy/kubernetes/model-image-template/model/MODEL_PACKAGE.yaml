@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/model-package.v1
+api_version: aidd.platform/model-package.v1
 slug: replace-with-model-slug
 name: Replace with model name
 version: 0.1.0

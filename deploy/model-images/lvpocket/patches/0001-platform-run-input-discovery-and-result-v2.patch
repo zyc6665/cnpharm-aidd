@@ -51,7 +51,7 @@
 -    "success": True,
 -    "message": "LVpocket pocket prediction completed",
 -    "outputs": {
-+    "result_version": "aidd.sciminer/result.v2",
++    "result_version": "aidd.platform/result.v2",
 +    "artifacts": artifact_map,
 +    "metrics": {
 +        "message": "LVpocket pocket prediction completed",

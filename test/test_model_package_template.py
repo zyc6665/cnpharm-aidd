@@ -58,7 +58,7 @@ def test_model_package_template_metadata_declares_model_side_contract():
     metadata = yaml.safe_load((TEMPLATE_ROOT / "MODEL_PACKAGE.yaml").read_text(encoding="utf-8"))
     runtime = metadata["runtime"]
 
-    assert metadata["schema_version"] == "sciminer.model-package.v1"
+    assert metadata["schema_version"] == "aidd.platform/model-package.v1"
     assert metadata["entrypoint"] == "platform_run.sh"
     assert runtime["python"] == "3.10"
     assert runtime["artifacts"]["primary"]["kind"] == "container"
@@ -98,7 +98,7 @@ def test_model_package_template_runtime_builds_standard_result(tmp_path: Path):
         output_dir=output_dir,
     )
 
-    assert result["result_version"] == "aidd.sciminer/result"
+    assert result["result_version"] == "aidd.platform/result"
     assert result["artifacts"]["properties"]["type"] == "molecule_table@1"
     assert set(result["artifacts"]["properties"]["files"]) == {"table_file", "metadata_json"}
     assert result["artifacts"]["properties"]["metadata"]["molecule_id_field"] == "molecule_id"

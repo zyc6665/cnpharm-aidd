@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: molp-pc-property-prediction
@@ -72,7 +72,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/molp-pc-runtime:0.1.1
+      image: registry.example/aidd/molp-pc-runtime:0.1.1
       image_digest: "sha256:4444444444444444444444444444444444444444444444444444444444444444"
       includes:
         - python

@@ -22,14 +22,17 @@ ENV GMXDATA=/opt/gromacs/share/gromacs \
 
 RUN pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple minio==7.2.10 mdtraj==1.10.3
 
-COPY platform_adaptor /opt/sciminer/platform_adaptor
-COPY gromacs_platform.py /opt/sciminer/gromacs/gromacs_platform.py
-COPY mmpbsa_platform.py /opt/sciminer/gromacs/mmpbsa_platform.py
-RUN chmod +x /opt/sciminer/platform_adaptor/*.sh /opt/sciminer/gromacs/*.py
+COPY platform_adaptor /opt/aidd/platform_adaptor
+COPY gromacs_platform.py /opt/aidd/gromacs/gromacs_platform.py
+COPY mmpbsa_platform.py /opt/aidd/gromacs/mmpbsa_platform.py
+RUN chmod +x /opt/aidd/platform_adaptor/*.sh /opt/aidd/gromacs/*.py
 
-ENV PLATFORM_ADAPTOR_ROOT=/opt/sciminer/platform_adaptor \
-    DRP_MODEL_ENTRY=/opt/sciminer/gromacs/gromacs_platform.py \
+ENV PLATFORM_ADAPTOR_ROOT=/opt/aidd/platform_adaptor \
+    DRP_MODEL_ENTRY=/opt/aidd/gromacs/gromacs_platform.py \
     MODEL_PYTHON=/usr/bin/python3 \
     PLATFORM_PYTHON=/usr/bin/python3
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/opt/sciminer/platform_adaptor/entrypoint.sh"]
+# 兼容存量 DB entrypoint（/opt/sciminer/...）：新镜像提供同名符号链接
+RUN ln -sfn /opt/aidd /opt/sciminer
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/aidd/platform_adaptor/entrypoint.sh"]

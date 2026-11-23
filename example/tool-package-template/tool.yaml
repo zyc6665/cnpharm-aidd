@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: protein-pocket-template
@@ -55,7 +55,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/protein-pocket-template-runtime:2.0.0
+      image: registry.example/aidd/protein-pocket-template-runtime:2.0.0
       image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       includes:
         - python

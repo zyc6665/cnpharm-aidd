@@ -1,5 +1,5 @@
 {
-  "request_version": "aidd.sciminer/request",
+  "request_version": "aidd.platform/request",
   "task": {
     "id": "example-gromacs-md-simulation",
     "tool_slug": "gromacs-md-simulation",

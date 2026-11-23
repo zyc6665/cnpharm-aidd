@@ -593,7 +593,7 @@ def main() -> int:
         "best_affinity_kcal_mol": min(best_affinities) if best_affinities else None,
     }
     result = {
-        "result_version": "aidd.sciminer/result",
+        "result_version": "aidd.platform/result",
         "artifacts": {
             "docking_results": {
                 "type": "molecule_table@1",

@@ -26,11 +26,11 @@ def test_platform_run_v2_probes_model_root_support() -> None:
     source = (TEMPLATE_ADAPTOR / "platform_run_v2.sh").read_text(encoding="utf-8")
 
     assert "MODEL_ROOT_ARGS=()" in source
-    # 入口改为支持 drp-runner 契约的 DRP_MODEL_ENTRY（默认仍是 /opt/sciminer/model/platform_run.sh）
+    # 入口改为支持 drp-runner 契约的 DRP_MODEL_ENTRY（默认仍是 /opt/aidd/model/platform_run.sh）
     assert 'grep -q -- \'--model-root)\' "${DRP_MODEL_ENTRY}"' in source
     assert '${MODEL_ROOT_ARGS[@]+"${MODEL_ROOT_ARGS[@]}"}' in source
     # 无条件传的写法必须已经不存在（否则探测就是摆设）
-    assert '\n  --model-root "${MODEL_PACKAGE_ROOT:-/opt/sciminer/model}" \\\n' not in source
+    assert '\n  --model-root "${MODEL_PACKAGE_ROOT:-/opt/aidd/model}" \\\n' not in source
 
 
 def test_model_images_readme_documents_weight_externalisation() -> None:
@@ -46,7 +46,7 @@ def test_lvpocket_weights_manifest_matches_dockerfile_mountpoint() -> None:
     dockerfile = (LVPOCKET / "Dockerfile").read_text(encoding="utf-8")
 
     mount_points = [item["mountPath"] for item in spec["weights"]]
-    assert mount_points == ["/opt/sciminer/model/new_best"]
+    assert mount_points == ["/opt/aidd/model/new_best"]
     for mount_point in mount_points:
         assert f"mkdir -p {mount_point}" in dockerfile, (
             f"Dockerfile 必须为 {mount_point} 建好空目录作为挂载点"
@@ -77,11 +77,11 @@ def test_lvpocket_dockerfile_keeps_weights_out_and_pythonpath_set() -> None:
         if stripped.startswith("COPY ") and "new_best" in stripped:
             raise AssertionError(f"权重不应进入镜像：{stripped}")
     # 模型根必须在 PYTHONPATH 里（scripts/ 子目录的脚本要能 import 根目录的 pybel.py）
-    assert "PYTHONPATH=/opt/sciminer/model" in dockerfile
+    assert "PYTHONPATH=/opt/aidd/model" in dockerfile
     # openbabel 的库修补必须在构建期执行
     assert "patch_openbabel.py" in dockerfile
     # env/bin/python 软链（模型入口硬编码了这个路径）
-    assert "ln -sfn /usr/local/bin/python /opt/sciminer/model/env/bin/python" in dockerfile
+    assert "ln -sfn /usr/local/bin/python /opt/aidd/model/env/bin/python" in dockerfile
 
 
 def test_shared_openbabel_patch_is_idempotent(tmp_path: Path) -> None:

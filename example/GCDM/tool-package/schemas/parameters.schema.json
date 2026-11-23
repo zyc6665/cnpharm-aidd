@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:sciminer:gcdm-pocket-generation:parameters:v2",
+  "$id": "urn:aidd:gcdm-pocket-generation:parameters:v2",
   "title": "GCDM pocket-conditioned generation parameters",
   "type": "object",
   "properties": {

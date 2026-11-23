@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Translate a platform request.v2 payload into the legacy fields research models read.
 
-The platform passes a standard ``aidd.sciminer/request`` document with grouped
+The platform passes a standard ``aidd.platform/request`` document with grouped
 ``inputs`` (per-slot ``files`` keyed by standard role) and ``parameters``.  The
 upstream model entry scripts in these images predate that contract and expect a
 flat ``input_files`` mapping plus ``params``.  This adapter bridges the two

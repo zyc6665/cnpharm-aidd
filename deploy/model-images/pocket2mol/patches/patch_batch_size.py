@@ -12,7 +12,7 @@
 
 用法（在模型目录下执行）：
 
-    python3 patch_batch_size.py /opt/sciminer/Pocket2Mol-main
+    python3 patch_batch_size.py /opt/aidd/Pocket2Mol-main
 
 补丁是幂等的：已经打过会直接说明并退出 0。
 """
