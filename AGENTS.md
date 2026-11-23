@@ -22,20 +22,31 @@
 
 | 目录 | 内容 | 归属 |
 |---|---|---|
-| `backend/app/api/v1/` | 31 个路由模块，API 入口 | 按域分（D1–D8） |
-| `backend/app/services/` | 94 个业务服务模块，**绝大多数业务逻辑在这里** | 按域分 |
-| `backend/app/tasks/`、`execution/`、`worker/`、`gpu/` | 任务状态机、执行器、Celery、卡位调度（合计 ~17k 行） | **L1 执行调度**（平台层，单人负责） |
-| `backend/app/models/`、`alembic/` | ORM 模型与迁移（75 个迁移） | **契约层**，改动要单独 PR |
-| `backend/app/tool_templates/` | 12 个工具 YAML 模板 | **契约层** |
-| `frontend/src/views/`、`components/` | Vue 3 页面与组件（workflow/tasks/tools 三个目录最大） | 按域分 |
-| `frontend/src/locales/` | 中英双语，两个 `index.ts` 各 3340 行 | **汇聚点**，改前先看第 6 节 |
-| `frontend/src/router/index.ts` | 476 行单体路由表 | **汇聚点** |
-| `deploy/` | compose（dev/prod/k100-test）、k8s 清单、node-agent 部署 | **L2 部署算力** |
-| `scripts/` | 校验、迁移、性能、环境脚本 | **契约层**（公共工具） |
+| `backend/app/api/v1/` | 路由模块，API 入口 | 按域分（D1–D8，主责 P2） |
+| `backend/app/services/` | 业务服务模块，**绝大多数业务逻辑在这里** | 按域分（主责 P2；`platform_tool_seeding.py` 等契约区归 P1） |
+| `backend/app/tasks/`、`execution/`、`worker/`、`gpu/` | 任务状态机、执行器、Celery、卡位调度 | **L1 执行调度**（P1，红区） |
+| `backend/app/models/`、`alembic/` | ORM 模型与数据库迁移 | **契约层**（P1），改动要单独 PR |
+| `backend/app/tool_templates/` | 工具模板 YAML | **契约层**（P4 主责 + P1 复核） |
+| `frontend/src/views/`、`components/` | Vue 3 页面与组件（workflow/tasks/tools 三个目录最大） | 按域分（P3 独占 `frontend/`） |
+| `frontend/src/locales/` | 中英双语 `index.ts` 两份 | **汇聚点**（P3），改前先看第 6 节 |
+| `frontend/src/router/index.ts` | 单体路由表 | **汇聚点**（P3） |
+| `deploy/` | compose（dev/prod/k100-test）、k8s 清单 | **L2 部署算力**（P4 主责 + P1 复核） |
+| `scripts/` | 校验、迁移、性能、环境脚本 | **契约层**（公共工具；`build-offline-package.sh` 归 P4） |
 | `docs/` | 交付文档集，先看 [docs/README.md](docs/README.md) | 全队 |
-| `test/` | 290 个后端测试文件 | 全队 |
+| `test/` | 后端测试 | 全队 |
 
 **没有 Makefile**：`docs/08-开发与工程/10-开发规范与编码约定.md` §12.2 提到的 `make` 目标、`packages/drp_compute`、`deploy/dev/` 属于产品线口径，本仓库不存在。**以仓库实际目录为准**。
+
+**规模不要背数字**：本节刻意不写死文件数 / 行数（静态计数极易腐化）。要多少现查：
+
+```bash
+find backend/app/api/v1 -maxdepth 1 -name '*.py' | wc -l   # 路由模块数
+find backend/app/services -maxdepth 1 -name '*.py' | wc -l # 服务模块数
+ls backend/alembic/versions/*.py | wc -l                    # 迁移版本数
+find test -name 'test_*.py' | wc -l                         # 后端测试文件数
+wc -l frontend/src/router/index.ts                          # 路由表行数
+wc -l frontend/src/locales/zh-CN/index.ts                   # 中文词条文件行数
+```
 
 ---
 
@@ -51,19 +62,19 @@
 
 ---
 
-## 4. 环境：数据集中，应用各本地
+## 4. 环境：日常本机独立数据栈，4090 是共享联调 / GPU 调试
 
-**数据服务跑在 4090 节点**（k3s，namespace `cnpharm-aidd`），**后端 / worker / beat / 前端跑在各自机器**：
+**日常开发一律走本机 `deploy/compose/docker-compose.dev.yml` 起独立数据栈**（PostgreSQL / Redis / MinIO 全在本机，随起随停、可随便造数据）。**4090 服务器（`10.202.2.228`）是团队共享联调环境，同时是 P4 的 GPU 真实模型调试环境**——多人并发写同一个库会互相踩数据，**禁止把它当作普通日常开发的直连数据库**。
 
-| 服务 | 地址 | 说明 |
+| 用途 | 数据来源 | 说明 |
 |---|---|---|
-| PostgreSQL | `10.202.2.228:30432` | 库 `scitool`，用户 `scitool` |
-| Redis | `10.202.2.228:30379` | 带密码 |
-| MinIO | `10.202.2.228:30900` / 控制台 `:30901` | 默认桶含 `scitool-files` 等 7 个 |
-| 后端 | 本地 `:8000` | uvicorn |
-| 前端 | 本地 `:5173` | vite dev server |
+| 日常开发（默认） | 本机 `docker-compose.dev.yml` | `cd deploy/compose && docker compose -f docker-compose.dev.yml up -d`；连接串指向 `127.0.0.1` |
+| 团队联调 / 集成验证 | 4090 `10.202.2.228` | PG `:30432`、Redis `:30379`、MinIO `:30900`（控制台 `:30901`）；只做短期联调，改数据前先在群里打招呼 |
+| P4 真实模型 / GPU 调试 | 4090 | 真实模型镜像与 GPU 卡位调试在此进行，切勿用来跑日常 CRUD |
 
-首次接入只需改 `backend/.env` 的 6 行（`DATABASE_URL`、`MINIO_ENDPOINT`、`REDIS_HOST`、`CELERY_BROKER_URL`、`CELERY_RESULT_BACKEND`、`K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT`），口径见 `docs/internal/30` §8。
+后端 / worker / beat / 前端仍跑在各自机器：后端本地 `:8000`（uvicorn）、前端本地 `:5173`（vite dev server）。
+
+> `.env` 连接串按所选数据源二选一：本机开发指向 `127.0.0.1`，联调指向 `10.202.2.228`。需改的 6 行（`DATABASE_URL`、`MINIO_ENDPOINT`、`REDIS_HOST`、`CELERY_BROKER_URL`、`CELERY_RESULT_BACKEND`、`K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT`）口径见 `docs/internal/30` §8。
 
 ### 启动顺序
 
@@ -106,6 +117,7 @@ curl http://127.0.0.1:8000/api/v1/system/health     # celery 项应为 healthy
 | 前端测试 + 构建 | `cd frontend && npm run test && npm run build` |
 | 前端 E2E | `cd frontend && npm run test:e2e -- --project=chromium --reporter=list --workers=1` |
 | 迁移升级 / 回滚 | `cd backend && python -m alembic upgrade head` / `python -m alembic downgrade base` |
+| 迁移单头校验 | `cd backend && python -m alembic heads`（应恰为 1 行；CI 已强制） |
 | 离线合规 | `python scripts/check_offline_compliance.py` |
 | 文档链接 | `python scripts/check_doc_links.py` |
 | 注册新工具 | `python scripts/create_tool.py`（字段见 `docs/internal/28`） |
@@ -121,7 +133,7 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 - `backend/alembic/versions/` — 迁移取号前先说明，避免撞号；命名 `YYYYMMDD_NN_主题.py`，**必须写可用的 `downgrade()`**
 - `backend/app/api/v1/__init__.py` — 路由注册表
-- `backend/app/services/platform_tool_seeding.py` — 10 个平台工具 slug 与时限的**唯一真源**（`REQUIRED_TOOL_SLUGS` / `TOOL_TIMEOUT_MINUTES`，gromacs-md 4320 分钟、pocket2mol 720、boltz2 各 360、多数 240、默认 60）
+- `backend/app/services/platform_tool_seeding.py` — 平台工具 slug 与时限的**唯一真源**（`REQUIRED_TOOL_SLUGS` / `TOOL_TIMEOUT_MINUTES`，gromacs-md 4320 分钟、pocket2mol 720、boltz2 各 360、多数 240、默认 60）
 - `backend/app/tool_templates/` — 工具模板 YAML
 - `docs/03-接口/05-API接口规格说明书.md` — 接口契约
 - `.github/`、`deploy/`、`scripts/` — 门禁、部署与公共脚本
@@ -130,15 +142,15 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 
 | 文件 | 现状 | 怎么改 |
 |---|---|---|
-| `frontend/src/locales/zh-CN/index.ts` + `en-US/index.ts` | 各 3340 行，近 300 提交里改动最频繁（各 72 次） | **两个文件必须同一次提交**，键名一致，缺键会让 en 界面显示原始 key |
-| `frontend/src/router/index.ts` | 476 行单体 | 加路由只在末尾追加，别重排 |
-| `backend/app/config.py` | 全局配置，26 次改动 | 新增配置项要同时改 `.env.example` 与部署清单 |
+| `frontend/src/locales/zh-CN/index.ts` + `en-US/index.ts` | 中英双语词条，历史改动最频繁 | **两个文件必须同一次提交**，键名一致，缺键会让 en 界面显示原始 key |
+| `frontend/src/router/index.ts` | 单体路由表 | 加路由只在末尾追加，别重排 |
+| `backend/app/config.py` | 全局配置，改动频繁 | 新增配置项要同时改 `.env.example` 与部署清单 |
 | `frontend/src/types/models.d.ts` | 全局类型 | 改字段先确认后端 schema |
 | `backend/app/api/v1/__init__.py` | 路由表 | 与契约层同流程 |
 
 ### 6.3 三个业务域在后端没有独立模块
 
-分子设计 / 亲和力 ADMET / 虚拟筛选（D3–D5）共用 `api/v1/tasks.py`、`api/v1/results.py` 与 `tool_templates/`。**前端按域切、后端按模块切**：预测类域的 owner 拥有自己的 views 与 `tool_templates/` 里的 YAML，但不拥有 `tasks.py` / `results.py`。改这两个文件前先在 Issue 里说一声。
+分子设计 / 亲和力 ADMET / 虚拟筛选（D3–D5）共用 `api/v1/tasks.py`、`api/v1/results.py` 与 `tool_templates/`。**前端按域切、后端按模块切**：前端页面归 P3，`tool_templates/` 里的 YAML 归 P4（P1 复核），业务域后端不拥有 `tasks.py` / `results.py`。改这两个文件前先在 Issue 里说一声。
 
 ---
 
@@ -160,8 +172,8 @@ CI（`.github/workflows/ci.yml`）跑 10 个作业：后端规范、后端测试
 ## 8. 工作方式（与 CONTRIBUTING 一致，这里是摘要）
 
 - **Issue 是唯一工作单元**：一个 Issue ≤ 2 天工作量，必须写清需求编号（M1–M7）、验收标准、影响的域。没有 Issue 的 PR 不合并。
-- **PR**：≤ 400 行、≤ 2 天、只碰一个域；标题 `type(scope): subject`；正文 `Closes #N`；合并方式 squash。
-- **分支**：`feature/` `fix/` `refactor/` `docs/` `release/` `spike/`；**活不过 3 天**；谁后合谁 rebase。
+- **PR**：≤ 800 行（除测试与自动生成文件外）、≤ 2 天、只碰一个域；标题 `type(scope): subject`；正文 `Closes #N`；合并方式 squash。
+- **分支**：`{type}/{role}-{issue号}-{简述}`（见 §11.2）；**活不过 3 天**；谁后合谁 rebase。
 - **评审**：1 人通过即可（CODEOWNERS 配好后按域找人）。**不要自己合自己的 PR**。
 - **进度**：看板 5 列（Backlog / Ready / In Progress / In Review / Done），In Progress 每人 ≤ 1；每日在 Discussion 的站会帖回 3 行。
 - **同步**：每天开工先 `git fetch` 看清本地落后多少，落后就 rebase——纪律见第 9 节。
@@ -262,12 +274,50 @@ echo "最新main: $(git log -1 --format='%h %s' origin/main)"
 
 ---
 
-## 11. 给 AI Agent 的额外约定
+## 11. 给 AI Agent 的约定与目录权限红线
+
+### 11.1 AI Agent 三色目录权限红线
+
+任何 AI 会话（含多 Agent 并行）改动文件前，先按颜色判定「能不能直接改」。颜色与文件大小无关，只与目录归属有关。
+
+| 颜色 | 范围 | 规则 |
+|---|---|---|
+| 🟢 绿区（自主修改） | 当前开发者角色管辖的**业务代码与对应测试**：P3 = `frontend/src` 自己的页面/组件/测试；P2 = 自己域的 `api/v1/<域>.py`、`services/<域>_*.py` 及其测试 | 可直接改，改完按第 5 节跑测试 |
+| 🟡 黄区（先输出 Plan 再改） | `backend/app/api/v1/__init__.py`、`backend/app/tasks.py`、`backend/app/results.py`、前端共享类型（`frontend/src/types/`）与路由（`frontend/src/router/`）、公共组件（`frontend/src/components/common/`） | 先输出改动 Plan，经对应 Owner（P1/P3）确认后再动手 |
+| 🔴 红区（禁止夹带业务 PR） | `backend/alembic/`、`backend/app/config.py`、L1 执行调度与状态机（`backend/app/{tasks,execution,worker}/`、`tasks.py`、`results.py`）、`auth_sso` 认证链路、`backend/app/services/platform_tool_seeding.py`、`deploy/` 生产清单、`.github/` | **必须单独提小 PR**，且经 `@zyc6665`（P1）审批；禁止混进业务 PR |
+
+> 注：`tasks.py` / `results.py` 同时被黄区（改前出 Plan）与红区（不可夹带、需 P1 单独审批）覆盖——因为它们承载 L1 调度与结果契约，默认按红区处理，仅当 P1 明确同意才可按黄区走。
+
+**跨端铁律（硬约束，没有例外）：**
+
+- 前端任务的 AI **严禁**改动 `backend/` 与 `deploy/`；
+- 后端任务的 AI **严禁**改动 `frontend/`；
+- 部署与模型适配任务的 AI **严禁**改动业务数据库表结构（`backend/alembic/` 迁移、`backend/app/models/`）。
+
+> 颜色归属不明时，默认按黄色处理（先出 Plan），不要凭感觉直接改。
+
+### 11.2 多 Agent 并行工作树规范
+
+- **同一开发者并行多个 AI 会话时，必须用 `git worktree` 隔离目录**，禁止多个会话在同一工作树里切分支 / 改文件（会互相覆盖、误 `stash` 别人的 WIP）：
+
+  ```bash
+  # 每个会话一个独立目录，各自从 origin/main 切出，互不干扰
+  git worktree add ../wt-<role>-<issue> -b <type>/<role>-<issue号>-<简述> origin/main
+  ```
+
+- **分支命名统一**：`{type}/{role}-{issue号}-{简述}`。
+  - `type`：`feature` / `fix` / `refactor` / `docs` / `chore`
+  - `role`：`fe` / `be` / `ops` / `arch`
+  - 例：`feature/fe-123-tool-form`、`fix/be-88-task-retry`、`chore/ops-45-offline-pkg`
+- **AI 生成的代码必须人工兜底**：由对应开发者本地跑通测试、人工 review 后才能提 PR；**开发者对 PR 负全责**（AI 只是执行工具，不承担正确性责任）。
+- **不碰别人的 worktree**：每个 worktree 只归创建它的会话；不要跨目录 `git checkout` / `git stash` / 删除文件。
+
+### 11.3 通用约定
 
 1. **先读再改**：改动前读 `docs/internal/30` 的域边界表，确认这个文件归谁；跨域改动拆成多个 PR。
-2. **不碰别人的 WIP**：工作树里未提交的文件可能属于其他人，不要 `git checkout --`、`git stash` 或删掉它们。用独立 worktree 从 `origin/main` 开工。
+2. **不碰别人的 WIP**：工作树里未提交的文件可能属于其他人，不要 `git checkout --`、`git stash` 或删掉它们。用独立 worktree 从 `origin/main` 开工（见 11.2）。
 3. **不绕过门禁**：不要 `--no-verify`、不要强推、不要为了过 CI 删测试或放宽断言。
-4. **迁移必须可回滚**：写 `downgrade()`，本地跑 `upgrade head` → `downgrade base` → `upgrade head`。
+4. **迁移必须可回滚**：写 `downgrade()`，本地跑 `upgrade head` → `downgrade base` → `upgrade head`；改动前先 `python -m alembic heads` 确认单头。
 5. **报完成前先跑基线**：第 5 节的四件套（flake8 / pytest / npm test / npm build）加上改动相关的检查，贴出实际输出再下结论。
 6. **不写死密钥**：`backend/.env` 不进仓库；文档里用 `<密码>` 占位。
 7. **文档与代码同批**：改了接口就改 `docs/03-接口/05-API接口规格说明书.md`，改了部署就改 `docs/05-部署/13-部署架构与上线方案.md`/`docs/internal/21`，否则下一个人按旧文档操作。
