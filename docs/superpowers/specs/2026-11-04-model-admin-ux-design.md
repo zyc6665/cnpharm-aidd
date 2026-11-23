@@ -22,7 +22,7 @@
 **目标**
 1. 管理员 5 步内完成一个新模型的上架；每步可校验、可保存草稿。
 2. 只保留 k8s 唯一执行路径；删除工具类型选择与旧 Agent 语义映射。
-3. 以 Tool Package v2（`aidd.sciminer/tool-package`）为标准：输入/输出用平台标准 Artifact 类型，运行参数用 `parameters_schema`。
+3. 以 Tool Package v2（`aidd.platform/tool-package`）为标准：输入/输出用平台标准 Artifact 类型，运行参数用 `parameters_schema`。
 4. 版本变更清晰：查看历史版本、基于当前版本“新建版本”、发布/停用、变更说明必填。
 5. 内置「模型接入教程」helper：镜像构建 → 入口/权重 → Tool Package 契约 → 发布 → 冒烟。
 

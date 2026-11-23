@@ -27,7 +27,7 @@
             └─ 收集 output/ → 写 Artifact / DataFile → 页面可见
 ```
 
-关键点：**平台只认标准契约**（`aidd.sciminer/result` + 标准 Artifact 类型），
+关键点：**平台只认标准契约**（`aidd.platform/result` + 标准 Artifact 类型），
 模型自己的输入/输出格式差异全部由镜像适配层消化，不改平台代码。
 
 ## 2. 前置条件
@@ -88,7 +88,7 @@ docker push 127.0.0.1:30500/aidd/compute-molp-pc:1.0.0
 ```
 EXECUTOR_ENABLED_K8S=true
 K8S_ADAPTER_KUBECONFIG=<kubeconfig 路径或 in-cluster>
-K8S_ADAPTER_NAMESPACE=sciminer-model-jobs
+K8S_ADAPTER_NAMESPACE=aidd-model-jobs
 K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT=http://<minio-cluster-ip>:9000   # 必须集群内地址，不能用 NodePort
 K8S_ADAPTER_OBJECT_STORAGE_ACCESS_KEY=...
 K8S_ADAPTER_OBJECT_STORAGE_SECRET_KEY=...

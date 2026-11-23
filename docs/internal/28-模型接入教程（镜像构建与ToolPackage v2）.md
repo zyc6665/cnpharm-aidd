@@ -1,7 +1,7 @@
 # 模型接入教程：镜像构建 + Tool Package v2 + 发布（k8s 调度）
 
 > 面向管理员/算法同学。按本教程可把一个模型从“本地代码/权重”做成平台可调度的模型，并在「工具管理 → 新建模型」上架。
-> 平台当前执行方式：**k8s_job**（GPU 通过 `nvidia.com/gpu` 申请），集群 `k3s-4090`，仓库 `10.202.2.228:30500`，模型作业命名空间 `sciminer-model-jobs`。
+> 平台当前执行方式：**k8s_job**（GPU 通过 `nvidia.com/gpu` 申请），集群 `k3s-4090`，仓库 `10.202.2.228:30500`，模型作业命名空间 `aidd-model-jobs`。
 
 ---
 
@@ -45,13 +45,13 @@ docker inspect --format='{{index .RepoDigests 0}}' 10.202.2.228:30500/aidd/compu
 
 ---
 
-## 2. 编写 Tool Package v2（`aidd.sciminer/tool-package`）
+## 2. 编写 Tool Package v2（`aidd.platform/tool-package`）
 
 > 平台以该 manifest 作为工具/模型契约：输入输出用**标准 Artifact 类型**，运行参数用 `parameters_schema`，资源画像与镜像在 `runtime`。
 
 ### 2.1 完整示例（以口袋条件分子生成为例）
 ```yaml
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: pocket2mol-pocket-ligand-generation
@@ -146,7 +146,7 @@ variants:
 > 工具类型固定 `k8s_job`，页面不再提供 Docker/Python/SSH 选择，也不再需要旧版 Agent 语义映射。
 
 ### 3.1 冒烟测试
-- 用最小输入起一个真实 K8s Job：`kubectl -n sciminer-model-jobs get pods -w`；
+- 用最小输入起一个真实 K8s Job：`kubectl -n aidd-model-jobs get pods -w`；
 - 校验：Pod `Succeeded`、`result.json` 合法、产物路径均在 `/work/out`、`progress.json` 可读；
 - 通过后再「设为当前版本」。
 
