@@ -21,9 +21,8 @@ class ToolImportConfigError(ValueError):
     """工具导入配置错误。"""
 
 
-SUPPORTED_TOOL_TYPES = {"docker_image", "python_script", "ssh_job", "k8s_job"}
-SUPPORTED_SSH_RUNNER_MODES = {"docker_exec", "shell"}
-SUPPORTED_SSH_AUTH_TYPES = {"key", "password"}
+# SSH 执行通道已退役（2026-11 执行通道收敛，统一 k8s_job）；导入配置不再接受 ssh_job。
+SUPPORTED_TOOL_TYPES = {"docker_image", "python_script", "k8s_job"}
 
 
 def resolve_script_relative_path(script_file: str | Path, target_path: str | Path) -> Path:
@@ -93,8 +92,6 @@ def validate_tool_import_config(config: Dict[str, Any]) -> Dict[str, Any]:
         _validate_docker_tool_config(tool_config)
     elif tool_type == "python_script":
         _validate_python_script_tool_config(tool_config)
-    elif tool_type == "ssh_job":
-        _validate_ssh_job_tool_config(tool_config)
     elif tool_type == "k8s_job":
         _validate_k8s_job_tool_config(tool_config)
 
@@ -146,72 +143,6 @@ def _validate_python_script_tool_config(tool_config: Dict[str, Any]) -> None:
         raise ToolImportConfigError(
             "tool_config.script_path or tool_config.script_content is required for python_script"
         )
-
-
-def _validate_ssh_job_tool_config(tool_config: Dict[str, Any]) -> None:
-    """校验 ssh_job 配置。"""
-    for field_name in ("host", "username", "remote_base_dir", "entrypoint"):
-        value = tool_config.get(field_name)
-        if not isinstance(value, str) or not value.strip():
-            raise ToolImportConfigError(f"tool_config.{field_name} is required for ssh_job")
-
-    auth_type = str(tool_config.get("auth_type", "key")).lower()
-    if auth_type not in SUPPORTED_SSH_AUTH_TYPES:
-        raise ToolImportConfigError(
-            f"tool_config.auth_type must be one of {sorted(SUPPORTED_SSH_AUTH_TYPES)}"
-        )
-    tool_config["auth_type"] = auth_type
-
-    if auth_type == "key":
-        auth_ref = tool_config.get("auth_ref")
-        if not isinstance(auth_ref, str) or not auth_ref.strip():
-            raise ToolImportConfigError("tool_config.auth_ref is required for ssh_job key auth")
-    else:
-        password_ref = tool_config.get("password_ref")
-        if not isinstance(password_ref, str) or not password_ref.strip():
-            raise ToolImportConfigError(
-                "tool_config.password_ref is required for ssh_job password auth"
-            )
-
-    runner_mode = tool_config.get("runner_mode", "shell")
-    if not isinstance(runner_mode, str) or runner_mode not in SUPPORTED_SSH_RUNNER_MODES:
-        raise ToolImportConfigError(
-            f"tool_config.runner_mode must be one of {sorted(SUPPORTED_SSH_RUNNER_MODES)}"
-        )
-    tool_config["runner_mode"] = runner_mode
-
-    if runner_mode == "docker_exec":
-        container_name = tool_config.get("container_name")
-        if not isinstance(container_name, str) or not container_name.strip():
-            raise ToolImportConfigError(
-                "tool_config.container_name is required for ssh_job docker_exec mode"
-            )
-
-    timeout_sec = tool_config.get("timeout_sec", 3600)
-    if not isinstance(timeout_sec, int) or timeout_sec <= 0:
-        raise ToolImportConfigError("tool_config.timeout_sec must be a positive integer")
-    tool_config["timeout_sec"] = timeout_sec
-
-    port = tool_config.get("port", 22)
-    if not isinstance(port, int) or port <= 0:
-        raise ToolImportConfigError("tool_config.port must be a positive integer")
-    tool_config["port"] = port
-
-    output_globs = tool_config.get("output_globs")
-    if output_globs is not None:
-        if not isinstance(output_globs, list) or not all(isinstance(item, str) for item in output_globs):
-            raise ToolImportConfigError("tool_config.output_globs must be a string array")
-
-        for pattern in output_globs:
-            normalized = Path(pattern).as_posix()
-            if normalized.startswith("/") or ".." in normalized.split("/"):
-                raise ToolImportConfigError(
-                    "tool_config.output_globs may only reference files under output/"
-                )
-            if not normalized.startswith("output/"):
-                raise ToolImportConfigError(
-                    "tool_config.output_globs may only reference files under output/"
-                )
 
 
 def _validate_k8s_job_tool_config(tool_config: Dict[str, Any]) -> None:

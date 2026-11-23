@@ -38,21 +38,21 @@ async def test_execution_service_delegates_complete_lifecycle_to_registered_adap
             calls.append(("collect", execution_id))
             return [ProducedArtifact(filename="result.json", path="output/result.json")]
 
-    service = ExecutionService({"ssh": FakeAdapter()})
+    service = ExecutionService({"k8s_job": FakeAdapter()})
     request = ExecutionRequest(
         idempotency_key="project-1:plan-1",
         project_id="project-1",
         requested_by="user-1",
         tool_package_version_id="package-version-1",
         variant="nvidia-cuda",
-        executor_type="ssh",
+        executor_type="k8s_job",
     )
 
     handle = await service.submit(request)
-    assert await service.status("ssh", handle.execution_id) == ExecutionState.RUNNING
-    assert (await service.logs("ssh", handle.execution_id, "1")).content == "running"
-    await service.cancel("ssh", handle.execution_id)
-    artifacts = await service.collect_artifacts("ssh", handle.execution_id)
+    assert await service.status("k8s_job", handle.execution_id) == ExecutionState.RUNNING
+    assert (await service.logs("k8s_job", handle.execution_id, "1")).content == "running"
+    await service.cancel("k8s_job", handle.execution_id)
+    artifacts = await service.collect_artifacts("k8s_job", handle.execution_id)
 
     assert artifacts[0].path == "output/result.json"
     assert calls == [
@@ -83,7 +83,7 @@ async def test_execution_service_binds_adapter_for_artifact_collection():
         async def collect_artifacts(self, execution_id):
             return [ProducedArtifact(filename="result.json", path=execution_id)]
 
-    source = ExecutionService({"ssh": FakeAdapter()}).artifact_source("ssh")
+    source = ExecutionService({"k8s_job": FakeAdapter()}).artifact_source("k8s_job")
 
     artifacts = await source.collect_artifacts("exec-2")
 
@@ -108,24 +108,10 @@ async def test_execution_service_reconcile_delegates_to_adapter_when_supported()
     assert calls == [("reconcile", "job-1")]
 
 
-@pytest.mark.asyncio
-async def test_execution_service_accepts_ssh_job_alias_for_registered_ssh_adapter():
-    from app.execution.contracts import ExecutionState
-    from app.execution.service import ExecutionService
-
-    class Adapter:
-        async def status(self, execution_id):
-            return ExecutionState.RUNNING
-
-    service = ExecutionService({"ssh": Adapter()})
-
-    assert await service.status("ssh_job", "job-1") == ExecutionState.RUNNING
-
-
 def test_execution_request_accepts_managed_job_types():
     from app.execution.contracts import ExecutionRequest
 
-    for executor_type in ("k8s_job", "ssh_job"):
+    for executor_type in ("k8s_job",):
         request = ExecutionRequest(
             idempotency_key=f"key-{executor_type}",
             project_id="project-1",
@@ -150,7 +136,7 @@ def test_execution_request_contract_cannot_contain_inline_credentials():
                 "requested_by": "user-1",
                 "tool_package_version_id": "version-1",
                 "variant": "cpu",
-                "executor_type": "ssh",
+                "executor_type": "k8s_job",
                 "private_key": "PRIVATE KEY CONTENT",
             }
         )

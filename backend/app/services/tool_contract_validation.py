@@ -11,10 +11,10 @@ from app.artifact_standards.registry import (
 )
 
 
+# SSH 执行通道已退役（2026-11 执行通道收敛）；ssh_job 不再是合法的工具执行类型。
 SUPPORTED_TOOL_EXECUTOR_TYPES = {
     "docker_image",
     "python_script",
-    "ssh_job",
     "k8s_job",
     "builtin",
 }

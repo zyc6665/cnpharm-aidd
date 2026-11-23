@@ -260,6 +260,3 @@ class TestNoDirectStatusAssignments:
         source = _source_path("direct_runner.py")
         _assert_no_direct_status_assignment(source)
 
-    def test_direct_recovery_does_not_assign_status_directly(self):
-        source = _source_path("direct_recovery.py")
-        _assert_no_direct_status_assignment(source)

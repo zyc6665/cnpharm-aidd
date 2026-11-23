@@ -23,14 +23,12 @@ class ExecutorResolver:
         from app.tasks.executors.docker import DockerExecutor
         from app.tasks.executors.kubernetes_job import KubernetesJobExecutor
         from app.tasks.executors.python_script import PythonScriptExecutor
-        from app.tasks.executors.ssh_job import SSHJobExecutor
 
         return {
             "builtin": BuiltinExecutor,
             "python_script": PythonScriptExecutor,
             "docker_image": DockerExecutor,
             "k8s_job": KubernetesJobExecutor,
-            "ssh_job": SSHJobExecutor,
         }
 
     def resolve(self, executor_type: str) -> type[BaseExecutor]:

@@ -79,11 +79,10 @@ def test_local_database_schema_uses_size_bytes_when_present():
 def test_executor_file_handling_entrypoints_exist():
     """执行器应保留关键文件处理入口。"""
     docker_source = read_backend_source("app/tasks/executors/docker.py")
-    ssh_source = read_backend_source("app/tasks/executors/ssh_job.py")
     base_source = read_backend_source("app/tasks/executors/base.py")
 
     assert "class DockerExecutor" in docker_source
-    assert "async def _prepare_input_files" in ssh_source
+    assert "async def _prepare_input_files" in docker_source
     assert "async def _collect_output_files" in base_source
     # 交付线移除了远程 API 执行器，其输出处理入口不应再出现。
     assert not (BACKEND_ROOT / "app" / "tasks" / "executors" / "remote_api.py").exists()

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.tasks.executor import BaseExecutor, DockerExecutor, PythonScriptExecutor, SSHJobExecutor
+from app.tasks.executor import BaseExecutor, DockerExecutor, PythonScriptExecutor
 
 
 def _build_task():
@@ -85,46 +85,6 @@ async def test_python_script_executor_collect_skips_result_json():
         assert result == ["file-2"]
         assert called_kwargs.get("skip_names") == {"result.json"}
         assert any(p.endswith("b.txt") for p in called_with)
-
-
-@pytest.mark.asyncio
-async def test_ssh_executor_collect_uses_relative_path_callbacks():
-    """SSHJobExecutor._collect_output_files should pass filename/file_meta builders."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        download_root = os.path.join(tmpdir, "download")
-        output_root = os.path.join(download_root, "output")
-        nested = os.path.join(output_root, "subdir")
-        os.makedirs(nested)
-        with open(os.path.join(nested, "c.txt"), "w") as f:
-            f.write("c")
-
-        executor = SSHJobExecutor(
-            _build_task(),
-            _build_tool_version({
-                "type": "ssh_job",
-                "host": "localhost",
-                "username": "root",
-                "runner_mode": "shell",
-            }),
-        )
-
-        called_with = None
-        called_kwargs = None
-
-        async def fake_collect(self, source_paths, **kwargs):
-            nonlocal called_with, called_kwargs
-            called_with = source_paths
-            called_kwargs = kwargs
-            return ["file-3"]
-
-        with patch.object(BaseExecutor, "_collect_output_files", fake_collect):
-            result = await executor._collect_output_files(download_root)
-
-        assert result == ["file-3"]
-        assert called_kwargs.get("output_root") == output_root
-        assert "filename_builder" in called_kwargs
-        assert "file_meta_builder" in called_kwargs
-        assert called_kwargs.get("skip_names") == {"result.json"}
 
 
 @pytest.mark.asyncio

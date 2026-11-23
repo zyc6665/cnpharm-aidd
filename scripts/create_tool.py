@@ -3,7 +3,7 @@
 工具创建助手脚本
 
 使用方法:
-    python scripts/create_tool.py --config example/ssh-job-tool-template/platform_tool.json
+    python scripts/create_tool.py --config example/model-package-template/tool-package/manifest.yaml
 """
 
 import asyncio

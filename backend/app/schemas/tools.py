@@ -39,9 +39,7 @@ class ToolVersionCreate(BaseModel):
     is_active: bool = Field(default=True, description="是否激活")
     # config结构:
     # {
-    #     "type": "docker_image|python_script|ssh_job|k8s_job",
-    #     "host": "gpu-node-01",  # ssh_job
-    #     "entrypoint": "/app/platform_run.sh",  # ssh_job
+    #     "type": "docker_image|python_script|k8s_job",
     #     "runtime": {"image": "registry.example/model@sha256:<digest>"},  # k8s_job
     #     "resource_profile": "gpu-large",  # k8s_job
     #     "input_schema": {},
