@@ -1,0 +1,30 @@
+# EditorConfig —— 跨 IDE / 编辑器的基础编辑约定（离线可用，无运行时依赖）
+# 参考 https://editorconfig.org
+# 目的：统一编码、换行与缩进，避免 Windows 与 Linux 之间的 CRLF/缩进噪声。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Python：4 空格缩进
+[*.py]
+indent_size = 4
+
+# 前端 / 配置：2 空格缩进
+[*.{ts,tsx,js,jsx,mjs,cjs,vue,json,yaml,yml,css,less,scss,html}]
+indent_size = 2
+
+# Shell 脚本：强制 LF，避免在 Linux 容器里因 CRLF 触发
+# "/bin/bash^M: bad interpreter" 之类错误
+[*.sh]
+end_of_line = lf
+indent_size = 2
+
+# Makefile 必须用 Tab 缩进
+[Makefile]
+indent_style = tab

@@ -93,6 +93,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements-dev.txt
 
+      - name: 校验 alembic 单头
+        # 单头约束：存在多个 migration head 说明迁移链分叉未合并，`upgrade head`
+        # 只会升其中一条链，另一条被静默跳过。这里在真正建库前显式拦截。
+        # `alembic heads` 每个 head 输出一行，正常应当恰好 1 行。
+        working-directory: ./backend
+        run: |
+          test "$(python -m alembic heads | wc -l)" -eq 1 || (echo "ERROR: Multiple alembic heads detected! Please rebase and merge heads." && exit 1)
+
       - name: upgrade head
         working-directory: ./backend
         run: python -m alembic upgrade head

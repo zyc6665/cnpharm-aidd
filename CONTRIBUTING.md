@@ -17,10 +17,23 @@
 | `fix/<模块>-<主题>` | ≤ 2 工作日 | `main` | `main` | 缺陷修复 |
 | `refactor/<模块>-<主题>` | ≤ 5 工作日 | `main` | `main` | 不改行为的重构（如 `agents/aidd` 拆包） |
 | `docs/<主题>` | ≤ 2 工作日 | `main` | `main` | 纯文档 |
-| `release/v1.x.y` | 交付周期 | `main` | `main` + tag | 交付候选，只收回归修复，不收新功能 |
+| `release/standard-v1.0`、`release/full-v2.0` | 交付周期 | `main` | tag（不回 main） | 标准版 / 完整版一次性交付分支，只收回归修复；现场 bugfix 需 cherry-pick 回 `main` |
 | `spike/<主题>` | ≤ 3 工作日 | `main` | **不合** | 技术验证，验证完写结论并删除 |
 
 **为什么主干是 `main` 而不是 `develop`**：中国医药文档 `docs/11` 的 GitLab 流水线按 `main` 为主干设计（`feat/fix ──MR──▶ main`），交付线要能直接对应这份验收文档。产品线的 `develop/beta` 双长期分支模型不适用于 3 个月的交付节奏——多一层集成分支只会让回滚更麻烦。
+
+### 1.3 「标准版 → 完整版」一次性交付
+
+本仓库发版模式是**标准版 → 完整版**私有化离线一次性交付，分支模型如下：
+
+- **单主干 `main`**：功能先合 `main`；完整版未就绪的能力用 **Feature Flag** 包起来（默认关），保证 `main` 任何时点都能出「标准版」。
+- **两个短命发版分支**：`release/standard-v1.0`（标准版）、`release/full-v2.0`（完整版），只用于冻结交付，**只收回归修复、不收新功能**。
+- **现场 bugfix 回主干**：在发版分支修好后 **`cherry-pick -x` 回 `main`**，避免修复丢失。
+- **产品线 `upstream`（`CPUmodel_V2`）**：**仅 `@zyc6665` 拥有 cherry-pick 权限**，其他人不要操作 `upstream`。
+
+### 1.4 新人只配置 `origin`
+
+新克隆仓库**只配置 `origin`**（团队主仓），不要自行添加 `upstream` 或其它远端。需要与产品线同步时找 P1，由 P1 统一执行 cherry-pick。分支命名统一 `{type}/{role}-{issue号}-{简述}`（`role` ∈ fe/be/ops/arch）。
 
 ### 1.2 命名示例
 
@@ -108,7 +121,7 @@ gh pr create --fill --base main
 
 PR 必须填完模板的「影响模块」和「测试结果」。**未运行项要写原因**，写「后端测试未跑：只改前端样式」比留空更被接受。
 
-PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨 5 个模块的 PR 会被打回要求拆分。
+PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨 5 个模块的 PR 会被打回要求拆分。**单 PR 原则上 ≤ 800 行（不含测试与自动生成文件）**，超过要拆。
 
 ### 2.5 合并
 
@@ -124,14 +137,14 @@ PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨
 
 | 路径 | 归属 |
 |---|---|
-| `backend/app/api/`、`backend/app/services/` | 后端 |
-| `backend/app/models/`、`backend/alembic/` | 后端（**改表必须双人确认**，见 4.1） |
-| `backend/app/execution/`、`backend/app/tasks/` | 平台/调度 |
-| `frontend/src/views/`、`frontend/src/components/` | 前端 |
-| `deploy/`、`.github/` | 运维/发布经理 |
-| `docs/0*`~`docs/1*` | 产品经理 |
+| `/frontend/` | P3 `@PLACEHOLDER_FE`（前端独占） |
+| `/backend/app/api/v1/`、`/backend/app/services/` | P2 `@PLACEHOLDER_BE2` + P1 `@zyc6665` 复核 |
+| `/backend/app/models/`、`/backend/alembic/`、`/backend/app/config.py`、`/backend/app/api/v1/__init__.py`、`platform_tool_seeding.py` | P1 `@zyc6665`（契约 / 高危，**改表必须双人确认**，见 4.1） |
+| `/backend/app/{tasks,execution,worker}/` | P1 `@zyc6665`（L1 调度） |
+| `/deploy/`、`/scripts/build-offline-package.sh`、`/backend/app/tool_templates/`、`/example/` | P4 `@PLACEHOLDER_OPS_MODEL` + P1 复核 |
+| `/.github/` | P1 `@zyc6665` |
 
-团队尚未扩充时，CODEOWNERS 全部指向仓库管理员；成员到位后逐条改。
+> `@PLACEHOLDER_BE2` / `@PLACEHOLDER_FE` / `@PLACEHOLDER_OPS_MODEL` 是占位符，**启用 Code Owners 强制审批前必须替换为真实 GitHub 账号**（见 `.github/CODEOWNERS` 顶部说明）。
 
 ---
 
@@ -143,7 +156,8 @@ PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨
 
 - 新增迁移文件后才能改模型，不允许只改 ORM 不写迁移；
 - 迁移必须**可回滚**（写 `downgrade()`），且不得删除已有列——先标记废弃，下个版本再删；
-- 已合入 `main` 的迁移文件**不得修改**，有错就新增一条修正迁移。
+- 已合入 `main` 的迁移文件**不得修改**，有错就新增一条修正迁移；
+- **必须保持单头**：`python -m alembic heads` 只能输出 1 行。出现多个 head 说明迁移链分叉，先 `git rebase origin/main` 合并 head 再提 PR（CI 的「迁移链」作业已强制该检查）。
 
 ### 4.2 任务状态机与执行器
 
@@ -207,11 +221,14 @@ PR 标题同提交规范。一个 PR 只做一件事：改了 30 个文件、跨
 
 ## 7. 发布
 
-```bash
-# 1. 从 main 切发布分支
-git switch -c release/v1.0.0 main
+一次性离线交付分「标准版」与「完整版」两个节点，均从 `main` 切短命发版分支冻结：
 
-# 2. 只收回归修复，每笔都要 cherry-pick 回 main
+```bash
+# 1. 从 main 切发版分支（标准版 / 完整版各一条）
+git switch -c release/standard-v1.0 main     # 或 release/full-v2.0 main
+
+# 2. 完整版未就绪能力靠 Feature Flag 关闭保证标准版可交付；
+#    发版分支只收回归修复，每笔修完都要 cherry-pick 回 main
 git cherry-pick -x <commit>
 
 # 3. 全量回归
@@ -219,14 +236,15 @@ python -m pytest test/ -v
 cd frontend && npm run test && npm run test:e2e
 
 # 4. 打 tag（受保护，见仓库 rulesets）
-git tag -a v1.0.0 -m "中国医药一期交付 v1.0.0"
+git tag -a v1.0.0 -m "中国医药交付 标准版 v1.0.0"
 git push origin v1.0.0
 
-# 5. 构建离线交付包
+# 5. 构建离线交付包（P4 主责）
 bash scripts/build-offline-package.sh --version v1.0.0
 ```
 
-版本号语义：`v<major>.<minor>.<patch>`；交付候选加 `-rc.N`，甲方验收通过后转正式版。
+- **产品线 `upstream` 同步**：仅 `@zyc6665`（P1）可对 `upstream`（`CPUmodel_V2`）执行 cherry-pick；其他人只配 `origin`。
+- 版本号语义：`v<major>.<minor>.<patch>`；交付候选加 `-rc.N`，甲方验收通过后转正式版。
 
 ---
 
@@ -250,3 +268,20 @@ bash scripts/build-offline-package.sh --version v1.0.0
 | 不知道某段代码能不能删 | 先 `grep -rn` 找引用，再在 Issue 里列清单，别直接删 |
 | 需求文档之间打架 | 以 `docs/03B` 的决策状态为准；未关闭的按最保守方案实现并开 `decision` Issue |
 | 需要甲方确认才能继续 | 开 `decision` Issue + 登记 `docs/03B`，同时做不受影响的部分 |
+
+---
+
+## 10. 新人 Day 1 Onboarding 极速清单
+
+目标：**当天**把环境跑通、跑绿基线、提出第一个 10 行小 PR。
+
+- [ ] **克隆** `cnpharm-aidd`（只配 `origin`）：`git clone <repo-url> && cd cnpharm-aidd`
+- [ ] **配 `.env`**：按 `deploy/compose/README.md` 从 `.env.example` 复制 `backend/.env`；本机开发连接串指向 `127.0.0.1`（联调才指 `10.202.2.228`），见 `AGENTS.md` §4
+- [ ] **起本机数据栈**：`docker compose -f deploy/compose/docker-compose.dev.yml up -d`
+- [ ] **跑通后端**：`cd backend && python -m venv .venv && . .venv/Scripts/activate && pip install -r requirements-dev.txt` → `uvicorn app.main:app --reload`；`curl 127.0.0.1:8000/api/v1/system/health` 全绿
+- [ ] **跑通 worker / beat**：`celery -A app.worker.celery_app worker --pool=threads -Q high_priority,gpu_queue,heavy_compute,cpu_queue,default,tool_tasks,maintenance,monitoring` + `celery -A app.worker.celery_app beat`
+- [ ] **跑通前端**：`cd frontend && npm ci && npm run dev`（Node 用 `.nvmrc` 的 20）
+- [ ] **跑绿基线**：`python -m flake8 backend/app --select F401`、`python -m pytest test/ -v`、`cd frontend && npm run test && npm run build`
+- [ ] **提首个 10 行测试 PR**：认领一个 `Ready` 小 Issue，写一个小测试 / 小修，走完「切分支 → 小步提交 → PR → 1 人评审 → squash 合并」
+
+> 卡住先看 `AGENTS.md` 第 7 节「已知的坑」，仍不通就在 Issue 里开 `blocker`。
