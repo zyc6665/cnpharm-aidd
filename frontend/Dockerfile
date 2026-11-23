@@ -16,7 +16,8 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
     VITE_APP_ENV=${VITE_APP_ENV}
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+# 安全基线：集团 2026-11-19 nginx 高危漏洞预警要求 nginx >= 1.30.7（1.31.x 须 >= 1.31.9）
+FROM nginx:1.30.7-alpine@sha256:caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3 AS runtime
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
