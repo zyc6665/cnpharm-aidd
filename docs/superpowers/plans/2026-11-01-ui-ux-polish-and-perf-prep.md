@@ -16,7 +16,7 @@
 - 复用组件已存在：`frontend/src/components/common/` 下 `AppPageHeader.vue`、`AppEmptyState.vue`、`AppErrorState.vue`、`AppFilterBar.vue`、`SkeletonList.vue`、`SkeletonDetail.vue`、`SkeletonCard.vue`、`ProtectedAvatar.vue`、`CommandPalette.vue`。
 - 现存不一致：`frontend/src/views` 内仍有 **49 处硬编码十六进制色值**（`#f0f0f0`×6、`#8c8c8c`×6、`#1677ff`×5、`#5b8ff9`×4、`#61ddaa`×3、`#595959`×3、`#52c41a`×3 等），暗/浅主题切换时会出现「一处变色、一处不变」。
 - 可观测性：`backend/app/monitoring/prometheus_metrics.py`、`backend/app/monitoring/metrics_collector.py`、`backend/app/middleware/trace.py` 已存在；无 k6 可执行文件，无现成压测脚本。
-- 数据库：本地 kind 内 `sciminer-postgres`（NodePort 30532）、`sciminer-redis`、`sciminer-storage`（MinIO NodePort 30900）；后端本地 uvicorn 运行于 8000，前端 vite 运行于 5173。
+- 数据库：本地 kind 内 `aidd-postgres`（NodePort 30532）、`aidd-redis`、`aidd-storage`（MinIO NodePort 30900）；后端本地 uvicorn 运行于 8000，前端 vite 运行于 5173。
 - 列表分页：结果中心 / 产物 / 工作流运行 / 任务 / 审计日志均已支持 keyset 游标（`backend/app/common/keyset.py`），压测应覆盖「深页」路径。
 
 ## 范围与非目标

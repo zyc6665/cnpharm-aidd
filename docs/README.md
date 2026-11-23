@@ -21,7 +21,7 @@
 | `docs/screenshots/` | 真实任务与页面截图 | 证据材料 | 96 份 |
 | `docs/evidence/` | 交付成果展示附件、UI 走查截图 | 证据材料 | 137 份 |
 
-> 跨仓库引用：`archive-upstream/` 里的文档描述的是**产品线**的命名与目录（如 `backend/app/agents/aidd/`、`sciminer`），引用时以本文档集为准。
+> 跨仓库引用：`archive-upstream/` 里的文档描述的是**产品线**的命名与目录（如 `backend/app/agents/aidd/`、`sciminer`），属历史命名，引用时以本文档集为准。现行平台命名已统一为 `aidd-*` / `aidd.platform/*`（2026-11 收敛，见 `internal/31`）。
 >
 > 团队协作与提交规范以仓库根 [CONTRIBUTING.md](../CONTRIBUTING.md) 为准；[`10`](08-开发与工程/10-开发规范与编码约定.md) 描述代码风格，两者不重复。
 
