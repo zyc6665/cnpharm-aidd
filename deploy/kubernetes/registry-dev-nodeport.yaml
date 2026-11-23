@@ -1,21 +1,21 @@
 # 已弃用的开发访问入口：默认 kustomization 不再引用，禁止匿名暴露 Registry。
 # 需要从宿主访问时：
-#   kubectl -n sciminer-storage port-forward svc/sciminer-registry 5000:5000
+#   kubectl -n aidd-storage port-forward svc/aidd-registry 5000:5000
 # 且必须先按 registry-dev.yaml 顶部说明配置 basic auth / htpasswd。
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-registry-nodeport
-  namespace: sciminer-storage
+  name: aidd-registry-nodeport
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: development-access
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: development-access
 spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: registry
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: registry
       port: 5000

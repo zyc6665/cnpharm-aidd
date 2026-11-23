@@ -2,11 +2,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-data
-  namespace: sciminer-storage
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
-    sciminer.io/purpose: object-storage
+    app.kubernetes.io/part-of: aidd
+    aidd.io/purpose: object-storage
 spec:
   accessModes:
     - ReadWriteOnce
@@ -18,11 +18,11 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sciminer-minio
-  namespace: sciminer-storage
+  name: aidd-minio
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
 spec:
   replicas: 1
   strategy:
@@ -30,12 +30,12 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: minio
-      app.kubernetes.io/part-of: sciminer
+      app.kubernetes.io/part-of: aidd
   template:
     metadata:
       labels:
         app.kubernetes.io/name: minio
-        app.kubernetes.io/part-of: sciminer
+        app.kubernetes.io/part-of: aidd
     spec:
       securityContext:
         runAsNonRoot: true
@@ -63,12 +63,12 @@ spec:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-minio-credentials
+                  name: aidd-minio-credentials
                   key: MINIO_ROOT_USER
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: sciminer-minio-credentials
+                  name: aidd-minio-credentials
                   key: MINIO_ROOT_PASSWORD
           ports:
             - name: api
@@ -107,16 +107,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: sciminer-minio
-  namespace: sciminer-storage
+  name: aidd-minio
+  namespace: aidd-storage
   labels:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
 spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: minio
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
   ports:
     - name: api
       port: 9000

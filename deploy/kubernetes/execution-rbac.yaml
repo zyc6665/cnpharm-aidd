@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: sciminer-execution-worker
-  namespace: sciminer-system
+  name: aidd-execution-worker
+  namespace: aidd-system
   labels:
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
     app.kubernetes.io/component: execution-worker
 automountServiceAccountToken: true
 ---
@@ -12,19 +12,19 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: model-runner
-  namespace: sciminer-model-jobs
+  namespace: aidd-model-jobs
   labels:
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
     app.kubernetes.io/component: model-job
 automountServiceAccountToken: false
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: sciminer-execution-worker
-  namespace: sciminer-model-jobs
+  name: aidd-execution-worker
+  namespace: aidd-model-jobs
   labels:
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
     app.kubernetes.io/component: execution-worker
 rules:
   - apiGroups: ["batch"]
@@ -46,16 +46,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: sciminer-execution-worker
-  namespace: sciminer-model-jobs
+  name: aidd-execution-worker
+  namespace: aidd-model-jobs
   labels:
-    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/part-of: aidd
     app.kubernetes.io/component: execution-worker
 subjects:
   - kind: ServiceAccount
-    name: sciminer-execution-worker
-    namespace: sciminer-system
+    name: aidd-execution-worker
+    namespace: aidd-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: sciminer-execution-worker
+  name: aidd-execution-worker
