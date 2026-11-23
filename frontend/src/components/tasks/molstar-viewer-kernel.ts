@@ -1,8 +1,13 @@
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { Color } from 'molstar/lib/mol-util/color'
-import type { MolstarViewerMode } from '@/domain/tasks'
+import type { MolstarBackground, MolstarViewerMode } from '@/domain/tasks'
 
-export type { MolstarViewerMode } from '@/domain/tasks'
+export type { MolstarBackground, MolstarViewerMode } from '@/domain/tasks'
+
+export const MOLSTAR_BACKGROUND_HEX: Readonly<Record<MolstarBackground, number>> = {
+  dark: 0x0b1a2e,
+  white: 0xffffff,
+}
 
 export interface MolstarViewerKernelOptions {
   allowNativeFullscreen?: boolean
@@ -59,6 +64,41 @@ export function createRevocableResourceRegistry(): RevocableResourceRegistry {
   return {
     add(revoke) { revokers.push(revoke) },
     clear() { revokers.forEach(revoke => revoke()); revokers = [] },
+  }
+}
+
+export function setMolstarBackgroundColor(
+  viewer: MolstarViewer | null,
+  background: MolstarBackground,
+): void {
+  if (!viewer) {
+    return
+  }
+  try {
+    viewer.plugin.canvas3d?.setProps({
+      renderer: { backgroundColor: Color(MOLSTAR_BACKGROUND_HEX[background]) },
+    })
+  } catch {
+    // Background configuration is best-effort and must not block structure loading.
+  }
+}
+
+export async function downloadMolstarScreenshot(
+  viewer: MolstarViewer | null,
+  filename = 'structure-snapshot.png',
+): Promise<boolean> {
+  if (!viewer) {
+    return false
+  }
+  try {
+    const helper = viewer.plugin.helpers.viewportScreenshot
+    if (!helper) {
+      return false
+    }
+    await helper.download(filename)
+    return true
+  } catch {
+    return false
   }
 }
 

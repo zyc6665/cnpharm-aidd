@@ -1,24 +1,131 @@
 <template>
-  <div class="molecule-viewer" :class="`molecule-viewer--${variant}`">
-    <div ref="containerRef" class="viewer-canvas" :class="{ 'viewer-canvas--hidden': Boolean(error) }" />
-
-    <div v-if="loading" class="viewer-overlay">
-      <a-spin />
-      <p>{{ t('tasks.visualizationLoading') }}</p>
-    </div>
-
-    <div v-else-if="error" class="viewer-overlay viewer-overlay--error">
-      <a-alert
-        type="error"
-        show-icon
-        :message="t('tasks.visualizationFailed')"
-        :description="error"
+  <div
+    class="molecule-viewer"
+    :class="[
+      `molecule-viewer--${variant}`,
+      `molecule-viewer--bg-${activeBackground}`,
+    ]"
+    :data-viewer-mode="effectiveMode"
+  >
+    <div class="viewer-stage">
+      <div
+        ref="containerRef"
+        class="viewer-canvas"
+        :class="{ 'viewer-canvas--hidden': Boolean(error) }"
       />
+
+      <div v-if="loading" class="viewer-overlay">
+        <a-spin />
+        <p>{{ t('tasks.visualizationLoading') }}</p>
+      </div>
+
+      <div v-else-if="error" class="viewer-overlay viewer-overlay--error">
+        <a-alert
+          type="error"
+          show-icon
+          :message="t('tasks.visualizationFailed')"
+          :description="error"
+        />
+      </div>
+
+      <div class="viewer-toolbar" role="group" :aria-label="t('tasks.visualizationMode')">
+        <span class="viewer-mode" :aria-label="t('tasks.visualizationMode')">{{ viewerPreset.mode }}</span>
+
+        <template v-if="!isCompact">
+          <select
+            v-model="activeRepresentation"
+            class="viewer-select"
+            data-testid="viewer-representation-select"
+            :disabled="loading || Boolean(error)"
+            :aria-label="t('tasks.visualizationRepresentation')"
+            :title="t('tasks.visualizationRepresentation')"
+            @change="handleRepresentationChange"
+          >
+            <option
+              v-for="rep in representationOptions"
+              :key="rep"
+              :value="rep"
+            >
+              {{ representationLabel(rep) }}
+            </option>
+          </select>
+
+          <select
+            v-model="activeColorTheme"
+            class="viewer-select"
+            data-testid="viewer-color-select"
+            :disabled="loading || Boolean(error)"
+            :aria-label="t('tasks.visualizationColorTheme')"
+            :title="t('tasks.visualizationColorTheme')"
+            @change="handleColorThemeChange"
+          >
+            <option
+              v-for="theme in colorThemeOptions"
+              :key="theme"
+              :value="theme"
+            >
+              {{ colorThemeLabel(theme) }}
+            </option>
+          </select>
+
+          <button
+            class="viewer-tool-btn"
+            type="button"
+            data-testid="viewer-bg-toggle"
+            :disabled="loading || Boolean(error)"
+            :title="t('tasks.visualizationToggleBackground')"
+            :aria-label="t('tasks.visualizationToggleBackground')"
+            @click="toggleBackground"
+          >
+            {{ activeBackground === 'dark' ? t('tasks.visualizationBgDark') : t('tasks.visualizationBgWhite') }}
+          </button>
+
+          <button
+            v-if="sequenceChains.length > 0"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': sequenceOpen }"
+            type="button"
+            data-testid="viewer-sequence-toggle"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="sequenceOpen"
+            @click="sequenceOpen = !sequenceOpen"
+          >
+            {{ t('tasks.visualizationSequence') }}
+          </button>
+
+          <button
+            class="viewer-tool-btn"
+            type="button"
+            data-testid="viewer-screenshot"
+            :disabled="loading || Boolean(error)"
+            @click="exportScreenshot"
+          >
+            {{ t('tasks.visualizationScreenshot') }}
+          </button>
+        </template>
+
+        <button
+          class="viewer-reset"
+          type="button"
+          data-testid="viewer-reset"
+          :disabled="loading || Boolean(error)"
+          @click="resetCamera"
+        >
+          {{ t('tasks.visualizationResetView') }}
+        </button>
+      </div>
     </div>
-    <div class="viewer-toolbar" role="group" :aria-label="t('tasks.visualizationMode')">
-      <span class="viewer-mode" :aria-label="t('tasks.visualizationMode')">{{ viewerPreset.mode }}</span>
-      <button class="viewer-reset" type="button" :disabled="loading || Boolean(error)" @click="resetCamera">{{ t('tasks.visualizationResetView') }}</button>
-    </div>
+
+    <SequenceSelectorBar
+      v-if="!isCompact && sequenceOpen && sequenceChains.length > 0"
+      :chains="sequenceChains"
+      :selected-keys="selectedResidueKeys"
+      :theme="activeBackground"
+      @toggle-residue="handleToggleResidue"
+      @focus-selection="focusSelectedResidues"
+      @clear-selection="clearResidueSelection"
+      @close="sequenceOpen = false"
+    />
   </div>
 </template>
 
@@ -27,27 +134,54 @@ import 'molstar/build/viewer/molstar.css'
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { message } from 'ant-design-vue'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
+import { PresetStructureRepresentations } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset'
+import { BoxShape3D } from 'molstar/lib/mol-plugin-state/transforms/shape'
+import { ShapeRepresentation3D } from 'molstar/lib/mol-plugin-state/transforms/representation'
+import { OrderedSet } from 'molstar/lib/mol-data/int'
+import { StructureElement, StructureProperties, Unit } from 'molstar/lib/mol-model/structure'
 import { Asset } from 'molstar/lib/mol-util/assets'
 import { Vec3 } from 'molstar/lib/mol-math/linear-algebra'
 import { Sphere3D } from 'molstar/lib/mol-math/geometry'
 import { Color } from 'molstar/lib/mol-util/color'
-import { createMolstarViewer, createRevocableResourceRegistry, disposeMolstarViewer } from './molstar-viewer-kernel'
-import { BoxShape3D } from 'molstar/lib/mol-plugin-state/transforms/shape'
-import { ShapeRepresentation3D } from 'molstar/lib/mol-plugin-state/transforms/representation'
+import {
+  createMolstarViewer,
+  createRevocableResourceRegistry,
+  disposeMolstarViewer,
+  downloadMolstarScreenshot,
+  setMolstarBackgroundColor,
+} from './molstar-viewer-kernel'
+import SequenceSelectorBar from './SequenceSelectorBar.vue'
 
-import { resolveMolstarHierarchyPreset, resolveMolstarViewerPreset, type VisualizationScene } from '@/domain/tasks'
+import {
+  createNormalizedSdfObjectUrl,
+  extractPolymerSequenceFromStructure,
+  groupSelectedResiduesByChain,
+  residueSelectionKey,
+  resolveMolstarColorThemeOptions,
+  resolveMolstarEffectiveColorTheme,
+  resolveMolstarHierarchyPreset,
+  resolveMolstarRepresentationOptions,
+  resolveMolstarViewerPreset,
+  toggleSequenceResidueSelection,
+  type MolstarBackground,
+  type MolstarColorTheme,
+  type MolstarRepresentation,
+  type MolstarViewerMode,
+  type SequenceChain,
+  type VisualizationScene,
+} from '@/domain/tasks'
 import type { PocketVoxelGrid } from '@/domain/tasks/pocket-voxel'
-import { createNormalizedSdfObjectUrl } from '@/domain/tasks'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
 
-const defaultMode = 'molecule' as const
+const defaultMode: MolstarViewerMode = 'molecule'
 
 const props = withDefaults(defineProps<{
   scene: VisualizationScene
   variant?: 'compact' | 'full'
-  mode?: 'molecule' | 'protein' | 'docking'
+  mode?: MolstarViewerMode
   allowNativeFullscreen?: boolean
   voxelGrid?: PocketVoxelGrid | null
 }>(), {
@@ -57,16 +191,118 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
-const viewerPreset = computed(() => resolveMolstarViewerPreset(props.mode ?? defaultMode))
+const isCompact = computed(() => props.variant === 'compact')
+const effectiveMode = computed<MolstarViewerMode>(() => props.mode ?? defaultMode)
+const viewerPreset = computed(() => resolveMolstarViewerPreset(effectiveMode.value))
+
+const activeRepresentation = ref<MolstarRepresentation>(viewerPreset.value.primaryRepresentation)
+const activeColorTheme = ref<MolstarColorTheme>('default')
+const activeBackground = ref<MolstarBackground>(viewerPreset.value.background)
+
+const representationOptions = computed(() => resolveMolstarRepresentationOptions(effectiveMode.value))
+const colorThemeOptions = computed(() => resolveMolstarColorThemeOptions(effectiveMode.value))
 
 const containerRef = ref<HTMLElement | null>(null)
 const loading = ref(true)
 const error = ref('')
 
+const sequenceChains = ref<SequenceChain[]>([])
+const selectedResidueKeys = ref<string[]>([])
+const lastAnchorKey = ref<string | null>(null)
+const sequenceOpen = ref(false)
+
+interface LoadedEntryRecord {
+  role: VisualizationScene['entries'][number]['role']
+  structureRefKey: string
+  isPrimaryTarget: boolean
+}
+
 let viewer: MolstarViewer | null = null
 let resizeObserver: ResizeObserver | null = null
 const entryResourcesRegistry = createRevocableResourceRegistry()
 let removeLayoutSyncListener: (() => void) | null = null
+let removeClickListener: (() => void) | null = null
+let loadedEntries: LoadedEntryRecord[] = []
+let selectionHighlightRefs: string[] = []
+
+function representationLabel(rep: MolstarRepresentation): string {
+  switch (rep) {
+    case 'cartoon':
+      return t('tasks.visualizationCartoon')
+    case 'surface':
+      return t('tasks.visualizationSurface')
+    case 'ball-and-stick':
+      return t('tasks.visualizationBallAndStick')
+    case 'sticks':
+      return t('tasks.visualizationSticks')
+    case 'spacefill':
+      return t('tasks.visualizationSpacefill')
+    case 'points':
+      return t('tasks.visualizationPoints')
+  }
+}
+
+function colorThemeLabel(theme: MolstarColorTheme): string {
+  switch (theme) {
+    case 'default':
+      return t('tasks.visualizationColorDefault')
+    case 'chain-id':
+      return t('tasks.visualizationColorChain')
+    case 'element-symbol':
+      return t('tasks.visualizationColorElement')
+    case 'secondary-structure':
+      return t('tasks.visualizationColorSecondary')
+    case 'uncertainty':
+      return t('tasks.visualizationColorPlddt')
+    case 'hydrophobicity':
+      return t('tasks.visualizationColorHydrophobicity')
+    case 'uniform':
+      return t('tasks.visualizationColorUniform')
+  }
+}
+
+function resolveUniformColor(role: VisualizationScene['entries'][number]['role']): number {
+  if (role === 'pocket') return 0xf59e0b
+  if (role === 'receptor') return 0x9ca3af
+  return 0x38bdf8
+}
+
+function resolveColorPresetParams(
+  role: VisualizationScene['entries'][number]['role'],
+  themeChoice: MolstarColorTheme,
+): Record<string, unknown> | undefined {
+  // In pocket/docking views, default receptor theme stays neutral gray so pocket/ligand pop out.
+  if (themeChoice === 'default' && role === 'receptor' && (effectiveMode.value === 'pocket' || effectiveMode.value === 'docking')) {
+    return {
+      theme: {
+        globalName: 'uniform',
+        globalColorParams: { value: Color(0x9ca3af) },
+      },
+    }
+  }
+  if (role === 'pocket' && themeChoice === 'default') {
+    return {
+      theme: {
+        globalName: 'uniform',
+        globalColorParams: { value: Color(0xf59e0b) },
+      },
+    }
+  }
+  const effectiveTheme = resolveMolstarEffectiveColorTheme(effectiveMode.value, themeChoice)
+  if (effectiveTheme === 'uniform') {
+    return {
+      theme: {
+        globalName: 'uniform',
+        globalColorParams: { value: Color(resolveUniformColor(role)) },
+      },
+    }
+  }
+  return {
+    theme: {
+      globalName: effectiveTheme,
+    },
+  }
+}
 
 function syncFullscreenLayout() {
   if (!viewer || !props.allowNativeFullscreen) {
@@ -79,8 +315,8 @@ function syncFullscreenLayout() {
     void PluginCommands.Layout.Update(viewer.plugin, {
       state: {
         isExpanded: true,
-        expandToFullscreen: true
-      }
+        expandToFullscreen: true,
+      },
     })
     return
   }
@@ -88,39 +324,125 @@ function syncFullscreenLayout() {
   if (!layoutState.expandToFullscreen && layoutState.isExpanded) {
     void PluginCommands.Layout.Update(viewer.plugin, {
       state: {
-        isExpanded: false
-      }
+        isExpanded: false,
+      },
     })
   }
 }
 
-async function loadPresetStructure(
+function isPrimaryTargetEntry(role: VisualizationScene['entries'][number]['role']): boolean {
+  if (effectiveMode.value === 'molecule') {
+    return role === 'ligand' || role === 'structure'
+  }
+  return role === 'receptor' || role === 'structure'
+}
+
+async function applyRepresentationToStructureRef(
+  currentViewer: MolstarViewer,
+  structureRef: any,
+  role: VisualizationScene['entries'][number]['role'],
+  rep: MolstarRepresentation,
+  themeChoice: MolstarColorTheme,
+) {
+  const themeParams = resolveColorPresetParams(role, themeChoice) as any
+  if (rep === 'spacefill') {
+    const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
+    await currentViewer.plugin.managers.structure.component.clear([structureRef])
+    const comp = await currentViewer.plugin.builders.structure.tryCreateComponentFromExpression(
+      structureRef.cell,
+      MS.struct.generator.all(),
+      `primary-spacefill-${structureRef.cell.transform.ref}`,
+      { label: 'Spacefill' },
+    )
+    if (comp) {
+      const globalTheme = themeParams?.theme
+      await currentViewer.plugin.builders.structure.representation.addRepresentation(comp, {
+        type: 'spacefill',
+        color: globalTheme?.globalName ?? 'element-symbol',
+        ...(globalTheme?.globalColorParams ? { colorParams: globalTheme.globalColorParams } : {}),
+      } as any)
+    }
+    return
+  }
+
+  const presetKey = resolveMolstarHierarchyPreset(rep)
+  const provider = PresetStructureRepresentations[presetKey]
+  await currentViewer.plugin.managers.structure.component.applyPreset(
+    [structureRef],
+    provider,
+    themeParams,
+  )
+}
+
+async function loadEntryStructure(
   currentViewer: MolstarViewer,
   entry: VisualizationScene['entries'][number],
   url: string,
-  representationPreset: 'polymer-cartoon' | 'molecular-surface' | 'atomic-detail',
-  color?: number,
-) {
+): Promise<LoadedEntryRecord | null> {
   const data = await currentViewer.plugin.builders.data.download(
     {
       url: Asset.Url(url),
       isBinary: false,
-      label: entry.label
+      label: entry.label,
     },
-    { state: { isGhost: true } }
+    { state: { isGhost: true } },
   )
   const trajectory = await currentViewer.plugin.builders.structure.parseTrajectory(data, entry.format)
 
-  await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
-    representationPreset,
-    ...(color === undefined
-      ? {}
-      : {
-          representationPresetParams: {
-            theme: { globalName: 'uniform', globalColorParams: { value: Color(color) } },
-          },
-        }),
+  if (entry.role === 'pocket') {
+    // 口袋残基也用卡通渲染：球棍（atomic-detail）在每个原子上画球，口袋动辄上百个残基，
+    // 叠在卡通蛋白上会糊成一团、把完整蛋白整个盖住。卡通 + 单色反而更容易看出口袋位置。
+    const preset = await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
+      representationPreset: 'polymer-cartoon',
+      representationPresetParams: {
+        theme: { globalName: 'uniform', globalColorParams: { value: Color(0xf59e0b) } },
+      },
+    })
+    const ref = preset?.structure?.ref
+    return ref ? { role: entry.role, structureRefKey: ref, isPrimaryTarget: false } : null
+  }
+
+  const primaryTarget = isPrimaryTargetEntry(entry.role)
+  const initialRep = primaryTarget
+    ? activeRepresentation.value
+    : entry.role === 'receptor'
+      ? viewerPreset.value.primaryRepresentation
+      : entry.role === 'ligand' && viewerPreset.value.primaryRepresentation === 'ball-and-stick'
+        ? viewerPreset.value.primaryRepresentation
+        : viewerPreset.value.primaryRepresentation
+  const presetName = initialRep === 'spacefill'
+    ? 'atomic-detail'
+    : initialRep === viewerPreset.value.primaryRepresentation
+      ? resolveMolstarHierarchyPreset(viewerPreset.value.primaryRepresentation)
+      : resolveMolstarHierarchyPreset(initialRep)
+  const themeParams = primaryTarget
+    ? resolveColorPresetParams(entry.role, activeColorTheme.value)
+    : undefined
+
+  const preset = await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
+    representationPreset: presetName,
+    ...(themeParams ? { representationPresetParams: themeParams } : {}),
   })
+
+  const structureRefKey = preset?.structure?.ref ?? ''
+  if (primaryTarget && initialRep === 'spacefill' && structureRefKey) {
+    const structureRef = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
+      s => s.cell.transform.ref === structureRefKey,
+    )
+    if (structureRef) {
+      await applyRepresentationToStructureRef(
+        currentViewer,
+        structureRef,
+        entry.role,
+        'spacefill',
+        activeColorTheme.value,
+      )
+    }
+  }
+
+  return structureRefKey
+    ? { role: entry.role, structureRefKey, isPrimaryTarget: primaryTarget }
+    : null
 }
 
 async function addVoxelGrid(currentViewer: MolstarViewer, grid: PocketVoxelGrid) {
@@ -165,6 +487,253 @@ async function addVoxelGrid(currentViewer: MolstarViewer, grid: PocketVoxelGrid)
   }
 }
 
+function collectPolymerSequences(currentViewer: MolstarViewer): SequenceChain[] {
+  const structures = currentViewer.plugin.managers.structure.hierarchy.current.structures
+  const primaryRefs = new Set(
+    loadedEntries.filter(record => record.isPrimaryTarget).map(record => record.structureRefKey),
+  )
+
+  const chainsById = new Map<string, SequenceChain>()
+  const chainOrder: string[] = []
+
+  for (const sRef of structures) {
+    if (primaryRefs.size > 0 && !primaryRefs.has(sRef.cell.transform.ref)) {
+      continue
+    }
+    const structureData = sRef.cell.obj?.data
+    if (!structureData) {
+      continue
+    }
+    const extracted = extractPolymerSequenceFromStructure(structureData)
+    for (const chain of extracted) {
+      if (!chainsById.has(chain.chain)) {
+        chainsById.set(chain.chain, { chain: chain.chain, residues: [...chain.residues] })
+        chainOrder.push(chain.chain)
+      }
+    }
+  }
+
+  return chainOrder.map(chainId => chainsById.get(chainId)!)
+}
+
+async function clearSelectionHighlights(currentViewer: MolstarViewer) {
+  if (!selectionHighlightRefs.length) {
+    return
+  }
+  const update = currentViewer.plugin.state.data.build()
+  for (const ref of selectionHighlightRefs) {
+    update.delete(ref)
+  }
+  selectionHighlightRefs = []
+  await update.commit()
+}
+
+async function syncSelectedResiduesHighlight() {
+  if (!viewer) {
+    return
+  }
+  const currentViewer = viewer
+  const savedCamera = currentViewer.plugin.canvas3d?.camera.getSnapshot()
+  await clearSelectionHighlights(currentViewer)
+
+  const groups = groupSelectedResiduesByChain(selectedResidueKeys.value)
+  if (!groups.length) {
+    if (savedCamera) {
+      currentViewer.plugin.managers.camera.setSnapshot(savedCamera, 0)
+    }
+    return
+  }
+
+  const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
+  const primaryRefs = new Set(
+    loadedEntries.filter(record => record.isPrimaryTarget).map(record => record.structureRefKey),
+  )
+  const targetStructures = currentViewer.plugin.managers.structure.hierarchy.current.structures.filter(
+    sRef => primaryRefs.size === 0 || primaryRefs.has(sRef.cell.transform.ref),
+  )
+
+  const createdRefs: string[] = []
+  for (const sRef of targetStructures) {
+    for (const group of groups) {
+      const expr = MS.struct.generator.atomGroups({
+        'chain-test': MS.core.rel.eq([MS.ammp('auth_asym_id'), group.chain]),
+        'residue-test': MS.core.set.has([MS.set(...group.seqIds), MS.ammp('auth_seq_id')]),
+      })
+      const comp = await currentViewer.plugin.builders.structure.tryCreateComponentFromExpression(
+        sRef.cell,
+        expr,
+        `seq-selection-${sRef.cell.transform.ref}-${group.chain}`,
+        { label: `Selected ${group.chain}` },
+      )
+      if (comp) {
+        createdRefs.push(comp.ref)
+        await currentViewer.plugin.builders.structure.representation.addRepresentation(comp, {
+          type: 'ball-and-stick',
+          color: 'uniform',
+          colorParams: { value: Color(0x22d3ee) },
+        } as any)
+      }
+    }
+  }
+  selectionHighlightRefs = createdRefs
+
+  if (savedCamera) {
+    currentViewer.plugin.managers.camera.setSnapshot(savedCamera, 0)
+  }
+}
+
+function focusSelectedResidues() {
+  if (!viewer || !selectionHighlightRefs.length) {
+    return
+  }
+  const state = viewer.plugin.state.data
+  let minX = Infinity
+  let minY = Infinity
+  let minZ = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  let maxZ = -Infinity
+  let found = false
+  const pos = Vec3.zero()
+
+  for (const ref of selectionHighlightRefs) {
+    const cell = state.cells.get(ref)
+    const structureData = cell?.obj?.data
+    if (!structureData?.units) {
+      continue
+    }
+    for (const unit of structureData.units) {
+      const elements = unit.elements
+      for (let i = 0; i < elements.length; i += 1) {
+        unit.conformation.position(elements[i]!, pos)
+        const px = pos[0] ?? 0
+        const py = pos[1] ?? 0
+        const pz = pos[2] ?? 0
+        found = true
+        if (px < minX) minX = px
+        if (py < minY) minY = py
+        if (pz < minZ) minZ = pz
+        if (px > maxX) maxX = px
+        if (py > maxY) maxY = py
+        if (pz > maxZ) maxZ = pz
+      }
+    }
+  }
+
+  if (!found) {
+    return
+  }
+
+  const center = Vec3.create((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+  const radius = Math.max(0.5 * Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) + 4, 6)
+  viewer.plugin.managers.camera.focusSphere(Sphere3D.create(center, radius), { durationMs: 250 })
+}
+
+function handleToggleResidue(payload: { chain: string; seqId: number; shiftKey: boolean }) {
+  const next = toggleSequenceResidueSelection({
+    chains: sequenceChains.value,
+    currentSelectedKeys: selectedResidueKeys.value,
+    clickedChain: payload.chain,
+    clickedSeqId: payload.seqId,
+    lastAnchorKey: lastAnchorKey.value,
+    shiftKey: payload.shiftKey,
+  })
+  selectedResidueKeys.value = next.selectedKeys
+  lastAnchorKey.value = next.anchorKey
+  void syncSelectedResiduesHighlight()
+}
+
+function clearResidueSelection() {
+  if (!selectedResidueKeys.value.length) {
+    return
+  }
+  selectedResidueKeys.value = []
+  lastAnchorKey.value = null
+  void syncSelectedResiduesHighlight()
+}
+
+async function handleRepresentationChange() {
+  if (!viewer || !loadedEntries.length) {
+    return
+  }
+  const currentViewer = viewer
+  const savedCamera = currentViewer.plugin.canvas3d?.camera.getSnapshot()
+  const targetRecords = loadedEntries.filter(record => record.isPrimaryTarget)
+
+  for (const record of targetRecords) {
+    const structureRef = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
+      s => s.cell.transform.ref === record.structureRefKey,
+    )
+    if (!structureRef) {
+      continue
+    }
+    await applyRepresentationToStructureRef(
+      currentViewer,
+      structureRef,
+      record.role,
+      activeRepresentation.value,
+      activeColorTheme.value,
+    )
+  }
+
+  await syncSelectedResiduesHighlight()
+  if (savedCamera) {
+    currentViewer.plugin.managers.camera.setSnapshot(savedCamera, 0)
+  }
+}
+
+async function handleColorThemeChange() {
+  if (!viewer || !loadedEntries.length) {
+    return
+  }
+  const currentViewer = viewer
+  const savedCamera = currentViewer.plugin.canvas3d?.camera.getSnapshot()
+  const targetRecords = loadedEntries.filter(record => record.isPrimaryTarget)
+
+  for (const record of targetRecords) {
+    const structureRef = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
+      s => s.cell.transform.ref === record.structureRefKey,
+    )
+    if (!structureRef) {
+      continue
+    }
+    const themeParams = resolveColorPresetParams(record.role, activeColorTheme.value) as
+      | { theme?: { globalName?: string; globalColorParams?: unknown } }
+      | undefined
+    const globalTheme = themeParams?.theme
+    if (globalTheme?.globalName) {
+      await currentViewer.plugin.managers.structure.component.updateRepresentationsTheme(
+        structureRef.components,
+        {
+          color: globalTheme.globalName as any,
+          ...(globalTheme.globalColorParams ? { colorParams: globalTheme.globalColorParams } : {}),
+        },
+      )
+    }
+  }
+
+  await syncSelectedResiduesHighlight()
+  if (savedCamera) {
+    currentViewer.plugin.managers.camera.setSnapshot(savedCamera, 0)
+  }
+}
+
+function toggleBackground() {
+  activeBackground.value = activeBackground.value === 'dark' ? 'white' : 'dark'
+  setMolstarBackgroundColor(viewer, activeBackground.value)
+}
+
+async function exportScreenshot() {
+  const firstLabel = props.scene.entries[0]?.label || 'structure'
+  const safeName = firstLabel.replace(/[^a-zA-Z0-9._-]+/g, '_')
+  const ok = await downloadMolstarScreenshot(viewer, `${safeName}.png`)
+  if (ok) {
+    message.success(t('tasks.visualizationScreenshotSuccess'))
+  } else {
+    message.warning(t('tasks.visualizationScreenshotFailed'))
+  }
+}
+
 async function ensureViewer() {
   if (viewer || !containerRef.value) {
     return
@@ -173,12 +742,51 @@ async function ensureViewer() {
   viewer = await createMolstarViewer(containerRef.value, {
     allowNativeFullscreen: props.allowNativeFullscreen,
     showControls: viewerPreset.value.showControls,
+    backgroundColor: activeBackground.value === 'white' ? 0xffffff : 0x0b1a2e,
   })
 
-  const subscription = viewer.plugin.layout.events.updated.subscribe(() => {
+  const layoutSub = viewer.plugin.layout.events.updated.subscribe(() => {
     syncFullscreenLayout()
   })
-  removeLayoutSyncListener = () => subscription.unsubscribe()
+  removeLayoutSyncListener = () => layoutSub.unsubscribe()
+
+  const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(event => {
+    if (isCompact.value || !sequenceChains.value.length) {
+      return
+    }
+    const loci = event.current.loci
+    if (!StructureElement.Loci.is(loci) || loci.elements.length === 0) {
+      return
+    }
+    const first = loci.elements[0]!
+    if (!Unit.isAtomic(first.unit) || OrderedSet.size(first.indices) === 0) {
+      return
+    }
+    const elementIndex = OrderedSet.getAt(first.indices, 0)
+    const element = first.unit.elements[elementIndex]
+    if (element === undefined) {
+      return
+    }
+    const loc = StructureElement.Location.create(loci.structure, first.unit, element)
+    if (StructureProperties.entity.type(loc) !== 'polymer') {
+      return
+    }
+    const chain = StructureProperties.chain.auth_asym_id(loc) || StructureProperties.chain.label_asym_id(loc) || 'A'
+    const seqId = StructureProperties.residue.auth_seq_id(loc)
+    const key = residueSelectionKey(chain, seqId)
+    const existsInSequence = sequenceChains.value.some(
+      c => c.chain === chain && c.residues.some(r => r.key === key),
+    )
+    if (!existsInSequence) {
+      return
+    }
+    handleToggleResidue({
+      chain,
+      seqId,
+      shiftKey: Boolean((event.modifiers as { shift?: boolean } | undefined)?.shift),
+    })
+  })
+  removeClickListener = () => clickSub.unsubscribe()
 }
 
 function resetCamera() {
@@ -190,6 +798,11 @@ async function renderScene() {
   loading.value = true
   error.value = ''
   entryResourcesRegistry.clear()
+  loadedEntries = []
+  selectionHighlightRefs = []
+  sequenceChains.value = []
+  selectedResidueKeys.value = []
+  lastAnchorKey.value = null
 
   try {
     if (!props.scene.entries.length) {
@@ -204,42 +817,32 @@ async function renderScene() {
     }
 
     await viewer.plugin.clear()
+    setMolstarBackgroundColor(viewer, activeBackground.value)
 
     const entryResourcesList = await Promise.all(
       props.scene.entries.map(async entry => ({
         entry,
         resource: entry.format === 'sdf'
           ? await createNormalizedSdfObjectUrl(entry.url)
-          : await createProtectedObjectUrl(entry.url)
-      }))
+          : await createProtectedObjectUrl(entry.url),
+      })),
     )
 
     try {
       for (const { entry, resource } of entryResourcesList) {
-        if (entry.role === 'receptor') {
-          await loadPresetStructure(viewer, entry, resource.url, 'polymer-cartoon', 0x9ca3af)
-          continue
+        const loaded = await loadEntryStructure(viewer, entry, resource.url)
+        if (loaded) {
+          loadedEntries.push(loaded)
         }
-
-        if (entry.role === 'pocket') {
-          // 口袋残基也用卡通渲染：球棍（atomic-detail）在每个原子上画球，口袋动辄上百个残基，
-          // 叠在卡通蛋白上会糊成一团、把完整蛋白整个盖住。卡通 + 单色反而更容易看出口袋位置。
-          await loadPresetStructure(viewer, entry, resource.url, 'polymer-cartoon', 0xf59e0b)
-          continue
-        }
-
-        if (entry.role === 'ligand' && viewerPreset.value.primaryRepresentation === 'ball-and-stick') {
-          await loadPresetStructure(viewer, entry, resource.url, resolveMolstarHierarchyPreset(viewerPreset.value.primaryRepresentation))
-          continue
-        }
-
-        await viewer.loadStructureFromUrl(resource.url, entry.format, false, {
-          label: entry.label
-        })
       }
 
       if (props.voxelGrid?.boxes.length) {
         await addVoxelGrid(viewer, props.voxelGrid)
+      }
+
+      sequenceChains.value = collectPolymerSequences(viewer)
+      if (!isCompact.value && sequenceChains.value.length > 0) {
+        sequenceOpen.value = true
       }
 
       entryResourcesList.forEach(({ resource }) => entryResourcesRegistry.add(resource.revoke))
@@ -256,8 +859,14 @@ async function renderScene() {
   }
 }
 
+watch(effectiveMode, nextMode => {
+  const preset = resolveMolstarViewerPreset(nextMode)
+  activeRepresentation.value = preset.primaryRepresentation
+  activeColorTheme.value = 'default'
+})
+
 onMounted(async () => {
-  if (containerRef.value) {
+  if (containerRef.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
       viewer?.handleResize()
     })
@@ -272,7 +881,7 @@ watch(
   () => {
     void renderScene()
   },
-  { deep: true }
+  { deep: true },
 )
 
 onUnmounted(() => {
@@ -280,14 +889,18 @@ onUnmounted(() => {
   resizeObserver?.disconnect()
   removeLayoutSyncListener?.()
   removeLayoutSyncListener = null
+  removeClickListener?.()
+  removeClickListener = null
   disposeMolstarViewer(viewer)
   viewer = null
 })
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .molecule-viewer {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 520px;
   height: 520px;
   border-radius: 20px;
@@ -295,6 +908,11 @@ onUnmounted(() => {
   background:
     radial-gradient(circle at top left, rgba(87, 181, 231, 0.22), transparent 38%),
     linear-gradient(145deg, #07111f, #10233f 58%, #17345f);
+}
+
+.molecule-viewer--bg-white {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .molecule-viewer--compact {
@@ -305,8 +923,15 @@ onUnmounted(() => {
 }
 
 .molecule-viewer--full {
-  min-height: 520px;
-  height: 520px;
+  min-height: 540px;
+  height: 540px;
+}
+
+.viewer-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 .viewer-canvas {
@@ -325,33 +950,68 @@ onUnmounted(() => {
   right: @spacing-sm;
   z-index: 2;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: @spacing-xs;
+  max-width: calc(100% - 16px);
 }
 
 .viewer-mode {
-  padding: 2px 6px;
+  padding: 3px 8px;
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.82);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
   background: rgba(8, 15, 30, 0.72);
   font-size: 11px;
+  font-weight: 600;
   text-transform: capitalize;
-}
-
-.viewer-reset {
-  position: static;
-  z-index: auto;
-  padding: 5px 10px;
-  border: 1px solid rgba(207, 224, 247, 0.28);
-  border-radius: 6px;
-  background: rgba(8, 20, 36, 0.72);
-  color: #cfe0f7;
-  cursor: pointer;
-  font-size: 12px;
   backdrop-filter: blur(4px);
 }
 
+.viewer-select,
+.viewer-tool-btn,
+.viewer-reset {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(207, 224, 247, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 20, 36, 0.76);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 24px;
+  backdrop-filter: blur(4px);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.viewer-select {
+  padding-right: 6px;
+}
+
+.viewer-tool-btn.is-active {
+  border-color: #38bdf8;
+  background: rgba(14, 116, 144, 0.85);
+  color: #ffffff;
+}
+
+.molecule-viewer--bg-white .viewer-mode,
+.molecule-viewer--bg-white .viewer-select,
+.molecule-viewer--bg-white .viewer-tool-btn,
+.molecule-viewer--bg-white .viewer-reset {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+}
+
+.molecule-viewer--bg-white .viewer-tool-btn.is-active {
+  border-color: #0284c7;
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.viewer-select:disabled,
+.viewer-tool-btn:disabled,
 .viewer-reset:disabled {
   cursor: not-allowed;
   opacity: 0.5;

@@ -1,6 +1,6 @@
 <template>
   <div v-if="scene" class="structure-artifact-preview" data-testid="structure-artifact-preview">
-    <component :is="MoleculeViewer" :scene="scene" />
+    <component :is="MoleculeViewer" :scene="scene" :mode="resolvedMode" />
   </div>
 </template>
 
@@ -10,6 +10,8 @@ import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import {
   createVisualizationScene,
   detectVisualizationFormat,
+  resolveMolstarStructureArtifactMode,
+  type MolstarViewerMode,
   type VisualizationSceneEntry,
 } from '@/domain/tasks'
 import type { TypedArtifact } from '@/types/artifacts'
@@ -18,6 +20,7 @@ const props = withDefaults(
   defineProps<{
     artifact: TypedArtifact
     role?: VisualizationSceneEntry['role']
+    mode?: MolstarViewerMode
     preferredFileRoles?: string[]
   }>(),
   {
@@ -53,8 +56,19 @@ const fileRef = computed(() => ({
     buildArtifactVersionDownloadUrl(props.artifact.id, props.artifact.latest_version.id),
 }))
 
+const detectedFormat = computed(() => detectVisualizationFormat(fileRef.value))
+
+const resolvedMode = computed(() =>
+  resolveMolstarStructureArtifactMode({
+    explicitMode: props.mode,
+    role: props.role,
+    artifactType: props.artifact.artifact_type,
+    format: detectedFormat.value,
+  })
+)
+
 const scene = computed(() => {
-  const format = detectVisualizationFormat(fileRef.value)
+  const format = detectedFormat.value
   if (!format) {
     return null
   }
