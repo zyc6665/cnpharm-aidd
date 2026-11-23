@@ -179,13 +179,15 @@ kubectl -n aidd-system create secret generic aidd-execution-worker-secrets \
 平台会为 Job 注入：
 
 ```text
-SCIMINER_OBJECT_STORAGE_ENDPOINT
-SCIMINER_OBJECT_STORAGE_BUCKET
-SCIMINER_OBJECT_STORAGE_ACCESS_KEY
-SCIMINER_OBJECT_STORAGE_SECRET_KEY
-SCIMINER_EXECUTION_OUTPUT_PREFIX=executions/<namespace>/<job-name>
-SCIMINER_RESULT_OBJECT=executions/<namespace>/<job-name>/result.json
+AIDD_OBJECT_STORAGE_ENDPOINT
+AIDD_OBJECT_STORAGE_BUCKET
+AIDD_OBJECT_STORAGE_ACCESS_KEY
+AIDD_OBJECT_STORAGE_SECRET_KEY
+AIDD_EXECUTION_OUTPUT_PREFIX=executions/<namespace>/<job-name>
+AIDD_RESULT_OBJECT=executions/<namespace>/<job-name>/result.json
 ```
+
+> 兼容期平台同时注入旧前缀 `SCIMINER_*`（值相同），供已构建的旧镜像读取；新镜像按 `AIDD_*` 优先、`SCIMINER_*` 回退。
 
 模型运行时必须先上传输出文件，再上传 `result.json`。`result.json` 遵循 `aidd.platform/result`，文件路径相对于输出前缀，且声明的 SHA-256 必须与对象内容一致。Worker 会下载并校验所有对象，校验通过后才创建平台 File 记录和标准 ArtifactVersion。
 
