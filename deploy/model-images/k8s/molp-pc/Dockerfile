@@ -24,12 +24,15 @@ RUN mkdir -p /opt/conda && tar -xzf /tmp/env.tar.gz -C /opt/conda && rm /tmp/env
 RUN PATH=/opt/conda/bin:$PATH /opt/conda/bin/pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple minio==7.2.10
 ENV PATH=/opt/conda/bin:$PATH \
     PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
-    MODEL_PACKAGE_ROOT=/opt/sciminer/MolP-PC PLATFORM_ADAPTOR_ROOT=/opt/sciminer/platform_adaptor \
-    DRP_MODEL_ENTRY=/opt/sciminer/MolP-PC/platform_run.sh \
+    MODEL_PACKAGE_ROOT=/opt/aidd/MolP-PC PLATFORM_ADAPTOR_ROOT=/opt/aidd/platform_adaptor \
+    DRP_MODEL_ENTRY=/opt/aidd/MolP-PC/platform_run.sh \
     MOLP_PC_PYTHON=/opt/conda/bin/python CONDA_EXE=/opt/conda/bin/conda \
     PLATFORM_POSTPROCESS_MODEL=molp-pc PLATFORM_LEGACY_REQUEST_BRIDGE=1 \
     LD_LIBRARY_PATH=/opt/conda/lib:/opt/conda/lib/python3.8/site-packages/nvidia/cublas/lib:/opt/conda/lib/python3.8/site-packages/nvidia/cusparse/lib:/opt/conda/lib/python3.8/site-packages/nvidia/cusolver/lib
-COPY platform_adaptor /opt/sciminer/platform_adaptor
-ADD model.tar.gz /opt/sciminer/
-RUN chmod +x /opt/sciminer/platform_adaptor/*.sh /opt/sciminer/MolP-PC/platform_run.sh
-ENTRYPOINT ["/usr/bin/tini","--","/opt/sciminer/platform_adaptor/entrypoint.sh"]
+COPY platform_adaptor /opt/aidd/platform_adaptor
+ADD model.tar.gz /opt/aidd/
+RUN chmod +x /opt/aidd/platform_adaptor/*.sh /opt/aidd/MolP-PC/platform_run.sh
+# 兼容存量 DB entrypoint（/opt/sciminer/...）：新镜像提供同名符号链接
+RUN ln -sfn /opt/aidd /opt/sciminer
+
+ENTRYPOINT ["/usr/bin/tini","--","/opt/aidd/platform_adaptor/entrypoint.sh"]

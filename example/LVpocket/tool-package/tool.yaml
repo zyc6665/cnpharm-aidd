@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: lvpocket-standard-pocket
@@ -64,7 +64,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/lvpocket-runtime:1.0.0
+      image: registry.example/aidd/lvpocket-runtime:1.0.0
       image_digest: "sha256:7777777777777777777777777777777777777777777777777777777777777777"
       includes:
         - python

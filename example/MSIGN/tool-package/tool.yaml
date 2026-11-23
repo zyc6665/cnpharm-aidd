@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: msign-affinity-prediction
@@ -70,7 +70,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/msign-runtime:0.1.1
+      image: registry.example/aidd/msign-runtime:0.1.1
       image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       includes:
         - python

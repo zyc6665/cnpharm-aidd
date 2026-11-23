@@ -1,5 +1,5 @@
 {
-  "result_version": "aidd.sciminer/result",
+  "result_version": "aidd.platform/result",
   "artifacts": {
     "pocket": {
       "name": "example_lvpocket_binding_pocket",

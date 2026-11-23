@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: gcdm-pocket-generation
@@ -100,7 +100,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/gcdm-runtime:0.1.2
+      image: registry.example/aidd/gcdm-runtime:0.1.2
       image_digest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
       includes:
         - python

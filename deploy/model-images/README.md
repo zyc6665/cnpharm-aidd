@@ -59,7 +59,7 @@ docker image inspect 127.0.0.1:30500/aidd/compute-lvpocket:2.0.0-cu122 \
 [
   {
     "name": "lvpocket-weights",
-    "mountPath": "/opt/sciminer/model/new_best",
+    "mountPath": "/opt/aidd/model/new_best",
     "readOnly": true,
     "source": { "kind": "host-path", "path": "/data/zhouyc/model-cache/lvpocket/v2/new_best" },
     "cache":  { "kind": "host-path", "path": "/data/model-cache/lvpocket/2.0.0" }

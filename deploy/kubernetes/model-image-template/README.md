@@ -13,7 +13,7 @@
 镜像运行目录固定分为两层：
 
 ```text
-/opt/sciminer/
+/opt/aidd/
 ├── model/
 │   ├── MODEL_PACKAGE.yaml
 │   ├── README.md

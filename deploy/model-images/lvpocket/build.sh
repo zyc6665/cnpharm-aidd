@@ -82,7 +82,7 @@ smoke() {
 JSON
   log "smoke 输出目录 ${out}"
   docker run --rm --gpus "\"device=${GPU_DEVICE}\"" \
-    -v "${WEIGHTS_DIR}:/opt/sciminer/model/new_best:ro" \
+    -v "${WEIGHTS_DIR}:/opt/aidd/model/new_best:ro" \
     -v "${out}/input:/workspace/input" \
     -v "${out}/params.json:/workspace/params.json:ro" \
     -v "${out}:/workspace/output" \

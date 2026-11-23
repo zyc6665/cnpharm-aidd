@@ -207,7 +207,7 @@ def main() -> int:
     )
 
     result = {
-        "result_version": "aidd.sciminer/result",
+        "result_version": "aidd.platform/result",
         "artifacts": {
             "predicted_structure": {
                 "type": "protein_structure@1",

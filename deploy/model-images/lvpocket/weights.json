@@ -4,7 +4,7 @@
   "weights": [
     {
       "name": "lvpocket-new-best",
-      "mountPath": "/opt/sciminer/model/new_best",
+      "mountPath": "/opt/aidd/model/new_best",
       "readOnly": true,
       "source": {
         "kind": "host-path",

@@ -59,7 +59,7 @@ def test_weight_mounts_are_rendered_as_read_only_host_paths() -> None:
                         {
                             "name": "lvpocket-weights",
                             "host_path": "/data/zhouyc/model-cache/lvpocket/v2/new_best",
-                            "mount_path": "/opt/sciminer/model/new_best",
+                            "mount_path": "/opt/aidd/model/new_best",
                         }
                     ]
                 }
@@ -80,7 +80,7 @@ def test_weight_mounts_are_rendered_as_read_only_host_paths() -> None:
     assert pod["containers"][0]["volumeMounts"] == [
         {
             "name": "lvpocket-weights",
-            "mountPath": "/opt/sciminer/model/new_best",
+            "mountPath": "/opt/aidd/model/new_best",
             "readOnly": True,
         }
     ]

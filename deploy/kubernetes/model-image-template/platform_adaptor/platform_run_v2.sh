@@ -38,7 +38,7 @@ fi
 DRP_TASK_FILE="${DRP_TASK_FILE:-${PARAMS_JSON}}"
 DRP_RESULT_FILE="${DRP_RESULT_FILE:-${OUTPUT_DIR}/result.json}"
 DRP_OUT_DIR="${DRP_OUT_DIR:-${OUTPUT_DIR}}"
-DRP_MODEL_ENTRY="${DRP_MODEL_ENTRY:-/opt/sciminer/model/platform_run.sh}"
+DRP_MODEL_ENTRY="${DRP_MODEL_ENTRY:-/opt/aidd/model/platform_run.sh}"
 DRP_DEVICE="${DRP_DEVICE:-${DEVICE}}"
 DRP_HEARTBEAT_SEC="${DRP_HEARTBEAT_SEC:-10}"
 DRP_MAX_MINUTES="${DRP_MAX_MINUTES:-}"
@@ -55,7 +55,7 @@ on_term() {
   if [[ -d "${OUTPUT_DIR}" ]]; then
     # 模型可能没有产出 result.json；合成一个最小 FAILED 清单，让 upload 至少提交已产出文件。
     if [[ ! -f "${OUTPUT_DIR}/result.json" ]]; then
-      printf '{"result_version":"aidd.sciminer/result","status":"FAILED","reason":"timeout","artifacts":{}}\n' \
+      printf '{"result_version":"aidd.platform/result","status":"FAILED","reason":"timeout","artifacts":{}}\n' \
         > "${OUTPUT_DIR}/result.json" 2>/dev/null || true
     fi
     "${PLATFORM_PYTHON}" "${SCRIPT_DIR}/object_storage.py" upload \
@@ -88,7 +88,7 @@ fi
 # 直接传会以 `Unknown argument: --model-root` 退出码 2 失败。先探测脚本是否支持该参数。
 MODEL_ROOT_ARGS=()
 if grep -q -- '--model-root)' "${DRP_MODEL_ENTRY}" 2>/dev/null; then
-  MODEL_ROOT_ARGS+=(--model-root "${MODEL_PACKAGE_ROOT:-/opt/sciminer/model}")
+  MODEL_ROOT_ARGS+=(--model-root "${MODEL_PACKAGE_ROOT:-/opt/aidd/model}")
 fi
 
 # 步骤 3：运行模型。非 0（含被信号终止）→ 视为模型异常，退出码 12；
@@ -111,7 +111,7 @@ fi
 
 # 步骤 3.5：可选的 legacy→result.v2 后处理。研究型模型往往只产出旧版
 # result.json；镜像通过 PLATFORM_POSTPROCESS_MODEL 声明模型键后，由平台适配层
-# 统一转换成 aidd.sciminer/result，避免每个模型重复实现契约。
+# 统一转换成 aidd.platform/result，避免每个模型重复实现契约。
 if [[ -n "${PLATFORM_POSTPROCESS_MODEL:-}" ]]; then
   if ! "${PLATFORM_PYTHON}" "${SCRIPT_DIR}/postprocess_result.py" \
     --model "${PLATFORM_POSTPROCESS_MODEL}" \

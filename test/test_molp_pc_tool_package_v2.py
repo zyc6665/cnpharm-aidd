@@ -105,7 +105,7 @@ def test_molp_pc_v2_scientific_metadata_declares_delivery_identity():
 
     assert metadata["model_name"] == "MolP-PC"
     assert metadata["model_version"] == "0.1.1"
-    assert metadata["runtime_ref"] == "container:registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    assert metadata["runtime_ref"] == "container:registry.example/aidd/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444"
     assert metadata["weights_ref"] == "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666"
     assert metadata["evidence_level"] == "engineering_smoke_only"
     assert metadata["applicability_domain_status"] == "unknown"

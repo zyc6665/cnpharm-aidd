@@ -67,7 +67,7 @@ def test_template_example_request_matches_parameter_schema():
     )
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(request["parameters"])
-    assert request["request_version"] == "aidd.sciminer/request"
+    assert request["request_version"] == "aidd.platform/request"
     assert request["inputs"]["protein"]["type"] == "protein_structure@1"
 
 

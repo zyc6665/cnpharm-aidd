@@ -350,7 +350,7 @@ def main() -> int:
     )
 
     result = {
-        "result_version": "aidd.sciminer/result",
+        "result_version": "aidd.platform/result",
         "artifacts": {
             "affinity_table": {
                 "type": "molecule_table@1",

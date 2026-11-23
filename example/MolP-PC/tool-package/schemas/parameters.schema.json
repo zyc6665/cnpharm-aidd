@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:sciminer:molp-pc-property-prediction:parameters:v2",
+  "$id": "urn:aidd:molp-pc-property-prediction:parameters:v2",
   "title": "MolP-PC property prediction parameters",
   "type": "object",
   "properties": {

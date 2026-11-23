@@ -3,7 +3,7 @@
 
 The model containers in this directory wrap upstream research scripts that emit a
 legacy ``result.json`` (``success``/``outputs``/``artifacts``).  The platform
-Kubernetes adaptor only accepts ``aidd.sciminer/result`` (result.v2), so after the
+Kubernetes adaptor accepts ``aidd.platform/result`` (and legacy ``aidd.platform/result``), so after the
 model entry finishes we translate the legacy payload into standard artifacts with
 the file roles required by each artifact type.
 
@@ -20,6 +20,11 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+
+
+RESULT_VERSION = "aidd.platform/result"
+LEGACY_RESULT_VERSION = "aidd.platform/result"
+ACCEPTED_RESULT_VERSIONS = {RESULT_VERSION, LEGACY_RESULT_VERSION}
 
 
 def sha256_file(path: Path) -> str:
@@ -67,7 +72,7 @@ def run_report(output_dir: Path, task_id: str, tool: str, summary: dict[str, Any
 def load_legacy(output_dir: Path) -> dict[str, Any]:
     path = output_dir / "result.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("result_version") == "aidd.sciminer/result":
+    if payload.get("result_version") in ACCEPTED_RESULT_VERSIONS:
         raise SystemExit("result.json already uses result.v2")
     if not payload.get("success"):
         raise SystemExit("legacy result reports failure; no v2 payload to build")
@@ -91,7 +96,7 @@ def molp_pc(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str,
     metadata = molecule_table_metadata(output_dir, task_id, "SMILES")
     report = run_report(output_dir, task_id, "molp-pc-property-prediction", legacy.get("outputs") or {})
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "properties": {
                 "type": "molecule_table@1",
@@ -161,7 +166,7 @@ def msign(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, A
         }
     report = run_report(output_dir, task_id, "msign-affinity-prediction", report_summary)
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "affinity": {
                 "type": "molecule_table@1",
@@ -188,7 +193,7 @@ def pocket2mol(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[s
     metadata = molecule_table_metadata(output_dir, task_id, "smiles")
     report = run_report(output_dir, task_id, "pocket2mol-pocket-ligand-generation", outputs)
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "molecules": {
                 "type": "molecule_table@1",
@@ -230,7 +235,7 @@ def therapainter(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict
         },
     )
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "peptides": {
                 "type": "molecule_table@1",

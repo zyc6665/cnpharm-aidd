@@ -63,7 +63,7 @@
   ],
   "model_name": "MolP-PC",
   "model_version": "0.1.1",
-  "runtime_ref": "container:registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "runtime_ref": "container:registry.example/aidd/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444",
   "weights_ref": "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666",
   "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
   "evidence_level": "engineering_smoke_only",

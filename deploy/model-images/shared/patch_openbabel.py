@@ -34,7 +34,7 @@ def _formatstodict(formats):
 
 ## 为什么改库文件而不是改模型代码
 
-模型侧（`/opt/sciminer/model/pybel.py`）只是 `from openbabel import pybel` 的
+模型侧（`/opt/aidd/model/pybel.py`）只是 `from openbabel import pybel` 的
 薄封装，问题在第三方包里。在镜像构建期修库文件，模型代码保持原样（可追溯、
 与原环境行为一致），代价是换 openbabel-wheel 版本时这段 patch 要在 CI 里被验证。
 """

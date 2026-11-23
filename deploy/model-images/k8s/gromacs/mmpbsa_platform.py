@@ -367,7 +367,7 @@ def main() -> int:
     }
     write_json(out / "report.json", report)
     result_payload = {
-        "result_version": "aidd.sciminer/result",
+        "result_version": "aidd.platform/result",
         "artifacts": {
             "binding_energy": {
                 "type": "molecule_table@1",

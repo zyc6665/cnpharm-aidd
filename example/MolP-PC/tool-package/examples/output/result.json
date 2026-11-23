@@ -1,5 +1,5 @@
 {
-  "result_version": "aidd.sciminer/result",
+  "result_version": "aidd.platform/result",
   "artifacts": {
     "properties": {
       "name": "example-task_molp_pc_admet_predictions",
@@ -12,7 +12,7 @@
         },
         "metadata_json": {
           "path": "artifacts/properties/metadata.json",
-          "sha256": "1c9db30b96ddb73a6df6c6e1a8b838194b82ad968f92597324ba30653067a0bc",
+          "sha256": "8dc0c6407644e60adc0bfc0d524c72f2dec0085d813efc9e7218a1afce4dec58",
           "content_type": "application/json"
         }
       },
@@ -81,7 +81,7 @@
         ],
         "model_name": "MolP-PC",
         "model_version": "0.1.1",
-        "runtime_ref": "container:registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "runtime_ref": "container:registry.example/aidd/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444",
         "weights_ref": "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666",
         "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
         "evidence_level": "engineering_smoke_only",
@@ -97,7 +97,7 @@
       "files": {
         "report_json": {
           "path": "reports/report.json",
-          "sha256": "6393507464ee14536612cc2f8155a399b4e3681dc243e478d9311b13c7b94738",
+          "sha256": "5ffeecbbb4c70a3c0dd4501b8146de968d14351f530fefbb0b4c4a249e32fcb6",
           "content_type": "application/json"
         }
       },

@@ -1,4 +1,4 @@
-name: sciminer-k100-test
+name: aidd-k100-test
 
 x-app-environment: &app_environment
   APP_NAME: 科学计算工具管理平台
@@ -35,7 +35,7 @@ x-app-environment: &app_environment
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: sciminer-k100-postgres
+    container_name: aidd-k100-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-scitool}
@@ -49,11 +49,11 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   redis:
     image: redis:7-alpine
-    container_name: sciminer-k100-redis
+    container_name: aidd-k100-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
@@ -64,11 +64,11 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   minio:
     image: minio/minio:RELEASE.2024-06-13T22-53-53Z
-    container_name: sciminer-k100-minio
+    container_name: aidd-k100-minio
     restart: unless-stopped
     command: server /data --address ":9000" --console-address ":9001"
     environment:
@@ -85,11 +85,11 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   backend:
-    image: sciminer-backend:${APP_VERSION:-k100-test}
-    container_name: sciminer-k100-backend
+    image: aidd-backend:${APP_VERSION:-k100-test}
+    container_name: aidd-k100-backend
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -118,11 +118,11 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   backend-migrate:
-    image: sciminer-backend:${APP_VERSION:-k100-test}
-    container_name: sciminer-k100-backend-migrate
+    image: aidd-backend:${APP_VERSION:-k100-test}
+    container_name: aidd-k100-backend-migrate
     profiles: ["tools"]
     env_file:
       - ./.env.k100-test
@@ -136,11 +136,11 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   celery-worker:
-    image: sciminer-backend:${APP_VERSION:-k100-test}
-    container_name: sciminer-k100-celery-worker
+    image: aidd-backend:${APP_VERSION:-k100-test}
+    container_name: aidd-k100-celery-worker
     restart: unless-stopped
     env_file:
       - ./.env.k100-test
@@ -150,7 +150,7 @@ services:
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
       --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
-      --hostname=k100-worker@sciminer
+      --hostname=k100-worker@aidd
     volumes:
       - k100_backend_storage:/app/storage
     extra_hosts:
@@ -169,11 +169,11 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - sciminer-k100
+      - aidd-k100
 
   frontend:
-    image: sciminer-frontend:${APP_VERSION:-k100-test}
-    container_name: sciminer-k100-frontend
+    image: aidd-frontend:${APP_VERSION:-k100-test}
+    container_name: aidd-k100-frontend
     build:
       context: ../../frontend
       dockerfile: Dockerfile
@@ -194,7 +194,7 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - sciminer-k100
+      - aidd-k100
 
 volumes:
   k100_postgres_data:
@@ -203,6 +203,6 @@ volumes:
   k100_backend_storage:
 
 networks:
-  sciminer-k100:
-    name: sciminer-k100
+  aidd-k100:
+    name: aidd-k100
     driver: bridge

@@ -16,6 +16,22 @@ from urllib.parse import urlparse
 SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 
+# 2026-11 命名收敛：平台注入 AIDD_*（新）并同时保留 SCIMINER_*（旧）。
+# 适配层按「新名优先、旧名回退」读取，保证新旧镜像都能工作。
+ENV_PREFIX = "AIDD_"
+LEGACY_ENV_PREFIX = "SCIMINER_"
+
+RESULT_VERSION = "aidd.platform/result"
+LEGACY_RESULT_VERSION = "aidd.platform/result"
+ACCEPTED_RESULT_VERSIONS = {RESULT_VERSION, LEGACY_RESULT_VERSION}
+
+
+def _env(values: dict[str, str], name: str, default: str | None = None) -> str | None:
+    value = values.get(f"{ENV_PREFIX}{name}")
+    if value is None:
+        value = values.get(f"{LEGACY_ENV_PREFIX}{name}")
+    return default if value is None else value
+
 
 class ObjectStorageError(ValueError):
     """Raised when model Job input or output storage is invalid."""
@@ -34,7 +50,7 @@ def prepare_job_inputs(
     input_dir = Path(input_dir).resolve()
     params_path = Path(params_path)
     input_dir.mkdir(parents=True, exist_ok=True)
-    descriptors = _input_descriptors(values.get("SCIMINER_INPUTS_JSON", "[]"))
+    descriptors = _input_descriptors(_env(values, "INPUTS_JSON", "[]"))
 
     if descriptors:
         if storage is None or bucket is None:
@@ -48,14 +64,14 @@ def prepare_job_inputs(
     else:
         staged = []
 
-    request_json = values.get("SCIMINER_REQUEST_JSON")
+    request_json = _env(values, "REQUEST_JSON")
     if request_json:
         try:
             request_payload = json.loads(request_json)
         except json.JSONDecodeError as exc:
-            raise ObjectStorageError("SCIMINER_REQUEST_JSON is not valid JSON") from exc
+            raise ObjectStorageError("AIDD_REQUEST_JSON/SCIMINER_REQUEST_JSON is not valid JSON") from exc
         if not isinstance(request_payload, dict):
-            raise ObjectStorageError("SCIMINER_REQUEST_JSON must contain an object")
+            raise ObjectStorageError("AIDD_REQUEST_JSON/SCIMINER_REQUEST_JSON must contain an object")
         params_path.parent.mkdir(parents=True, exist_ok=True)
         params_path.write_text(
             json.dumps(request_payload, ensure_ascii=False, indent=2) + "\n",
@@ -149,10 +165,12 @@ def _resolve_output_result(
         result_payload = json.loads(result_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ObjectStorageError("result.json is not valid JSON") from exc
-    if not isinstance(result_payload, dict) or result_payload.get("result_version") != (
-        "aidd.sciminer/result"
-    ):
-        raise ObjectStorageError("result.json must use aidd.sciminer/result")
+    if not isinstance(result_payload, dict) or result_payload.get(
+        "result_version"
+    ) not in ACCEPTED_RESULT_VERSIONS:
+        raise ObjectStorageError(
+            "result.json must use aidd.platform/result (or legacy aidd.platform/result)"
+        )
 
     files = sorted(
         path
@@ -241,17 +259,17 @@ def _input_descriptors(raw: str) -> list[dict[str, Any]]:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ObjectStorageError("SCIMINER_INPUTS_JSON is not valid JSON") from exc
+        raise ObjectStorageError("AIDD_INPUTS_JSON/SCIMINER_INPUTS_JSON is not valid JSON") from exc
     if not isinstance(value, list):
-        raise ObjectStorageError("SCIMINER_INPUTS_JSON must contain a list")
+        raise ObjectStorageError("AIDD_INPUTS_JSON/SCIMINER_INPUTS_JSON must contain a list")
     return value
 
 
 def _storage_from_environment(env: dict[str, str]) -> tuple[Any, str]:
-    endpoint = env.get("SCIMINER_OBJECT_STORAGE_ENDPOINT")
-    bucket = env.get("SCIMINER_OBJECT_STORAGE_BUCKET")
-    access_key = env.get("SCIMINER_OBJECT_STORAGE_ACCESS_KEY")
-    secret_key = env.get("SCIMINER_OBJECT_STORAGE_SECRET_KEY")
+    endpoint = _env(env, "OBJECT_STORAGE_ENDPOINT")
+    bucket = _env(env, "OBJECT_STORAGE_BUCKET")
+    access_key = _env(env, "OBJECT_STORAGE_ACCESS_KEY")
+    secret_key = _env(env, "OBJECT_STORAGE_SECRET_KEY")
     if not all((endpoint, bucket, access_key, secret_key)):
         raise ObjectStorageError("object-storage configuration must be complete")
 
@@ -354,7 +372,7 @@ def _main() -> int:
     env = dict(os.environ)
     output_dir = Path(args.output_dir).resolve()
     storage, bucket = _storage_from_environment(env)
-    prefix = _safe_object_key(env.get("SCIMINER_EXECUTION_OUTPUT_PREFIX"))
+    prefix = _safe_object_key(_env(env, "EXECUTION_OUTPUT_PREFIX"))
     upload_output_directory(
         output_dir=output_dir,
         result_path=output_dir / "result.json",

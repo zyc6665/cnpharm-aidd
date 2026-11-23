@@ -1,6 +1,6 @@
 """让 MolP-PC 镜像接受平台规范化的 ``smiles`` 小写表头。
 
-镜像内的 ``/opt/sciminer/MolP-PC/platform_run.sh`` 自带一个内嵌的
+镜像内的 ``/opt/aidd/MolP-PC/platform_run.sh`` 自带一个内嵌的
 ``molp_pc_platform_runner.py``（heredoc 生成到工作目录），它对输入 CSV 的要求是
 表头里必须有**大写** ``SMILES`` 列：
 
@@ -27,8 +27,8 @@ cd deploy/model-images/molp-pc
 python3 patches/patch_smiles_header.py /path/to/platform_run.sh
 cat > Dockerfile <<'EOF'
 FROM 127.0.0.1:30500/aidd/compute-molp-pc@sha256:c7e5dfdc8ce1f4669aa00faef71a21a9d61c4ab78449293d9dab81c993a5f516
-COPY platform_run.sh /opt/sciminer/MolP-PC/platform_run.sh
-RUN chmod +x /opt/sciminer/MolP-PC/platform_run.sh
+COPY platform_run.sh /opt/aidd/MolP-PC/platform_run.sh
+RUN chmod +x /opt/aidd/MolP-PC/platform_run.sh
 EOF
 docker buildx build --push -t 127.0.0.1:30500/aidd/compute-molp-pc:1.1.2 .
 ```

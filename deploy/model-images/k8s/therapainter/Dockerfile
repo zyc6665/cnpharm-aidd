@@ -14,11 +14,14 @@ RUN /opt/conda/bin/pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.
     fair-esm
 
 # Platform adaptor: legacy request bridge + DualPep result postprocess.
-COPY request_to_legacy.py /opt/sciminer/platform_adaptor/request_to_legacy.py
-COPY postprocess_result.py /opt/sciminer/platform_adaptor/postprocess_result.py
+COPY request_to_legacy.py /opt/aidd/platform_adaptor/request_to_legacy.py
+COPY postprocess_result.py /opt/aidd/platform_adaptor/postprocess_result.py
 
 ENV DRP_MODEL_ENTRY=/opt/TheraPainter/platform_run.sh \
     MODEL_PYTHON=/opt/conda/bin/python \
     THERAPAINTER_MODEL_ROOT=/opt/TheraPainter \
     PLATFORM_LEGACY_REQUEST_BRIDGE=1 \
     PLATFORM_POSTPROCESS_MODEL=therapainter
+
+# 兼容存量 DB entrypoint（/opt/sciminer/...）：同名符号链接
+RUN ln -sfn /opt/aidd /opt/sciminer

@@ -1,5 +1,5 @@
 {
-  "request_version": "aidd.sciminer/request",
+  "request_version": "aidd.platform/request",
   "task": {
     "id": "example-gmx-mmpbsa-free-energy",
     "tool_slug": "gmx-mmpbsa-free-energy",

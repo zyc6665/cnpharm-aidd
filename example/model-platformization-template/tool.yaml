@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package
+api_version: aidd.platform/tool-package
 kind: ToolPackage
 metadata:
   slug: standard-pocket-adapter-template
@@ -58,7 +58,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/standard-pocket-adapter-runtime:0.1.0
+      image: registry.example/aidd/standard-pocket-adapter-runtime:0.1.0
       image_digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"
       includes:
         - python

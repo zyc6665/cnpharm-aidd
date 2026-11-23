@@ -18,10 +18,17 @@ INPUT_DIR = Path("/workspace/input")
 INPUT_MANIFEST = INPUT_DIR / "manifest.json"
 SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 
+# 平台注入 AIDD_*（新）并保留 SCIMINER_*（旧）：新名优先、旧名回退。
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(f"AIDD_{name}")
+    if value is None:
+        value = os.getenv(f"SCIMINER_{name}")
+    return default if value is None else value
+
 
 def main() -> int:
-    task_id = os.getenv("SCIMINER_TASK_ID", "local-smoke")
-    attempt_id = os.getenv("SCIMINER_ATTEMPT_ID", "local-attempt")
+    task_id = _env("TASK_ID", "local-smoke")
+    attempt_id = _env("ATTEMPT_ID", "local-attempt")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -47,13 +54,13 @@ def main() -> int:
 
 
 def stage_inputs() -> list[dict[str, str]]:
-    raw = os.getenv("SCIMINER_INPUTS_JSON", "[]")
+    raw = _env("INPUTS_JSON", "[]")
     try:
         descriptors = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RuntimeError("SCIMINER_INPUTS_JSON is not valid JSON") from exc
+        raise RuntimeError("AIDD_INPUTS_JSON/SCIMINER_INPUTS_JSON is not valid JSON") from exc
     if not isinstance(descriptors, list):
-        raise RuntimeError("SCIMINER_INPUTS_JSON must be a list")
+        raise RuntimeError("AIDD_INPUTS_JSON/SCIMINER_INPUTS_JSON must be a list")
 
     storage = build_storage_client()
     staged: list[dict[str, str]] = []
@@ -94,7 +101,7 @@ def write_result(task_id: str, attempt_id: str, report_path: Path) -> Path:
     result_path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result",
+                "result_version": "aidd.platform/result",
                 "artifacts": {
                     "report": {
                         "type": "run_report@1",
@@ -123,10 +130,10 @@ def write_result(task_id: str, attempt_id: str, report_path: Path) -> Path:
 
 def build_storage_client():
     values = {
-        "endpoint": os.getenv("SCIMINER_OBJECT_STORAGE_ENDPOINT"),
-        "bucket": os.getenv("SCIMINER_OBJECT_STORAGE_BUCKET"),
-        "access_key": os.getenv("SCIMINER_OBJECT_STORAGE_ACCESS_KEY"),
-        "secret_key": os.getenv("SCIMINER_OBJECT_STORAGE_SECRET_KEY"),
+        "endpoint": _env("OBJECT_STORAGE_ENDPOINT"),
+        "bucket": _env("OBJECT_STORAGE_BUCKET"),
+        "access_key": _env("OBJECT_STORAGE_ACCESS_KEY"),
+        "secret_key": _env("OBJECT_STORAGE_SECRET_KEY"),
     }
     configured = [bool(value) for value in values.values()]
     if not any(configured):
@@ -153,12 +160,12 @@ def build_storage_client():
 def upload_outputs(result_path: Path) -> None:
     storage = build_storage_client()
     if storage is None:
-        if os.getenv("SCIMINER_INPUTS_JSON", "[]") != "[]":
+        if _env("INPUTS_JSON", "[]") != "[]":
             raise RuntimeError("object-storage credentials are required when inputs are configured")
         return
 
-    bucket = require_env("SCIMINER_OBJECT_STORAGE_BUCKET")
-    prefix = safe_prefix(require_env("SCIMINER_EXECUTION_OUTPUT_PREFIX"))
+    bucket = require_env("OBJECT_STORAGE_BUCKET")
+    prefix = safe_prefix(require_env("EXECUTION_OUTPUT_PREFIX"))
     for path in sorted(OUTPUT_DIR.rglob("*")):
         if not path.is_file() or path == result_path:
             continue
@@ -167,7 +174,7 @@ def upload_outputs(result_path: Path) -> None:
 
 
 def download_object(storage, key: str, destination: Path) -> None:
-    bucket = require_env("SCIMINER_OBJECT_STORAGE_BUCKET")
+    bucket = require_env("OBJECT_STORAGE_BUCKET")
     response = storage.get_object(bucket, key)
     try:
         with destination.open("wb") as handle:
@@ -215,9 +222,11 @@ def safe_segment(value: object, label: str) -> str:
 
 
 def require_env(name: str) -> str:
-    value = os.getenv(name)
+    value = _env(name)
     if not value:
-        raise RuntimeError(f"missing environment variable: {name}")
+        raise RuntimeError(
+            f"missing environment variable: AIDD_{name} (or legacy SCIMINER_{name})"
+        )
     return value
 
 

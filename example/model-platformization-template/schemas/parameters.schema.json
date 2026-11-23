@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:sciminer:standard-pocket-adapter-template:parameters:v2",
+  "$id": "urn:aidd:standard-pocket-adapter-template:parameters:v2",
   "title": "Standard pocket adapter template parameters",
   "type": "object",
   "properties": {
