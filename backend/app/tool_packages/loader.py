@@ -10,9 +10,9 @@ from pydantic import ValidationError
 
 from app.tool_packages.schemas import (
     AnyToolPackageManifest,
-    TOOL_PACKAGE_API_VERSION,
     LegacyToolPackageManifest,
     ToolPackageManifest,
+    is_tool_package_api_version,
 )
 
 
@@ -30,7 +30,7 @@ def load_tool_package(package_dir: str | Path) -> AnyToolPackageManifest:
     raw["variants"] = [_load_variant(root, item) for item in raw.get("variants", [])]
     manifest_model = (
         ToolPackageManifest
-        if raw.get("api_version") == TOOL_PACKAGE_API_VERSION
+        if is_tool_package_api_version(raw.get("api_version"))
         else LegacyToolPackageManifest
     )
     try:

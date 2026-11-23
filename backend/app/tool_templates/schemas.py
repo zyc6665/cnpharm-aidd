@@ -11,6 +11,10 @@ from app.artifact_standards.types import (
     normalize_platform_artifact_type,
 )
 from app.artifact_standards.registry import validate_standard_artifact_roles
+from app.execution.standard_contracts import (
+    RESULT_VERSION,
+    is_supported_result_version,
+)
 
 try:
     from jsonschema import Draft7Validator
@@ -20,8 +24,22 @@ except ImportError:  # pragma: no cover - optional dependency guard
     HAS_JSONSCHEMA = False
 
 
-TOOL_TEMPLATE_API_VERSION = "aidd.sciminer/tool-template"
-STANDARD_RESULT_VERSION = "aidd.sciminer/result"
+TOOL_TEMPLATE_API_VERSION = "aidd.platform/tool-template"
+TOOL_TEMPLATE_API_VERSIONS = (
+    TOOL_TEMPLATE_API_VERSION,
+    "aidd.sciminer/tool-template",
+)
+ToolTemplateApiVersion = Literal[
+    "aidd.platform/tool-template",
+    "aidd.sciminer/tool-template",
+]
+STANDARD_RESULT_VERSION = RESULT_VERSION
+StandardResultVersion = Literal[
+    "aidd.platform/result",
+    "aidd.platform/result.v2",
+    "aidd.sciminer/result",
+    "aidd.sciminer/result.v2",
+]
 # SSH 执行通道已退役（2026-11 执行通道收敛）；模板不再声明 ssh_job。
 SUPPORTED_TEMPLATE_EXECUTOR_TYPES = {
     "docker_image",
@@ -235,7 +253,7 @@ class ToolTemplateSmokeTest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     params: dict[str, Any] = Field(default_factory=dict)
     input_artifacts: dict[str, str] = Field(default_factory=dict)
-    expected_result_version: Literal[STANDARD_RESULT_VERSION]
+    expected_result_version: StandardResultVersion
     expected_outputs: list[ToolTemplateExpectedOutput] = Field(min_length=1)
 
 
@@ -244,7 +262,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    api_version: Literal[TOOL_TEMPLATE_API_VERSION]
+    api_version: ToolTemplateApiVersion
     kind: Literal["ToolTemplate"]
     metadata: ToolTemplateMetadata
     executor_types: list[Literal["docker_image", "python_script", "k8s_job"]] = Field(
@@ -274,8 +292,11 @@ class DrugDiscoveryToolTemplate(BaseModel):
     @model_validator(mode="after")
     def _validate_standard_result_contract(self) -> "DrugDiscoveryToolTemplate":
         result_version_schema = self.output_schema.get("properties", {}).get("result_version", {})
-        if result_version_schema.get("const") != STANDARD_RESULT_VERSION:
-            raise ValueError("output_schema.properties.result_version.const must be aidd.sciminer/result")
+        if not is_supported_result_version(result_version_schema.get("const")):
+            raise ValueError(
+                "output_schema.properties.result_version.const must be "
+                f"{STANDARD_RESULT_VERSION}"
+            )
 
         capability_outputs = {output.semantic_type for output in self.agent_capability.outputs}
         expected_outputs = {output.semantic_type for output in self.smoke_test.expected_outputs}

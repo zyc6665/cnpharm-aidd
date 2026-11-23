@@ -230,7 +230,7 @@ async def test_harvest_falls_back_to_execution_record_handle(db_session):
             tool_package_version_id="tpv-1",
             idempotency_key="idem-1",
             adapter_type="k8s_job",
-            external_id="sciminer-model-jobs/sciminer-abc123",
+            external_id="aidd-model-jobs/aidd-abc123",
             status="failed",
         )
     )
@@ -241,4 +241,4 @@ async def test_harvest_falls_back_to_execution_record_handle(db_session):
     rows = await harvest_task_runtime_logs(db_session, task=task, execution_service=service)
 
     assert rows == 1
-    assert service.calls[0][1] == "sciminer-model-jobs/sciminer-abc123"
+    assert service.calls[0][1] == "aidd-model-jobs/aidd-abc123"

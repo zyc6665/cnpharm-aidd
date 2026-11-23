@@ -192,7 +192,7 @@ def _tool_version(**overrides):
         "variant": "default",
         "runtime": {
             "image": "registry.example/model@sha256:" + "a" * 64,
-            "entrypoint": ["/opt/sciminer/platform_adaptor/entrypoint.sh"],
+            "entrypoint": ["/opt/aidd/platform_adaptor/entrypoint.sh"],
         },
         "poll_interval_sec": 0,
     }
@@ -250,7 +250,7 @@ class _VanishingAdapter:
                     file_id="file-1",
                 ),
             ),
-            result_payload={"request_version": "aidd.sciminer/result"},
+            result_payload={"request_version": "aidd.platform/result"},
         )
 
     async def logs(self, execution_id, cursor=None):  # pragma: no cover
@@ -280,7 +280,7 @@ async def test_executor_recovers_result_when_job_vanished_after_ttl():
     assert result["success"] is True
     assert result["state"] == "succeeded"
     assert result["output_file_ids"] == ["file-1"]
-    assert result["result"]["request_version"] == "aidd.sciminer/result"
+    assert result["result"]["request_version"] == "aidd.platform/result"
     # The result is collected exactly once: the recovery path returns it and the
     # normal path reuses it instead of downloading the manifest a second time.
     assert [call[0] for call in adapter.calls] == ["submit", "reconcile", "collect_result"]

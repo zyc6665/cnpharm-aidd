@@ -53,10 +53,10 @@ def test_render_manifest_maps_platform_resources_and_identity_labels():
 
     assert manifest["metadata"]["namespace"] == "model-jobs"
     assert manifest["metadata"]["labels"] == {
-        "app.kubernetes.io/managed-by": "sciminer",
-        "sciminer.io/task-id": "task-1",
-        "sciminer.io/attempt-id": "attempt-1",
-        "sciminer.io/tool-version-id": "tool-version-1",
+        "app.kubernetes.io/managed-by": "aidd",
+        "aidd.io/task-id": "task-1",
+        "aidd.io/attempt-id": "attempt-1",
+        "aidd.io/tool-version-id": "tool-version-1",
     }
     assert manifest["spec"]["backoffLimit"] == 0
     assert manifest["spec"]["activeDeadlineSeconds"] == 1200
@@ -108,9 +108,9 @@ def test_render_manifest_places_node_selector_tolerations_and_custom_gpu_resourc
         namespace="model-jobs",
         credential_ref="platform-k8s",
         service_account="model-runner",
-        node_selector={"sciminer.io/pool": "gpu"},
+        node_selector={"aidd.io/pool": "gpu"},
         tolerations=[
-            {"key": "sciminer.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
+            {"key": "aidd.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
         ],
         gpu_resource_name="hygon.com/dcu",
     )
@@ -118,9 +118,9 @@ def test_render_manifest_places_node_selector_tolerations_and_custom_gpu_resourc
     manifest = build_kubernetes_job_manifest(_request(), config)
 
     pod_spec = manifest["spec"]["template"]["spec"]
-    assert pod_spec["nodeSelector"] == {"sciminer.io/pool": "gpu"}
+    assert pod_spec["nodeSelector"] == {"aidd.io/pool": "gpu"}
     assert pod_spec["tolerations"] == [
-        {"key": "sciminer.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
+        {"key": "aidd.io/gpu", "operator": "Exists", "effect": "NoSchedule"}
     ]
     container = pod_spec["containers"][0]
     assert container["resources"]["requests"] == {
@@ -179,9 +179,9 @@ def test_render_manifest_injects_platform_object_storage_contract_without_plaint
         namespace="model-jobs",
         credential_ref="platform-k8s",
         service_account="model-runner",
-        object_storage_endpoint="http://sciminer-minio.sciminer-storage:9000",
+        object_storage_endpoint="http://aidd-minio.aidd-storage:9000",
         object_storage_bucket="scitool-files",
-        object_storage_secret_ref="sciminer-minio-client",
+        object_storage_secret_ref="aidd-minio-client",
         object_storage_output_prefix="executions",
     )
 
@@ -192,16 +192,16 @@ def test_render_manifest_injects_platform_object_storage_contract_without_plaint
     }
 
     assert env["SCIMINER_OBJECT_STORAGE_ENDPOINT"]["value"] == (
-        "http://sciminer-minio.sciminer-storage:9000"
+        "http://aidd-minio.aidd-storage:9000"
     )
     assert env["SCIMINER_OBJECT_STORAGE_BUCKET"]["value"] == "scitool-files"
     assert env["SCIMINER_EXECUTION_OUTPUT_PREFIX"]["value"].startswith("executions/")
     assert env["SCIMINER_OBJECT_STORAGE_ACCESS_KEY"]["valueFrom"]["secretKeyRef"] == {
-        "name": "sciminer-minio-client",
+        "name": "aidd-minio-client",
         "key": "access-key",
     }
     assert env["SCIMINER_OBJECT_STORAGE_SECRET_KEY"]["valueFrom"]["secretKeyRef"] == {
-        "name": "sciminer-minio-client",
+        "name": "aidd-minio-client",
         "key": "secret-key",
     }
     assert all("secret" not in item.get("value", "").lower() for item in env.values())
@@ -238,6 +238,16 @@ def test_render_manifest_injects_immutable_input_descriptors():
     assert env == [
         {"name": "MODEL_VARIANT", "value": "nvidia-cuda"},
         {
+            "name": "AIDD_INPUTS_JSON",
+            "value": (
+                '[{"artifact_version_id":"artifact-version-1","name":"protein",'
+                '"uri":"executions/inputs/protein.pdb",'
+                '"sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",'
+                '"role":"residue_pocket_pdb","artifact_type":"binding_pocket@1",'
+                '"content_type":"chemical/x-pdb","metadata":{"center":[32.0,28.0,36.0]}}]'
+            ),
+        },
+        {
             "name": "SCIMINER_INPUTS_JSON",
             "value": (
                 '[{"artifact_version_id":"artifact-version-1","name":"protein",'
@@ -247,5 +257,6 @@ def test_render_manifest_injects_immutable_input_descriptors():
                 '"content_type":"chemical/x-pdb","metadata":{"center":[32.0,28.0,36.0]}}]'
             ),
         },
+        {"name": "AIDD_INPUT_MANIFEST", "value": "/workspace/input/manifest.json"},
         {"name": "SCIMINER_INPUT_MANIFEST", "value": "/workspace/input/manifest.json"},
     ]

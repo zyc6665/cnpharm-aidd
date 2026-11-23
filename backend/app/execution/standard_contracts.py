@@ -14,6 +14,31 @@ from app.artifact_standards.registry import (
     validate_relation_type,
 )
 
+# 2026-11 命名收敛：平台产出 `aidd.platform/*`，旧 `aidd.sciminer/*` 继续只读接受。
+# 这些字符串是对外契约（镜像内 adaptor 与 result.json），不可单边替换。
+REQUEST_VERSION = "aidd.platform/request"
+RESULT_VERSION = "aidd.platform/result"
+RESULT_VERSION_V2 = "aidd.platform/result.v2"
+
+REQUEST_VERSIONS = (REQUEST_VERSION, "aidd.sciminer/request")
+RESULT_VERSIONS = (
+    RESULT_VERSION,
+    RESULT_VERSION_V2,
+    "aidd.sciminer/result",
+    "aidd.sciminer/result.v2",
+)
+RESULT_VERSION_V2_VALUES = (RESULT_VERSION_V2, "aidd.sciminer/result.v2")
+
+
+def is_supported_result_version(value: object) -> bool:
+    """Whether ``value`` is an accepted standard result version (new or legacy)."""
+    return value in RESULT_VERSIONS
+
+
+def is_result_version_v2(value: object) -> bool:
+    """Whether ``value`` is the v2 standard result version (new or legacy)."""
+    return value in RESULT_VERSION_V2_VALUES
+
 
 class StandardExecutionContractError(ValueError):
     """Raised when a standard execution request or result violates its contract."""
@@ -64,7 +89,7 @@ class StandardExecutionContext(BaseModel):
 class StandardExecutionRequest(BaseModel):
     """Standard request envelope consumed by Tool Package adapters."""
 
-    request_version: Literal["aidd.sciminer/request"]
+    request_version: Literal["aidd.platform/request", "aidd.sciminer/request"]
     task: StandardTaskContext
     inputs: dict[str, StandardInputArtifact] = Field(default_factory=dict)
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -128,7 +153,12 @@ OutputArtifactValue = StandardOutputArtifact | list[StandardOutputArtifact]
 class StandardExecutionResult(BaseModel):
     """Standard result envelope emitted by Tool Package adapters."""
 
-    result_version: Literal["aidd.sciminer/result", "aidd.sciminer/result.v2"]
+    result_version: Literal[
+        "aidd.platform/result",
+        "aidd.platform/result.v2",
+        "aidd.sciminer/result",
+        "aidd.sciminer/result.v2",
+    ]
     artifacts: dict[str, OutputArtifactValue] = Field(default_factory=dict)
     relations: list[StandardRelationDeclaration] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)

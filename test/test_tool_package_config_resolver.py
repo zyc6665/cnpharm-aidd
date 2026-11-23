@@ -12,7 +12,7 @@ from app.tool_packages.config_resolver import (
 
 def _minimal_v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "molp-pc",
@@ -60,7 +60,7 @@ def test_tool_package_manifest_data_reads_supported_config_shapes() -> None:
 
 
 def test_validated_tool_package_manifest_data_ignores_non_v2_manifests() -> None:
-    legacy_manifest = {"api_version": "aidd.sciminer/v1", "kind": "ToolPackage"}
+    legacy_manifest = {"api_version": "aidd.platform/v1", "kind": "ToolPackage"}
 
     assert validated_tool_package_manifest_data({"tool_package_manifest": legacy_manifest}) is None
     assert validated_tool_package_manifest_data({"tool_package_manifest": "bad"}) is None

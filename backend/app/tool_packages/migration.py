@@ -16,7 +16,10 @@ from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.tools import Tool, ToolVersion
 from app.execution.executor_types import execution_types_for_tool_type
 from app.services.tool_contracts import collect_tool_contract_config_validation_errors
-from app.tool_packages.schemas import LegacyToolPackageManifest
+from app.tool_packages.schemas import (
+    LEGACY_TOOL_PACKAGE_API_VERSION,
+    LegacyToolPackageManifest,
+)
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -236,7 +239,7 @@ def build_legacy_tool_manifest(
             ]
         )
     manifest = {
-        "api_version": "aidd.sciminer/v1",
+        "api_version": LEGACY_TOOL_PACKAGE_API_VERSION,
         "kind": "ToolPackage",
         "metadata": {
             "slug": tool.slug,

@@ -18,7 +18,7 @@ class CategorizedLogger:
     提供结构化的日志记录方法，便于日志分析和审计。
     """
 
-    def __init__(self, name: str = "sciminer"):
+    def __init__(self, name: str = "aidd"):
         """初始化分类日志器
 
         Args:
@@ -266,7 +266,7 @@ class CategorizedLogger:
 _categorized_logger: Optional[CategorizedLogger] = None
 
 
-def get_logger(name: str = "sciminer") -> CategorizedLogger:
+def get_logger(name: str = "aidd") -> CategorizedLogger:
     """获取分类日志器
 
     Args:

@@ -78,7 +78,7 @@ async def worker_standard_db_factory():
 def _v2_manifest() -> dict:
     slug = "worker-standard-tool"
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": slug,
@@ -100,7 +100,7 @@ def _v2_manifest() -> dict:
             "artifacts": {
                 "primary": {
                     "kind": "container",
-                    "image": f"registry.example/sciminer/{slug}:1.0.0",
+                    "image": f"registry.example/aidd/{slug}:1.0.0",
                     "image_digest": "sha256:test",
                 },
                 "fallback": {
@@ -292,7 +292,7 @@ def _molecule_table_manifest(
     output_name: str,
 ) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {"slug": slug, "name": slug, "version": "1.0.0"},
         "artifacts": {
@@ -381,7 +381,7 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
         file_ids = [residue.id, atom.id, metadata.id]
         await db.commit()
         result_payload = {
-            "result_version": "aidd.sciminer/result",
+            "result_version": "aidd.platform/result",
             "artifacts": {
                 "pocket": {
                     "name": "Top pocket",
@@ -432,7 +432,7 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
             )
         ).scalar_one()
 
-    assert result["result"]["result_version"] == "aidd.sciminer/result"
+    assert result["result"]["result_version"] == "aidd.platform/result"
     assert task_record.progress == 100.0
     assert task_record.progress_message == "任务执行成功"
     assert task_output.file_ids == file_ids
@@ -524,7 +524,7 @@ async def test_worker_rejects_invalid_standard_result_without_persisting_artifac
         return {
             "success": True,
             "result": {
-                "result_version": "aidd.sciminer/result",
+                "result_version": "aidd.platform/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Top pocket",
@@ -946,7 +946,7 @@ async def test_worker_persists_builtin_standard_outputs(
         )
         file_ids = [residue.id, atom.id, metadata.id]
         result_payload = {
-            "result_version": "aidd.sciminer/result",
+            "result_version": "aidd.platform/result",
             "artifacts": {
                 "pocket": {
                     "name": "Top pocket",

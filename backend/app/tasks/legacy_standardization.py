@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.execution.standard_contracts import RESULT_VERSION, is_supported_result_version
 from app.files.content import read_file_bytes
 from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel, FileSourceType
@@ -65,13 +66,17 @@ async def append_legacy_standard_result(
 
 
 def _has_standard_result(output_result: dict[str, Any]) -> bool:
-    if output_result.get("result_version") == "aidd.sciminer/result":
+    if is_supported_result_version(output_result.get("result_version")):
         return True
     nested = output_result.get("result")
-    if isinstance(nested, dict) and nested.get("result_version") == "aidd.sciminer/result":
+    if isinstance(nested, dict) and is_supported_result_version(
+        nested.get("result_version")
+    ):
         return True
     standard_result = output_result.get("standard_result")
-    return isinstance(standard_result, dict) and standard_result.get("result_version") == "aidd.sciminer/result"
+    return isinstance(standard_result, dict) and is_supported_result_version(
+        standard_result.get("result_version")
+    )
 
 
 def _declares_standard_output(config: dict[str, Any], name: str, standard_type: str) -> bool:
@@ -151,7 +156,7 @@ async def _legacy_lvpocket_result(
 
     pocket_id = str(first_pocket.get("id") or "pocket0")
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "pocket": {
                 "type": "binding_pocket@1",
@@ -294,7 +299,7 @@ async def _legacy_molp_pc_result(
         return None
 
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "properties": {
                 "type": "molecule_table@1",
@@ -452,7 +457,7 @@ async def _legacy_msign_result(
         return None
 
     return {
-        "result_version": "aidd.sciminer/result",
+        "result_version": RESULT_VERSION,
         "artifacts": {
             "affinity": {
                 "type": "molecule_table@1",

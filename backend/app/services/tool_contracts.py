@@ -13,7 +13,7 @@ from app.services.tool_contract_validation import (  # noqa: F401
     collect_tool_contract_validation_errors,
 )
 from app.tool_packages.config_resolver import tool_package_manifest_data
-from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION
+from app.tool_packages.schemas import is_tool_package_api_version
 from app.tools.capabilities import resolve_model_family
 
 
@@ -132,7 +132,7 @@ def _build_tool_package_contract(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     """Project a Tool Package manifest onto the stable contract shape."""
-    if manifest.get("api_version") == TOOL_PACKAGE_API_VERSION:
+    if is_tool_package_api_version(manifest.get("api_version")):
         return _build_tool_package_manifest_contract(
             package, current_version, manifest
         )

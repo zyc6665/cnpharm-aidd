@@ -17,7 +17,7 @@ from app.services.tool_contracts import build_tool_contract
 
 def _manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/v1",
+        "api_version": "aidd.platform/v1",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "pocket-finder",
@@ -183,7 +183,7 @@ def test_existing_tool_contract_builder_reads_tool_package_manifest():
     contract = build_tool_contract(package)
 
     assert contract["contract_version"] == "1.0"
-    assert contract["package"]["api_version"] == "aidd.sciminer/v1"
+    assert contract["package"]["api_version"] == "aidd.platform/v1"
     assert {item["accelerator"] for item in contract["variants"]} == {
         "cpu",
         "nvidia_cuda",

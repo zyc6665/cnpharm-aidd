@@ -21,7 +21,7 @@ from app.tool_packages.validator import validate_tool_package
 
 def _v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "lvpocket-standard",
@@ -72,7 +72,7 @@ def _v2_manifest() -> dict:
             "artifacts": {
                 "primary": {
                     "kind": "container",
-                    "image": "registry.example/sciminer/lvpocket-runtime:1.0.0",
+                    "image": "registry.example/aidd/lvpocket-runtime:1.0.0",
                     "image_digest": f"sha256:{'a' * 64}",
                     "includes": ["python", "cuda_runtime", "dependencies"],
                 },
@@ -256,6 +256,36 @@ def test_loader_detects_v2_manifest(tmp_path: Path):
 
     (tmp_path / "tool.yaml").write_text(
         yaml.safe_dump(_v2_manifest(), sort_keys=False),
+        encoding="utf-8",
+    )
+
+    manifest = load_tool_package(tmp_path)
+
+    assert isinstance(manifest, ToolPackageManifest)
+    assert manifest.api_version == "aidd.platform/tool-package"
+
+
+def test_v2_manifest_accepts_legacy_sciminer_api_version():
+    """旧产品线命名 accepted：存量已签名 manifest 不能因改名失效。"""
+    from app.tool_packages.schemas import is_tool_package_api_version
+
+    raw = _v2_manifest()
+    raw["api_version"] = "aidd.sciminer/tool-package"
+
+    manifest = ToolPackageManifest.model_validate(raw)
+
+    assert manifest.api_version == "aidd.sciminer/tool-package"
+    assert is_tool_package_api_version(manifest.api_version) is True
+    assert validate_tool_package(manifest).is_valid is True
+
+
+def test_loader_detects_v2_manifest_with_legacy_api_version(tmp_path: Path):
+    import yaml
+
+    raw = _v2_manifest()
+    raw["api_version"] = "aidd.sciminer/tool-package"
+    (tmp_path / "tool.yaml").write_text(
+        yaml.safe_dump(raw, sort_keys=False),
         encoding="utf-8",
     )
 

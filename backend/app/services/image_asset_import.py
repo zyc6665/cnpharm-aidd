@@ -312,7 +312,7 @@ async def import_image_archive(
     if archive_size_bytes > settings.IMAGE_IMPORT_MAX_SIZE_MB * 1024 * 1024:
         raise ImageArchiveError("镜像归档超过平台大小限制")
 
-    with TemporaryDirectory(prefix="sciminer-image-import-") as temporary:
+    with TemporaryDirectory(prefix="aidd-image-import-") as temporary:
         work_dir = Path(temporary)
         seekable_archive = _prepare_archive_for_random_access(archive_path, work_dir)
         try:

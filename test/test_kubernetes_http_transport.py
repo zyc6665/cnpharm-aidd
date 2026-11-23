@@ -68,10 +68,10 @@ async def test_http_transport_delegates_job_lifecycle_to_kubernetes_api():
         if request.method == "POST" and request.url.path.endswith("/jobs"):
             return httpx.Response(
                 201,
-                json={"metadata": {"name": "sciminer-job-1"}},
+                json={"metadata": {"name": "aidd-job-1"}},
                 request=request,
             )
-        if request.method == "GET" and request.url.path.endswith("/jobs/sciminer-job-1"):
+        if request.method == "GET" and request.url.path.endswith("/jobs/aidd-job-1"):
             return httpx.Response(
                 200,
                 json={"status": {"active": 1}},
@@ -80,12 +80,12 @@ async def test_http_transport_delegates_job_lifecycle_to_kubernetes_api():
         if request.method == "GET" and request.url.path.endswith("/pods"):
             return httpx.Response(
                 200,
-                json={"items": [{"metadata": {"name": "sciminer-job-1-pod"}}]},
+                json={"items": [{"metadata": {"name": "aidd-job-1-pod"}}]},
                 request=request,
             )
-        if request.method == "GET" and request.url.path.endswith("/pods/sciminer-job-1-pod/log"):
+        if request.method == "GET" and request.url.path.endswith("/pods/aidd-job-1-pod/log"):
             return httpx.Response(200, text="smoke log", request=request)
-        if request.method == "DELETE" and request.url.path.endswith("/jobs/sciminer-job-1"):
+        if request.method == "DELETE" and request.url.path.endswith("/jobs/aidd-job-1"):
             return httpx.Response(200, json={}, request=request)
         return httpx.Response(500, json={"message": "unexpected request"}, request=request)
 
@@ -93,7 +93,7 @@ async def test_http_transport_delegates_job_lifecycle_to_kubernetes_api():
     transport = KubernetesHttpTransport(client=client)
     try:
         external_id = await transport.submit(_request(), _config(), _credentials())
-        assert external_id == "model-jobs/sciminer-job-1"
+        assert external_id == "model-jobs/aidd-job-1"
         assert await transport.status(external_id, _config(), _credentials()) == ExecutionState.RUNNING
         assert await transport.reconcile(external_id, _config(), _credentials()) == ExecutionState.RUNNING
         content, cursor = await transport.logs(external_id, None, _config(), _credentials())
@@ -105,11 +105,11 @@ async def test_http_transport_delegates_job_lifecycle_to_kubernetes_api():
 
     assert calls == [
         ("POST", "/apis/batch/v1/namespaces/model-jobs/jobs"),
-        ("GET", "/apis/batch/v1/namespaces/model-jobs/jobs/sciminer-job-1"),
-        ("GET", "/apis/batch/v1/namespaces/model-jobs/jobs/sciminer-job-1"),
+        ("GET", "/apis/batch/v1/namespaces/model-jobs/jobs/aidd-job-1"),
+        ("GET", "/apis/batch/v1/namespaces/model-jobs/jobs/aidd-job-1"),
         ("GET", "/api/v1/namespaces/model-jobs/pods"),
-        ("GET", "/api/v1/namespaces/model-jobs/pods/sciminer-job-1-pod/log"),
-        ("DELETE", "/apis/batch/v1/namespaces/model-jobs/jobs/sciminer-job-1"),
+        ("GET", "/api/v1/namespaces/model-jobs/pods/aidd-job-1-pod/log"),
+        ("DELETE", "/apis/batch/v1/namespaces/model-jobs/jobs/aidd-job-1"),
     ]
 
 
@@ -122,7 +122,7 @@ async def test_http_transport_treats_duplicate_job_submission_as_idempotent():
             return httpx.Response(409, json={"reason": "AlreadyExists"}, request=request)
         return httpx.Response(
             200,
-            json={"metadata": {"name": "sciminer-job-1"}},
+            json={"metadata": {"name": "aidd-job-1"}},
             request=request,
         )
 
@@ -130,7 +130,7 @@ async def test_http_transport_treats_duplicate_job_submission_as_idempotent():
     transport = KubernetesHttpTransport(client=client)
     try:
         assert await transport.submit(_request(), _config(), _credentials()) == (
-            "model-jobs/sciminer-job-1"
+            "model-jobs/aidd-job-1"
         )
     finally:
         await client.aclose()

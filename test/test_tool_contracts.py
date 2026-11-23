@@ -31,7 +31,7 @@ from app.schemas.tools import ToolPublicResponse, ToolVersionPublicResponse
 
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "lvpocket-standard",

@@ -35,7 +35,7 @@ def _production_runtime_settings(environment: str) -> dict[str, object]:
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
         "COOKIE_SECURE": True,
-        "ALLOWED_HOSTS": ["sciminer.example.com"],
+        "ALLOWED_HOSTS": ["aidd.example.com"],
     }
 
 
@@ -134,7 +134,7 @@ class TestAiddFeatureFlags:
         settings = Settings(
             ENVIRONMENT="production",
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             **_production_runtime_settings("production"),
@@ -151,7 +151,7 @@ class TestAiddFeatureFlags:
         settings = Settings(
             ENVIRONMENT="production",
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             AIDD_ROLLOUT_USER_EMAILS=["internal@example.com"],
@@ -180,7 +180,7 @@ class TestAiddFeatureFlags:
         settings = Settings(
             ENVIRONMENT="production",
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             LEGACY_AIDD_API_ENABLED=True,
@@ -196,7 +196,7 @@ class TestAiddFeatureFlags:
         settings = Settings(
             ENVIRONMENT="production",
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             AIDD_ROLLOUT_USER_EMAILS=[" Internal@Example.com ", ""],
@@ -214,17 +214,17 @@ class TestDeploymentCorsOrigins:
     @pytest.mark.parametrize(
         "origin",
         [
-            "http://sciminer.example.com",
-            "https://*.sciminer.example.com",
+            "http://aidd.example.com",
+            "https://*.aidd.example.com",
             "https://",
-            " https://sciminer.example.com",
-            "https://sciminer.example.com ",
+            " https://aidd.example.com",
+            "https://aidd.example.com ",
             "https://%73ciminer.example.com",
-            "https://sciminer.example.com:0",
-            "https://sciminer.example.com/path",
-            "https://sciminer.example.com?query=value",
-            "https://sciminer.example.com#fragment",
-            "https://user@sciminer.example.com",
+            "https://aidd.example.com:0",
+            "https://aidd.example.com/path",
+            "https://aidd.example.com?query=value",
+            "https://aidd.example.com#fragment",
+            "https://user@aidd.example.com",
             "https://[2001:0db8::1]",
             "https://[2001:db8:0:0:0:0:0:1]",
             "https://192.168.001.001",
@@ -253,12 +253,12 @@ class TestDeploymentCorsOrigins:
     @pytest.mark.parametrize(
         "origin",
         [
-            "https://sciminer.example.com",
+            "https://aidd.example.com",
             "https://203.0.113.1",
             "https://[2001:db8::1]",
-            "https://sciminer.example.com:1",
-            "https://sciminer.example.com:8443",
-            "https://sciminer.example.com:65535",
+            "https://aidd.example.com:1",
+            "https://aidd.example.com:8443",
+            "https://aidd.example.com:65535",
         ],
     )
     def test_deployment_environment_accepts_valid_https_cors_origin(
@@ -286,7 +286,7 @@ class TestDeploymentCorsOrigins:
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com", "http://localhost:8585"],
+                CORS_ORIGINS=["https://aidd.example.com", "http://localhost:8585"],
                 JWT_SECRET_KEY="j" * 32,
                 SETTINGS_ENCRYPTION_KEY="e" * 32,
             )
@@ -295,10 +295,10 @@ class TestDeploymentCorsOrigins:
     @pytest.mark.parametrize(
         "origin",
         [
-            "HTTPS://sciminer.example.com",
+            "HTTPS://aidd.example.com",
             "https://SCIMINER.example.com",
-            "https://sciminer.example.com:443",
-            "https://sciminer.example.com:08443",
+            "https://aidd.example.com:443",
+            "https://aidd.example.com:08443",
         ],
     )
     def test_deployment_environment_rejects_noncanonical_cors_origin(
@@ -321,7 +321,7 @@ class TestDeploymentCorsOrigins:
         self, environment
     ):
         """部署环境接受规范化的非默认 HTTPS 端口。"""
-        origin = "https://sciminer.example.com:8443"
+        origin = "https://aidd.example.com:8443"
         settings = Settings(
             ENVIRONMENT=environment,
             DEBUG=False,
@@ -414,7 +414,7 @@ class TestJWTSecretKey:
         long_key = "a" * 32
         settings = Settings(
             ENVIRONMENT="staging",
-            CORS_ORIGINS=["https://staging.sciminer.example.com"],
+            CORS_ORIGINS=["https://staging.aidd.example.com"],
             JWT_SECRET_KEY=long_key,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
         )
@@ -426,7 +426,7 @@ class TestJWTSecretKey:
         settings = Settings(
             ENVIRONMENT="production",
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY=long_key,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             **_production_runtime_settings("production"),
@@ -439,7 +439,7 @@ class TestJWTSecretKey:
             Settings(
                 ENVIRONMENT="production",
                 DEBUG=True,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY="a" * 32,
                 SETTINGS_ENCRYPTION_KEY="e" * 32,
             )
@@ -488,7 +488,7 @@ class TestCookieSettings:
             Settings(
                 ENVIRONMENT="production",
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY="a" * 32,
                 SETTINGS_ENCRYPTION_KEY="e" * 32,
                 **runtime,
@@ -507,7 +507,7 @@ class TestSettingsEncryptionKey:
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY="j" * 32,
                 SETTINGS_ENCRYPTION_KEY=None,
             )
@@ -523,7 +523,7 @@ class TestSettingsEncryptionKey:
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY="j" * 32,
                 SETTINGS_ENCRYPTION_KEY="",
             )
@@ -539,7 +539,7 @@ class TestSettingsEncryptionKey:
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY="j" * 32,
                 SETTINGS_ENCRYPTION_KEY="short",
             )
@@ -556,7 +556,7 @@ class TestSettingsEncryptionKey:
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
-                CORS_ORIGINS=["https://sciminer.example.com"],
+                CORS_ORIGINS=["https://aidd.example.com"],
                 JWT_SECRET_KEY=shared_key,
                 SETTINGS_ENCRYPTION_KEY=shared_key,
             )
@@ -569,7 +569,7 @@ class TestSettingsEncryptionKey:
         settings = Settings(
             ENVIRONMENT=environment,
             DEBUG=False,
-            CORS_ORIGINS=["https://sciminer.example.com"],
+            CORS_ORIGINS=["https://aidd.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
             **_production_runtime_settings(environment),
@@ -589,7 +589,7 @@ class TestDeploymentHardeningSettings:
         kwargs = {
             "ENVIRONMENT": "production",
             "DEBUG": False,
-            "CORS_ORIGINS": ["https://sciminer.example.com"],
+            "CORS_ORIGINS": ["https://aidd.example.com"],
             "JWT_SECRET_KEY": "j" * 32,
             "SETTINGS_ENCRYPTION_KEY": "e" * 32,
             **_production_runtime_settings("production"),

@@ -31,6 +31,7 @@ from app.chemistry.ligand_preparation import (
     prepared_molecule_table_csv,
 )
 from app.common.exceptions import ValidationException
+from app.execution.standard_contracts import RESULT_VERSION
 
 
 @dataclass(frozen=True)
@@ -432,7 +433,7 @@ def _run_sdf_to_smiles_csv_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToo
             ),
         ),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "molecules": {
                     "type": "molecule_table@1",
@@ -499,7 +500,7 @@ def _run_sdf_to_pdb_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult
             ),
         ),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "ligand": {
                     "type": "ligand_structure@1",
@@ -688,7 +689,7 @@ def _run_protein_preparation_tool(
     return BuiltinToolResult(
         artifacts=tuple(artifacts),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "prepared_protein": {
                     "type": "protein_structure@1",
@@ -788,7 +789,7 @@ def _run_ligand_preparation_tool(
             ),
         ),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "molecules": {
                     "type": "molecule_table@1",
@@ -910,7 +911,7 @@ def _run_rdkit_conformer_tool(
             ),
         ),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "ligand": {
                     "type": "ligand_structure@1",
@@ -1147,7 +1148,7 @@ def _run_rdkit_properties_tool(
             ),
         ),
         standard_result={
-            "result_version": "aidd.sciminer/result",
+            "result_version": RESULT_VERSION,
             "artifacts": {
                 "properties": {
                     "type": "molecule_table@1",

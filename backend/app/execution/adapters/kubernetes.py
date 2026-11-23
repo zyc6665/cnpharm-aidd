@@ -42,7 +42,7 @@ class KubernetesJobExecutionConfig(BaseModel):
     namespace: str = Field(min_length=1, max_length=255)
     credential_ref: str = Field(min_length=1, max_length=255)
     service_account: str = Field(min_length=1, max_length=255)
-    job_name_prefix: str = Field(default="sciminer", min_length=1, max_length=63)
+    job_name_prefix: str = Field(default="aidd", min_length=1, max_length=63)
     image_pull_secret_ref: str | None = Field(default=None, max_length=255)
     job_ttl_seconds: int = Field(default=86400, ge=0, le=604800)
     object_storage_endpoint: str | None = Field(default=None, max_length=2048)

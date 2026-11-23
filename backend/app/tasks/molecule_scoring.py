@@ -24,6 +24,7 @@ from app.common.archive_limits import (
     MAX_ARCHIVE_UNCOMPRESSED_BYTES,
 )
 from app.common.exceptions import ValidationException
+from app.execution.standard_contracts import is_supported_result_version
 from app.files.content import ensure_local_file, read_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task, TaskInput
@@ -495,7 +496,7 @@ def _merge_output_ids(output_result: dict[str, Any], file_ids: list[str]) -> Non
 
 
 def _is_standard_result(result: dict[str, Any]) -> bool:
-    return result.get("result_version") == "aidd.sciminer/result"
+    return is_supported_result_version(result.get("result_version"))
 
 
 async def _store_artifact(
@@ -562,7 +563,7 @@ async def append_molecule_scoring_artifacts(
     input_files = await _load_input_files(db, task)
     receptor_file = _find_receptor_file(input_files)
     if receptor_file and receptor_file.storage_backend == "minio":
-        receptor_dir = Path(tempfile.mkdtemp(prefix="sciminer-receptor-"))
+        receptor_dir = Path(tempfile.mkdtemp(prefix="aidd-receptor-"))
         receptor_path = receptor_dir / Path(receptor_file.filename).name
         try:
             await ensure_local_file(receptor_file, receptor_path)

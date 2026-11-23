@@ -437,7 +437,7 @@ class Settings(BaseSettings):
     IMAGE_REGISTRY_PASSWORD: str = ""
     IMAGE_REGISTRY_TIMEOUT_SECONDS: int = 120
     IMAGE_IMPORT_MAX_SIZE_MB: int = 16384
-    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "sciminer"
+    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "aidd/"
 
     # ==================== 缓存配置 ====================
     # 缓存后端: memory | redis
@@ -633,7 +633,7 @@ class Settings(BaseSettings):
     K8S_ADAPTER_NAMESPACE: Optional[str] = None
     K8S_ADAPTER_CREDENTIAL_REF: Optional[str] = None
     K8S_ADAPTER_SERVICE_ACCOUNT: Optional[str] = None
-    K8S_ADAPTER_JOB_NAME_PREFIX: str = "sciminer"
+    K8S_ADAPTER_JOB_NAME_PREFIX: str = "aidd"
     # 已结束的 Job（及其 Pod）保留多久。Pod 一删容器日志就没了，所以这个值只在
     # TASK_LOG_HARVEST_ENABLED 把日志落库之后才能安全调短。
     # 默认 1800 秒：够运维在页面上看到刚失败任务的现场，又不至于让
@@ -655,7 +655,7 @@ class Settings(BaseSettings):
     K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF: Optional[str] = None
     K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: str = "inputs"
     K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX: str = "executions"
-    K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: str = "/tmp/sciminer-k8s-artifacts"
+    K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: str = "/tmp/aidd-k8s-artifacts"
     # 多节点算力集群的调度定位（docs/24 §10）。权重随镜像打包后不再需要「钉权重宿主」，
     # 但资源池定向（GPU/CPU 池分离、GPU 节点污点容忍）仍靠这两个部署侧配置；
     # 工具只引用资源档位，不感知节点拓扑，平台统一从环境注入。
@@ -665,12 +665,12 @@ class Settings(BaseSettings):
     # device plugin 暴露的资源名（如 hygon.com/dcu）。
     K8S_ADAPTER_GPU_RESOURCE_NAME: str = "nvidia.com/gpu"
 
-    IMAGE_REGISTRY_ENDPOINT: str = "http://sciminer-registry.sciminer-storage.svc.cluster.local:5000"
-    IMAGE_REGISTRY_IMAGE_PREFIX: str = "sciminer-registry.sciminer-storage.svc.cluster.local:5000"
+    IMAGE_REGISTRY_ENDPOINT: str = "http://aidd-registry.aidd-storage.svc.cluster.local:5000"
+    IMAGE_REGISTRY_IMAGE_PREFIX: str = "aidd-registry.aidd-storage.svc.cluster.local:5000"
     IMAGE_REGISTRY_USERNAME: Optional[str] = None
     IMAGE_REGISTRY_PASSWORD: Optional[str] = None
     IMAGE_IMPORT_MAX_SIZE_MB: int = 16384
-    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "sciminer/"
+    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "aidd/"
 
     # ==================== Docker 执行器配置 ====================
     # 生产环境默认强制不可变 digest；该列表可进一步收紧为精确允许的镜像引用。

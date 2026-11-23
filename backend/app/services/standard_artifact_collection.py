@@ -14,6 +14,8 @@ from app.execution.result_parser import (
     ParsedStandardResult,
 )
 from app.execution.standard_contracts import (
+    RESULT_VERSION,
+    RESULT_VERSIONS,
     DeclaredArtifactOutput,
     StandardExecutionContractError,
     StandardExecutionResult,
@@ -30,10 +32,8 @@ from app.tool_packages.config_resolver import (
 )
 
 
-STANDARD_RESULT_VERSION = "aidd.sciminer/result"
-STANDARD_RESULT_VERSIONS = frozenset(
-    {"aidd.sciminer/result", "aidd.sciminer/result.v2"}
-)
+STANDARD_RESULT_VERSION = RESULT_VERSION
+STANDARD_RESULT_VERSIONS = frozenset(RESULT_VERSIONS)
 
 
 def collected_standard_result_payload(

@@ -84,7 +84,7 @@ def _build_client(credentials: Any) -> Tuple[httpx.AsyncClient, List[str]]:
 
 async def build_k8s_compute_overview() -> Dict[str, Any]:
     kubeconfig_path = getattr(settings, "K8S_ADAPTER_KUBECONFIG", None)
-    namespace = getattr(settings, "K8S_ADAPTER_NAMESPACE", None) or "sciminer-model-jobs"
+    namespace = getattr(settings, "K8S_ADAPTER_NAMESPACE", None) or "aidd-model-jobs"
     cluster_alias = getattr(settings, "K8S_ADAPTER_CLUSTER_ALIAS", None)
     if not kubeconfig_path or not os.path.exists(kubeconfig_path):
         return {

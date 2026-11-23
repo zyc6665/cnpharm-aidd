@@ -169,7 +169,7 @@ def _headers(user: str) -> dict[str, str]:
 
 def _manifest(*, input_name: str = "protein", input_type: str = "protein_structure@1") -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package",
+        "api_version": "aidd.platform/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "boltz-2",

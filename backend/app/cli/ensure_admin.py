@@ -4,7 +4,7 @@
 
     # 传统：按邮箱定位（用户名由邮箱本地部分自动派生）
     python -m app.cli.ensure_admin \
-        --email admin@sciminer.com --password 'ChangeMe_123'
+        --email admin@aidd.example.com --password 'ChangeMe_123'
 
     # 内网 LDAP 场景：只给用户名（不落邮箱）
     python -m app.cli.ensure_admin \

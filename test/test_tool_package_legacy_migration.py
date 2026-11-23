@@ -39,7 +39,7 @@ def test_legacy_migration_requires_explicit_choice_for_generated_ligand() -> Non
 def test_v2_validator_rejects_legacy_alias_even_when_migration_exists() -> None:
     manifest = ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package",
+            "api_version": "aidd.platform/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": "legacy-alias-tool",
@@ -57,7 +57,7 @@ def test_v2_validator_rejects_legacy_alias_even_when_migration_exists() -> None:
                 "artifacts": {
                     "primary": {
                         "kind": "container",
-                        "image": "registry.example/sciminer/legacy-alias:1.0.0",
+                        "image": "registry.example/aidd/legacy-alias:1.0.0",
                         "image_digest": f"sha256:{'a' * 64}",
                     },
                     "fallback": {

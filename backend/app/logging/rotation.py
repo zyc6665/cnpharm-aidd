@@ -62,7 +62,7 @@ class LogRotationConfig:
     compress_delay: int = 1                 # 延迟压缩（轮转后N个文件才压缩）
     encoding: str = "utf-8"
     log_dir: str = "logs"
-    file_prefix: str = "sciminer"
+    file_prefix: str = "aidd"
 
 
 # 预定义的轮转配置

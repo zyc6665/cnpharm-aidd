@@ -58,7 +58,7 @@ async def test_kubernetes_adapter_delegates_lifecycle_and_redacts_logs():
             namespace="model-jobs",
             credential_ref="platform-k8s",
             service_account="model-runner",
-            job_name_prefix="sciminer",
+            job_name_prefix="aidd",
         ),
         secret_provider=SecretProvider(),
         transport=transport,
