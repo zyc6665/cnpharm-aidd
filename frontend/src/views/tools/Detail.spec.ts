@@ -168,7 +168,7 @@ function mockToolPackageV2Detail() {
         config: {
           type: 'ssh_job',
           tool_package_manifest: {
-            api_version: 'aidd.sciminer/tool-package',
+            api_version: 'aidd.platform/tool-package',
             kind: 'ToolPackage',
             metadata: {
               slug: 'molp-pc',
@@ -246,7 +246,7 @@ function mockToolPackageV2DetailWithLegacyFileSchema() {
             required: ['protein_pdb'],
           },
           tool_package_manifest: {
-            api_version: 'aidd.sciminer/tool-package',
+            api_version: 'aidd.platform/tool-package',
             kind: 'ToolPackage',
             metadata: {
               slug: 'lvpocket-standard-pocket',

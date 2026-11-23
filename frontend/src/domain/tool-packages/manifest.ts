@@ -1,6 +1,7 @@
 import type { ToolPackage } from '@/types/tool-packages'
 import type { ToolSchema } from '@/types/models'
 import { createEmptyParameterSchema } from '@/domain/tools/parameter-schema'
+import { TOOL_PACKAGE_API_VERSION } from '@/domain/contract-versions'
 
 export interface ToolPackageGuidedInput {
   name: string
@@ -85,7 +86,7 @@ export function buildToolPackageManifest(draft: ToolPackageGuidedDraft): Record<
   const entrypoint = draft.entrypoint.trim().split(/\s+/).filter(Boolean)
 
   return {
-    api_version: 'aidd.sciminer/tool-package',
+    api_version: TOOL_PACKAGE_API_VERSION,
     kind: 'ToolPackage',
     metadata: {
       slug: draft.slug.trim(),

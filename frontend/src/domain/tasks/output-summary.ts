@@ -1,6 +1,7 @@
 import type { Task } from '@/types/models'
 import { EMPTY_DISPLAY } from '@/domain/common/format'
 import { toDisplayFileName } from './file-display'
+import { isResultVersion } from '@/domain/contract-versions'
 
 export type TaskOutputFile = NonNullable<Task['output_files']>[number]
 
@@ -29,7 +30,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asStandardResult(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value) || value.result_version !== 'aidd.sciminer/result') {
+  if (!isRecord(value) || !isResultVersion(value.result_version)) {
     return null
   }
 

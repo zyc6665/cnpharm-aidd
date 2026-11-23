@@ -67,7 +67,7 @@
             </a-col>
             <a-col :xs="24" :lg="12">
               <a-card size="small" title="推荐目录结构">
-                <pre class="guide-code">/opt/sciminer/
+                <pre class="guide-code">/opt/aidd/
 ├── platform_adaptor/       # 平台请求/结果适配
 ├── model/                 # 模型代码与权重入口
 └── run.py                 # 容器入口
@@ -114,7 +114,7 @@ docker push registry.example/aidd/my-model:1.0.0
           <h2>3. 编写 Tool Package v2 manifest</h2>
           <p>在「工具与模型 → 模型交付包」中可以直接使用向导生成，也可以粘贴完整 manifest。最小可用示例：</p>
           <pre class="guide-code">{
-  "api_version": "aidd.sciminer/tool-package",
+  "api_version": "aidd.platform/tool-package",
   "kind": "ToolPackage",
   "metadata": {
     "slug": "my-model",
@@ -141,7 +141,7 @@ docker push registry.example/aidd/my-model:1.0.0
     {
       "accelerator": "gpu",
       "image": "registry.example/aidd/my-model@sha256:&lt;64位digest&gt;",
-      "entrypoint": ["python", "/opt/sciminer/run.py"],
+      "entrypoint": ["python", "/opt/aidd/run.py"],
       "resources": { "cpu": "4", "memory": "16Gi", "gpu": 1 }
     }
   ]
