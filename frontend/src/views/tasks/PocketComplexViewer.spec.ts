@@ -13,7 +13,7 @@ import PocketComplexViewer from './PocketComplexViewer.vue'
 
 const MoleculeViewerStub = {
   name: 'MoleculeViewer',
-  props: ['scene', 'voxelGrid'],
+  props: ['scene', 'mode', 'voxelGrid'],
   template: '<div data-testid="stub-molecule-viewer" />',
 }
 
@@ -55,6 +55,7 @@ describe('PocketComplexViewer', () => {
 
     const viewer = wrapper.findComponent(MoleculeViewerStub)
     expect(viewer.exists()).toBe(true)
+    expect(viewer.props('mode')).toBe('protein')
     expect(viewer.props('scene').entries.map((entry: { role: string }) => entry.role)).toEqual([
       'receptor',
       'pocket',

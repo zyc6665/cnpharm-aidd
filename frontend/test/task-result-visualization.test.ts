@@ -105,12 +105,14 @@ test('结果面板源码应包含输出结果列表选择逻辑', () => {
 test('结果可视化应修复内置全屏入口，而不是额外包一层自定义全屏弹层', () => {
   const panelSource = readSource('src/components/tasks/ResultVisualizationPanel.vue')
   const viewerSource = readSource('src/components/tasks/MoleculeViewer.vue')
+  const kernelSource = readSource('src/components/tasks/molstar-viewer-kernel.ts')
 
   assert.equal(panelSource.includes('v-model:open="isFullscreen"'), false)
   assert.equal(panelSource.includes('FullscreenOutlined'), false)
   assert.equal(panelSource.includes('visualizationFullscreen'), false)
 
-  assert.equal(viewerSource.includes('viewportShowToggleFullscreen: true'), true)
+  assert.equal(kernelSource.includes('viewportShowToggleFullscreen: options.allowNativeFullscreen ?? false'), true)
+  assert.equal(viewerSource.includes('allowNativeFullscreen: true'), true)
   assert.equal(viewerSource.includes('var(--viewer-height)'), false)
   assert.equal(viewerSource.includes('fullscreen?: boolean'), false)
   assert.equal(viewerSource.includes('height: 100%'), true)
@@ -118,15 +120,22 @@ test('结果可视化应修复内置全屏入口，而不是额外包一层自�
   assert.equal(viewerSource.includes('expandToFullscreen && !layoutState.isExpanded'), true)
   assert.equal(viewerSource.includes('!layoutState.expandToFullscreen && layoutState.isExpanded'), true)
   assert.equal(viewerSource.includes('PluginCommands.Layout.Update'), true)
+  assert.equal(viewerSource.includes('@click="resetCamera"'), true)
+  assert.equal(viewerSource.includes("t('tasks.visualizationMode')"), true)
+  assert.equal(viewerSource.includes('viewerPreset.mode'), true)
+  assert.equal(viewerSource.includes("t('tasks.visualizationResetView')"), true)
+  assert.equal(viewerSource.includes('viewer.plugin.managers.camera.reset(undefined, 300)'), true)
   assert.equal(viewerSource.includes('z-index: 1100'), true)
 })
 
 test('口袋受体应使用 polymer-cartoon 表示且不复用球棍默认视图', () => {
   const viewerSource = readSource('src/components/tasks/MoleculeViewer.vue')
 
-  assert.equal(viewerSource.includes("entry.role === 'receptor'"), true)
+  assert.equal(viewerSource.includes("role === 'receptor'"), true)
   assert.equal(viewerSource.includes("representationPreset: 'polymer-cartoon'"), true)
   assert.equal(viewerSource.includes("plugin.builders.structure.hierarchy.applyPreset"), true)
+  assert.equal(viewerSource.includes("resolveMolstarHierarchyPreset(initialRep)"), true)
+  assert.match(viewerSource, /entry\.role === 'ligand'\s*\?\s*'ball-and-stick'/)
 })
 
 test('带 QED 排名的 SDF 输出应按分数降序截取 Top 10', () => {

@@ -75,6 +75,7 @@
           <MoleculeViewer
             v-else-if="previewKind === 'structure' && scene"
             :scene="scene"
+            :mode="structureViewerMode"
             data-testid="artifact-preview-structure"
           />
 
@@ -118,6 +119,7 @@ import {
   createVisualizationScene,
   detectCsvResultFile,
   detectVisualizationFormat,
+  resolveMolstarStructureMode,
   type TaskFileReference,
   type VisualizationFilePreviewKind,
   type VisualizationScene
@@ -156,6 +158,9 @@ const scene = ref<VisualizationScene | null>(null)
 
 const drawerTitle = computed(() => props.row?.title || t('workspace.artifactPreviewTitle'))
 const downloadUrl = computed(() => previewFile.value?.url || props.row?.downloadUrl || '')
+const structureViewerMode = computed(() =>
+  resolveMolstarStructureMode(scene.value?.entries.some(entry => entry.role === 'receptor') ?? false)
+)
 const isFilePreviewKind = computed(
   () => previewKind.value === 'json' || previewKind.value === 'text' || previewKind.value === 'image'
 )

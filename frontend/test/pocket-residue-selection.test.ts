@@ -114,11 +114,25 @@ test('只有选中的残基画球棍，关键残基不自动展开', () => {
   // 选中残基用球棍表示
   assert.match(viewer, /'focus-residue'/)
   assert.match(viewer, /type: 'ball-and-stick'/)
+  assert.match(viewer, /type: pocketRepresentation\.value/)
   // 没有「关键残基」这个自动分组：不选就不画，选了才画
   assert.doesNotMatch(viewer, /'key-residues'/)
   assert.doesNotMatch(viewer, /keyResIds/)
   // 卡通层要把选中的残基排除，否则同一个原子被画两遍，球棍埋在丝带里
-  assert.match(viewer, /const peripheral = props\.resIds\.filter\(\(id\) => !selected\.has\(id\)\)/)
+  assert.match(viewer, /const peripheral = selection\.residueIds\.filter\(\(id\) => !selected\.has\(id\)\)/)
+  // 同一规范化选择同时驱动高亮和相机框选。
+  assert.match(viewer, /const selection = resolveMolstarPocketSelection\(/)
+  assert.match(viewer, /computePocketSphere\(props\.pdbUrl, selection\)/)
+  assert.match(viewer, /await buildHighlights\(selection\)/)
+  assert.match(viewer, /@click=\"focusPocket\"/)
+  assert.match(viewer, /tasks\.visualizationResetView/)
+  assert.match(viewer, /tasks\.visualizationProteinRepresentation/)
+  assert.match(viewer, /tasks\.visualizationSurface/)
+  assert.ok(viewer.includes('v-model="pocketRepresentation"'))
+  assert.ok(viewer.includes('value="surface"'))
+  assert.ok(viewer.includes('ref<MolstarRepresentation>(pocketPreset.primaryRepresentation)'))
+  assert.ok(viewer.includes('watch(pocketRepresentation, () => { if (plugin) void render({ keepCamera: true }) })'))
+  assert.match(viewer, /selection\.chain && ch !== selection\.chain/)
   // 图例说明球棍形态
   assert.match(viewer, /选中残基（球棍）/)
 

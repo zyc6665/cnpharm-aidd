@@ -66,6 +66,7 @@
           <MoleculeViewer
             v-if="selectedResult?.kind === 'structure'"
             :scene="focusedScene"
+            :mode="focusedSceneMode"
             :variant="variant"
             :allow-native-fullscreen="allowNativeFullscreen"
           />
@@ -135,7 +136,8 @@ import {
   buildVisualizationScene,
   buildVisualizationResultItems,
   createVisualizationScene,
-  preferTopRankedSdfFiles
+  preferTopRankedSdfFiles,
+  resolveMolstarSceneMode
 } from '@/domain/tasks'
 
 const props = withDefaults(defineProps<{
@@ -192,6 +194,8 @@ const focusedScene = computed(() => {
 
   return createVisualizationScene([], [selected.entry], [])
 })
+
+const focusedSceneMode = computed(() => resolveMolstarSceneMode(focusedScene.value.entries))
 
 function selectResult(key: string) {
   selectedResultKey.value = key

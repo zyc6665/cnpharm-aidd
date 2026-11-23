@@ -45,6 +45,8 @@
           <StructureArtifactPreview
             v-if="previewArtifact"
             :artifact="previewArtifact"
+            role="receptor"
+            mode="protein"
             :preferred-file-roles="previewFileRoles"
           />
           <AppEmptyState

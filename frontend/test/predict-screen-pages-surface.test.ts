@@ -31,6 +31,11 @@ test('五条路由：P-21..P-25 都在 router 中以正确 path/name/组件注�
   }
 })
 
+test('docking 结果页使用共享 docking viewer preset', () => {
+  const source = read('src/views/screening/DockingResultDetail.vue')
+  assert.equal(source.includes('<MoleculeViewer v-if=\"scene\" :scene=\"scene\" mode=\"docking\"'), true)
+})
+
 test('tool slug 与冻结契约一致（molp-pc-property-prediction / autodock-vina-docking）', () => {
   const predictTypes = read('src/types/predict.ts')
   const screeningTypes = read('src/types/screening.ts')
