@@ -7,9 +7,9 @@ tests and local development use a deterministic fake transport.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.execution.contracts import (
     ExecutionArtifactCollection,
@@ -53,8 +53,31 @@ class KubernetesJobExecutionConfig(BaseModel):
         min_length=1,
         max_length=512,
     )
+    # 部署侧受控的调度定位（docs/24 §10）：资源池定向与污点容忍。
+    # 平台统一从 K8S_ADAPTER_* 环境注入，工具与租户不可指定节点拓扑。
+    node_selector: dict[str, str] = Field(default_factory=dict)
+    tolerations: list[dict[str, Any]] = Field(default_factory=list)
+    # GPU 扩展资源名：NVIDIA 集群为 nvidia.com/gpu；海光 DCU 集群切换为
+    # device plugin 暴露的资源名（如 hygon.com/dcu）。
+    gpu_resource_name: str = Field(default="nvidia.com/gpu", min_length=1, max_length=63)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("node_selector")
+    @classmethod
+    def _validate_node_selector(cls, value: dict[str, str]) -> dict[str, str]:
+        for key, item in value.items():
+            if not isinstance(key, str) or not key or not isinstance(item, str):
+                raise ValueError("node_selector must map non-empty keys to string values")
+        return value
+
+    @field_validator("tolerations")
+    @classmethod
+    def _validate_tolerations(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for item in value:
+            if not isinstance(item, dict) or not item:
+                raise ValueError("tolerations entries must be non-empty objects")
+        return value
 
 
 class KubernetesSecretProvider(Protocol):

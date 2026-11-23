@@ -205,20 +205,24 @@ def _validate_runtime_env(manifest: ToolPackageManifest, errors: list[str]) -> N
         errors.append("runtime.artifacts.fallback.sha256 must be 64 hex")
 
     weights = runtime.weights
-    if not weights.manifest_uri and not weights.mounts:
-        errors.append("runtime.weights requires either manifest_uri or mounts")
-    if weights.manifest_uri and (
-        not weights.manifest_sha256 or not _SHA256_RE.fullmatch(weights.manifest_sha256)
-    ):
-        errors.append("runtime.weights.manifest_sha256 must be 64 hex")
+    # 权重随镜像打包是默认形态（weights 缺省）；只有仍走「对象存储权重清单 /
+    # 节点本地挂载」形态的包才需要给出 weights 且内容完整。
+    if weights is not None:
+        if not weights.manifest_uri and not weights.mounts:
+            errors.append("runtime.weights requires either manifest_uri or mounts")
+        if weights.manifest_uri and (
+            not weights.manifest_sha256 or not _SHA256_RE.fullmatch(weights.manifest_sha256)
+        ):
+            errors.append("runtime.weights.manifest_sha256 must be 64 hex")
 
     cache_policy = runtime.cache_policy
     if not cache_policy.mutable_host_paths_forbidden:
         errors.append("runtime.cache_policy.mutable_host_paths_forbidden must be true")
-    required_cache_keys = {
-        "runtime.artifacts.selected.digest_or_sha256",
-        "runtime.weights.manifest_sha256",
-    }
+    # 权重随镜像打包时缓存键就是镜像 digest；只有声明了「对象存储权重清单」的包
+    # 才需要把权重 sha256 纳入缓存键。
+    required_cache_keys = {"runtime.artifacts.selected.digest_or_sha256"}
+    if weights is not None and weights.manifest_uri:
+        required_cache_keys.add("runtime.weights.manifest_sha256")
     missing_cache_keys = required_cache_keys - set(cache_policy.key_fields)
     for key in sorted(missing_cache_keys):
         errors.append(f"runtime.cache_policy.key_fields must include {key}")

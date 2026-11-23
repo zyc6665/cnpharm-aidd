@@ -39,6 +39,13 @@ data:
   K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: inputs
   K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX: executions
   K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: /tmp/sciminer-k8s-artifacts
+  # 资源池定向与污点容忍（部署侧受控，工具不感知节点拓扑）。留空表示不注入。
+  # 示例：K8S_ADAPTER_NODE_SELECTOR_JSON: '{"sciminer.io/pool":"gpu"}'
+  # 示例：K8S_ADAPTER_TOLERATIONS_JSON: '[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]'
+  K8S_ADAPTER_NODE_SELECTOR_JSON: ""
+  K8S_ADAPTER_TOLERATIONS_JSON: ""
+  # NVIDIA 集群为 nvidia.com/gpu；海光 DCU 集群切换为 device plugin 资源名。
+  K8S_ADAPTER_GPU_RESOURCE_NAME: nvidia.com/gpu
   WORKER_CAPABILITY_ADMISSION_ENABLED: "true"
   WORKER_CAPABILITY_ROUTING_ENABLED: "true"
   WORKER_CAPABILITY_RESERVATION_ENABLED: "true"

@@ -59,6 +59,29 @@ def test_runtime_factory_keeps_k8s_disabled_by_default(monkeypatch):
     assert runtime is None
 
 
+def test_runtime_scheduling_json_parsers_reject_invalid_payloads():
+    from app.execution.transports.kubernetes_runtime import (
+        KubernetesCredentialConfigurationError,
+        _parse_json_list,
+        _parse_json_mapping,
+    )
+
+    assert _parse_json_mapping(None, "K8S_ADAPTER_NODE_SELECTOR_JSON") == {}
+    assert _parse_json_mapping("", "K8S_ADAPTER_NODE_SELECTOR_JSON") == {}
+    assert _parse_json_mapping('{"a":"b"}', "K8S_ADAPTER_NODE_SELECTOR_JSON") == {"a": "b"}
+    assert _parse_json_list(None, "K8S_ADAPTER_TOLERATIONS_JSON") == []
+    assert _parse_json_list("[]", "K8S_ADAPTER_TOLERATIONS_JSON") == []
+
+    with pytest.raises(KubernetesCredentialConfigurationError, match="valid JSON"):
+        _parse_json_mapping("{oops", "K8S_ADAPTER_NODE_SELECTOR_JSON")
+    with pytest.raises(KubernetesCredentialConfigurationError, match="JSON object"):
+        _parse_json_mapping("[1]", "K8S_ADAPTER_NODE_SELECTOR_JSON")
+    with pytest.raises(KubernetesCredentialConfigurationError, match="valid JSON"):
+        _parse_json_list("[{oops", "K8S_ADAPTER_TOLERATIONS_JSON")
+    with pytest.raises(KubernetesCredentialConfigurationError, match="JSON array"):
+        _parse_json_list('{"a":1}', "K8S_ADAPTER_TOLERATIONS_JSON")
+
+
 def test_runtime_factory_requires_all_platform_bindings_when_enabled():
     from app.config import Settings
     from app.execution.transports.kubernetes_runtime import (

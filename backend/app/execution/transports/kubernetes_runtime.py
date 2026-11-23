@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -91,6 +92,32 @@ class KubernetesRuntime:
         await self.client.aclose()
         if self.out_of_cluster:
             release_temp_files()
+
+
+def _parse_json_mapping(raw: str | None, name: str) -> dict[str, str]:
+    """解析部署侧注入的 JSON 对象配置（当前用于 nodeSelector）。"""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise KubernetesCredentialConfigurationError(f"{name} must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise KubernetesCredentialConfigurationError(f"{name} must be a JSON object")
+    return parsed
+
+
+def _parse_json_list(raw: str | None, name: str) -> list[dict[str, Any]]:
+    """解析部署侧注入的 JSON 数组配置（当前用于 tolerations）。"""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise KubernetesCredentialConfigurationError(f"{name} must be valid JSON") from exc
+    if not isinstance(parsed, list):
+        raise KubernetesCredentialConfigurationError(f"{name} must be a JSON array")
+    return parsed
 
 
 def _build_in_cluster(settings: Any) -> tuple[KubernetesSecretProvider, httpx.AsyncClient]:
@@ -229,6 +256,19 @@ def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
                 settings,
                 "K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX",
                 "executions",
+            ),
+            node_selector=_parse_json_mapping(
+                getattr(settings, "K8S_ADAPTER_NODE_SELECTOR_JSON", None),
+                "K8S_ADAPTER_NODE_SELECTOR_JSON",
+            ),
+            tolerations=_parse_json_list(
+                getattr(settings, "K8S_ADAPTER_TOLERATIONS_JSON", None),
+                "K8S_ADAPTER_TOLERATIONS_JSON",
+            ),
+            gpu_resource_name=getattr(
+                settings,
+                "K8S_ADAPTER_GPU_RESOURCE_NAME",
+                "nvidia.com/gpu",
             ),
         ),
         secret_provider=provider,

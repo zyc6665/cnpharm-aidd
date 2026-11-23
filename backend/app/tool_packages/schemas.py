@@ -240,7 +240,9 @@ class RuntimeEnvManifest(BaseModel):
     )
     selection_policy: str = Field(min_length=1, max_length=500)
     artifacts: RuntimeArtifactsManifest
-    weights: RuntimeWeightsManifest
+    # 权重随镜像打包是默认形态（2026-11 收敛决策），此时本字段缺省；
+    # 仍走「节点本地/对象存储权重」形态的旧包才需要声明。
+    weights: RuntimeWeightsManifest | None = None
     cache_policy: RuntimeCachePolicyManifest
 
 

@@ -48,12 +48,18 @@ def build_kubernetes_tool_config(
     if "@" in image:
         image = image.split("@", 1)[0]
 
+    runtime: dict[str, Any] = {
+        "image": f"{image}@{primary.image_digest}",
+        "entrypoint": list(variant.entrypoint),
+    }
+    # 权重随镜像打包是默认形态（weights 缺省）；若包仍声明节点本地权重挂载，
+    # 这里必须透传，否则注册产物会在执行期静默丢挂载。
+    if manifest.runtime.weights is not None:
+        runtime["weights"] = manifest.runtime.weights.model_dump(exclude_none=True)
+
     return {
         "type": "k8s_job",
         "variant": variant.name,
-        "runtime": {
-            "image": f"{image}@{primary.image_digest}",
-            "entrypoint": list(variant.entrypoint),
-        },
+        "runtime": runtime,
         "resource_profile": resource_profile,
     }
