@@ -2011,7 +2011,10 @@ export default {
       projectPlaceholder: 'Select a project',
       selectPlaceholder: 'Select',
       noSelectedPockets: 'No selected pockets under this structure. Mark a pocket first in the structure detail.',
-      loadFailed: 'Failed to load data. Please try again later.'
+      loadFailed: 'Failed to load data. Please try again later.',
+      loadingFilename: 'Reading structure filename…',
+      filenameLookupFailed: 'Could not read structure metadata; retry available',
+      unsupportedFormat: 'This structure format is not supported for preview'
     },
     molecule: {
       title: 'Molecule Generation',
@@ -2682,6 +2685,7 @@ export default {
       targetPlaceholder: 'Select a target',
       proteinPlaceholder: 'Select a protein',
       structurePlaceholder: 'Select a structure',
+      prefillMismatch: 'Project, target, protein, or structure ownership does not match. Only verified selections were kept.',
       prepared: 'Prepared',
       raw: 'Raw',
       selectHint: 'Prefer the prepared structure file; fall back to the raw structure when no prepared file exists.',

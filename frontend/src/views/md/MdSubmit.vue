@@ -19,6 +19,7 @@
               <a-form-item :label="t('md.submit.project')" required>
                 <a-select
                   v-model:value="form.projectId"
+                  @change="handleProjectChange"
                   :placeholder="t('md.submit.projectPlaceholder')"
                   show-search
                   option-filter-prop="label"
@@ -31,6 +32,7 @@
               <a-form-item :label="t('md.submit.target')">
                 <a-select
                   v-model:value="form.targetId"
+                  @change="handleTargetChange"
                   :placeholder="t('md.submit.targetPlaceholder')"
                   :disabled="!form.projectId"
                   :loading="loadingTargets"
@@ -44,6 +46,7 @@
               <a-form-item :label="t('md.submit.protein')">
                 <a-select
                   v-model:value="form.proteinId"
+                  @change="handleProteinChange"
                   :placeholder="t('md.submit.proteinPlaceholder')"
                   :disabled="!form.targetId"
                   :loading="loadingProteins"
@@ -116,12 +119,13 @@
 
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref, watch } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
+  import { useRequestSequence } from '@/composables/useRequestSequence'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import { listProjects } from '@/api/projects'
-  import { getTarget, listStructures, listTargets } from '@/api/targets'
+  import { getProtein, getStructure, getTarget, listStructures, listTargets } from '@/api/targets'
   import { findToolBySlug, MD_TOOL_SLUG, resolveToolVersionId, submitMdTask } from '@/api/md'
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
@@ -139,6 +143,16 @@
 
   const { t } = useI18n()
   const router = useRouter()
+  const route = useRoute()
+  const targetsSequence = useRequestSequence()
+  const proteinsSequence = useRequestSequence()
+  const structuresSequence = useRequestSequence()
+  const prefillSequence = useRequestSequence()
+  let applyingPrefillProject = false
+  const queryValue = (key: string): string | undefined => {
+    const value = route.query[key]
+    return typeof value === 'string' && value.trim() ? value : undefined
+  }
 
   const projects = ref<ResearchProject[]>([])
   const targets = ref<TargetSummary[]>([])
@@ -216,86 +230,160 @@
 
   async function loadProjects(): Promise<void> {
     loadingProjects.value = true
+    let loaded = false
     try {
       projects.value = (await listProjects()).data.items
+      loaded = true
     } catch (error) {
       message.error(errorMessage(error, t('md.common.loadFailed')))
     } finally {
       loadingProjects.value = false
     }
+    if (loaded) await applyQueryPrefill()
   }
 
   async function loadTargets(projectId: string): Promise<void> {
+    const seq = targetsSequence.next()
     loadingTargets.value = true
     targets.value = []
     try {
-      targets.value = (await listTargets(projectId)).data.items
+      const items = (await listTargets(projectId)).data.items
+      if (targetsSequence.isCurrent(seq) && form.projectId === projectId) targets.value = items
     } catch (error) {
-      message.error(errorMessage(error, t('md.common.loadFailed')))
+      if (targetsSequence.isCurrent(seq) && form.projectId === projectId) message.error(errorMessage(error, t('md.common.loadFailed')))
     } finally {
-      loadingTargets.value = false
+      if (targetsSequence.isCurrent(seq) && form.projectId === projectId) loadingTargets.value = false
     }
   }
 
   async function loadProteins(targetId: string): Promise<void> {
+    const seq = proteinsSequence.next()
     loadingProteins.value = true
     proteins.value = []
     try {
       const target = (await getTarget(targetId)).data
-      proteins.value = target.proteins ?? []
+      if (proteinsSequence.isCurrent(seq) && form.targetId === targetId) proteins.value = target.proteins ?? []
     } catch (error) {
-      message.error(errorMessage(error, t('md.common.loadFailed')))
+      if (proteinsSequence.isCurrent(seq) && form.targetId === targetId) message.error(errorMessage(error, t('md.common.loadFailed')))
     } finally {
-      loadingProteins.value = false
+      if (proteinsSequence.isCurrent(seq) && form.targetId === targetId) loadingProteins.value = false
     }
   }
 
   async function loadStructures(proteinId: string): Promise<void> {
+    const seq = structuresSequence.next()
     loadingStructures.value = true
     structures.value = []
     try {
-      structures.value = (await listStructures(proteinId)).data.items
+      const items = (await listStructures(proteinId)).data.items
+      if (structuresSequence.isCurrent(seq) && form.proteinId === proteinId) structures.value = items
     } catch (error) {
-      message.error(errorMessage(error, t('md.common.loadFailed')))
+      if (structuresSequence.isCurrent(seq) && form.proteinId === proteinId) message.error(errorMessage(error, t('md.common.loadFailed')))
     } finally {
-      loadingStructures.value = false
+      if (structuresSequence.isCurrent(seq) && form.proteinId === proteinId) loadingStructures.value = false
     }
   }
 
-  watch(
-    () => form.projectId,
-    (projectId) => {
-      form.targetId = undefined
-      form.proteinId = undefined
-      form.structureId = undefined
-      targets.value = []
-      proteins.value = []
-      structures.value = []
-      if (projectId) void loadTargets(projectId)
-    }
-  )
+  function handleProjectChange(): void {
+    prefillSequence.invalidate()
+    clearProjectDescendants()
+    if (form.projectId) void loadTargets(form.projectId)
+  }
 
-  watch(
-    () => form.targetId,
-    (targetId) => {
-      form.proteinId = undefined
-      form.structureId = undefined
-      proteins.value = []
-      structures.value = []
-      if (targetId) void loadProteins(targetId)
-    }
-  )
+  function clearProjectDescendants(): void {
+    targetsSequence.invalidate()
+    proteinsSequence.invalidate()
+    structuresSequence.invalidate()
+    form.targetId = undefined
+    form.proteinId = undefined
+    form.structureId = undefined
+    targets.value = []
+    proteins.value = []
+    structures.value = []
+    loadingTargets.value = false
+    loadingProteins.value = false
+    loadingStructures.value = false
+  }
 
-  watch(
-    () => form.proteinId,
-    (proteinId) => {
-      form.structureId = undefined
-      structures.value = []
-      if (proteinId) void loadStructures(proteinId)
+  function handleTargetChange(): void {
+    proteinsSequence.invalidate()
+    structuresSequence.invalidate()
+    form.proteinId = undefined
+    form.structureId = undefined
+    proteins.value = []
+    structures.value = []
+    loadingProteins.value = false
+    loadingStructures.value = false
+    if (form.targetId) void loadProteins(form.targetId)
+  }
+
+  function handleProteinChange(): void {
+    structuresSequence.invalidate()
+    form.structureId = undefined
+    structures.value = []
+    loadingStructures.value = false
+    if (form.proteinId) void loadStructures(form.proteinId)
+  }
+
+  async function applyQueryPrefill(): Promise<void> {
+    const seq = prefillSequence.next()
+    const query = { project: queryValue('project_id'), target: queryValue('target_id'), protein: queryValue('protein_id'), structure: queryValue('structure_id') }
+    if (!query.project) return
+    const current = () => prefillSequence.isCurrent(seq) && route.query.project_id === query.project
+    const warn = () => message.warning(t('md.submit.prefillMismatch'))
+    if (!projects.value.some(item => item.id === query.project)) { warn(); return }
+    applyingPrefillProject = true
+    form.projectId = query.project
+    applyingPrefillProject = false
+    await loadTargets(query.project)
+    if (!current()) return
+    let targetId = query.target
+    let proteinId = query.protein
+    const structureId = query.structure
+    if (structureId) {
+      try {
+        const structure = (await getStructure(structureId)).data
+        if (!current()) return
+        if (proteinId && proteinId !== structure.protein_id) { warn(); return }
+        proteinId = structure.protein_id
+        const protein = (await getProtein(proteinId)).data
+        if (!current()) return
+        if (targetId && targetId !== protein.target_id) { warn(); return }
+        targetId = protein.target_id
+        const target = (await getTarget(targetId)).data
+        if (!current()) return
+        if (target.project_id !== query.project) { warn(); return }
+        if (!targets.value.some(item => item.id === targetId)) { warn(); return }
+        form.targetId = targetId
+        await loadProteins(targetId)
+        if (!current()) return
+        if (!proteins.value.some(item => item.id === proteinId)) { warn(); return }
+        form.proteinId = proteinId
+        await loadStructures(proteinId)
+        if (!current()) return
+        if (!structures.value.some(item => item.id === structureId)) { warn(); return }
+        form.structureId = structureId
+        return
+      } catch { if (current()) warn(); return }
     }
-  )
+    if (targetId && targets.value.some(item => item.id === targetId)) {
+      form.targetId = targetId
+      await loadProteins(targetId)
+      if (!current()) return
+      if (proteinId && proteins.value.some(item => item.id === proteinId)) {
+        form.proteinId = proteinId
+        await loadStructures(proteinId)
+        if (!current()) return
+        if (query.structure && structures.value.some(item => item.id === query.structure)) form.structureId = query.structure
+        else if (query.structure) warn()
+      } else if (proteinId) warn()
+    } else if (targetId) warn()
+  }
+
+  watch(() => [route.query.project_id, route.query.target_id, route.query.protein_id, route.query.structure_id], () => void applyQueryPrefill())
 
   function resetForm(): void {
+    prefillSequence.invalidate()
     form.targetId = undefined
     form.proteinId = undefined
     form.structureId = undefined
@@ -303,36 +391,47 @@
     targets.value = []
     proteins.value = []
     structures.value = []
+    if (form.projectId) void loadTargets(form.projectId)
   }
 
   async function handleSubmit(): Promise<void> {
+    if (submitting.value) return
     if (!form.projectId) {
       message.warning(t('md.submit.projectRequired'))
       return
     }
-    if (!complexFileId.value) {
+    const structure = selectedStructure.value
+    const fileId = structure?.prepared_file_id ?? structure?.structure_file_id ?? null
+    if (!fileId) {
       message.warning(t('md.submit.structureRequired'))
       return
     }
+    const tool = selectedOption.value
+    const schema = tool?.parameterSchema ?? null
+    const params2 = normalizeParameters(schema, params.value) as unknown as MdSubmitParams
+    if (validateParameters(schema, params.value).length > 0) return
     submitting.value = true
+    const snapshot = {
+      projectId: form.projectId,
+      toolSlug: selectedSlug.value,
+      params: params2,
+      complexFileId: fileId,
+      name: `MD ${durationNs.value.toFixed(2)}ns`
+    }
     try {
-      const tool = await findToolBySlug(selectedSlug.value)
-      if (!tool) {
-        message.error(t('md.submit.toolMissing', { slug: selectedSlug.value }))
+      const resolved = await findToolBySlug(snapshot.toolSlug)
+      if (!resolved) {
+        message.error(t('md.submit.toolMissing', { slug: snapshot.toolSlug }))
         return
       }
-      const toolVersionId = await resolveToolVersionId(tool)
-      const params2 = normalizeParameters(
-        selectedOption.value?.parameterSchema ?? null,
-        params.value
-      ) as unknown as MdSubmitParams
+      const toolVersionId = await resolveToolVersionId(resolved)
       const taskId = await submitMdTask({
-        projectId: form.projectId,
-        toolId: tool.id,
+        projectId: snapshot.projectId,
+        toolId: resolved.id,
         toolVersionId,
-        params: params2,
-        complexFileId: complexFileId.value,
-        name: `MD ${durationNs.value.toFixed(2)}ns`
+        params: snapshot.params,
+        complexFileId: snapshot.complexFileId,
+        name: snapshot.name
       })
       message.success(t('md.submit.submitSuccess'))
       await router.push(`/tasks/${taskId}/md`)

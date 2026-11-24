@@ -150,6 +150,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRequestSequence } from '@/composables/useRequestSequence'
 import {
   listDesignProjects,
   listProjectTargets,
@@ -241,23 +242,31 @@ function resolveStructureUrn(): string | null {
 }
 
 const resolvedFilenames = ref<Record<string, string>>({})
+const filenameSequences = new Map<string, ReturnType<typeof useRequestSequence>>()
+function filenameSequence(fileId: string) {
+  let sequence = filenameSequences.get(fileId)
+  if (!sequence) {
+    sequence = useRequestSequence()
+    filenameSequences.set(fileId, sequence)
+  }
+  return sequence
+}
 
 watch(
   [() => props.showPreview, () => props.modelValue?.structureFileId, () => resolveStructureUrn()],
   async ([enabled, fileId, urn]) => {
-    if (!enabled || !fileId) return
-    if (urn && urnExtension(urn)) return
-    if (resolvedFilenames.value[fileId] !== undefined) return
+    if (!enabled || !fileId || (urn && urnExtension(urn))) return
+    const sequence = filenameSequence(fileId)
+    const seq = sequence.next()
     try {
       const response = await getFileInfo(fileId)
-      resolvedFilenames.value = {
-        ...resolvedFilenames.value,
-        [fileId]: response.data?.filename ?? '',
+      if (sequence.isCurrent(seq) && props.modelValue?.structureFileId === fileId && response.data?.filename) {
+        resolvedFilenames.value = { ...resolvedFilenames.value, [fileId]: response.data.filename }
       }
     } catch {
-      resolvedFilenames.value = {
-        ...resolvedFilenames.value,
-        [fileId]: '',
+      // Do not cache transient lookup failures as an empty filename; a later watch can retry.
+      if (sequence.isCurrent(seq) && props.modelValue?.structureFileId === fileId) {
+        delete resolvedFilenames.value[fileId]
       }
     }
   },
@@ -317,6 +326,13 @@ const loadingTargets = ref(false)
 const loadingProteins = ref(false)
 const loadingStructures = ref(false)
 const loadingPockets = ref(false)
+const projectSequence = useRequestSequence()
+const targetSequence = useRequestSequence()
+const proteinSequence = useRequestSequence()
+const structureSequence = useRequestSequence()
+const pocketSequence = useRequestSequence()
+const predictedSequence = useRequestSequence()
+const relaySequence = useRequestSequence()
 const error = ref('')
 
 const currentStep = computed(() => {
@@ -387,152 +403,89 @@ function emitPocketSelection(pocket: PocketSummary): void {
 }
 
 async function loadProjects(): Promise<void> {
+  const seq = projectSequence.next()
   loadingProjects.value = true
   error.value = ''
-  try {
-    projects.value = await listDesignProjects()
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingProjects.value = false
-  }
+  try { const items = await listDesignProjects(); if (projectSequence.isCurrent(seq)) projects.value = items }
+  catch { if (projectSequence.isCurrent(seq)) error.value = t('design.pocket.loadFailed') }
+  finally { if (projectSequence.isCurrent(seq)) loadingProjects.value = false }
 }
 
 async function handleProjectChange(value: unknown): Promise<void> {
+  targetSequence.invalidate(); proteinSequence.invalidate(); structureSequence.invalidate(); pocketSequence.invalidate(); predictedSequence.invalidate(); relaySequence.invalidate()
   clearBelow('target')
-  if (typeof value !== 'string') {
-    return
-  }
-  loadingTargets.value = true
-  try {
-    targets.value = await listProjectTargets(value)
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingTargets.value = false
-  }
+  if (typeof value !== 'string') return
+  const seq = targetSequence.next(); loadingTargets.value = true
+  try { const items = await listProjectTargets(value); if (targetSequence.isCurrent(seq) && selectedProject.value === value) targets.value = items }
+  catch { if (targetSequence.isCurrent(seq) && selectedProject.value === value) error.value = t('design.pocket.loadFailed') }
+  finally { if (targetSequence.isCurrent(seq) && selectedProject.value === value) loadingTargets.value = false }
 }
 
 async function handleTargetChange(value: unknown): Promise<void> {
+  proteinSequence.invalidate(); structureSequence.invalidate(); pocketSequence.invalidate(); predictedSequence.invalidate(); relaySequence.invalidate()
   clearBelow('protein')
-  if (typeof value !== 'string') {
-    return
-  }
-  loadingProteins.value = true
-  try {
-    proteins.value = await loadTargetProteins(value)
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingProteins.value = false
-  }
+  if (typeof value !== 'string') return
+  const seq = proteinSequence.next(); loadingProteins.value = true
+  try { const items = await loadTargetProteins(value); if (proteinSequence.isCurrent(seq) && selectedTarget.value === value) proteins.value = items }
+  catch { if (proteinSequence.isCurrent(seq) && selectedTarget.value === value) error.value = t('design.pocket.loadFailed') }
+  finally { if (proteinSequence.isCurrent(seq) && selectedTarget.value === value) loadingProteins.value = false }
 }
 
 async function handleProteinChange(value: unknown): Promise<void> {
+  structureSequence.invalidate(); pocketSequence.invalidate(); predictedSequence.invalidate(); relaySequence.invalidate()
   clearBelow('structure')
-  selectedStructure.value = undefined
-  structures.value = []
-  if (typeof value !== 'string') {
-    return
-  }
-  loadingStructures.value = true
-  try {
-    structures.value = await listProteinStructures(value)
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingStructures.value = false
-  }
+  if (typeof value !== 'string') return
+  const seq = structureSequence.next(); loadingStructures.value = true
+  try { const items = await listProteinStructures(value); if (structureSequence.isCurrent(seq) && selectedProtein.value === value) structures.value = items }
+  catch { if (structureSequence.isCurrent(seq) && selectedProtein.value === value) error.value = t('design.pocket.loadFailed') }
+  finally { if (structureSequence.isCurrent(seq) && selectedProtein.value === value) loadingStructures.value = false }
 }
 
 async function loadPocketsForStructure(structureId: string): Promise<void> {
-  loadingPockets.value = true
-  pockets.value = []
-  selectedPocket.value = undefined
-  try {
-    const all = await listStructurePockets(structureId)
-    pockets.value = all.filter(pocket => pocket.selected)
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingPockets.value = false
-  }
+  const seq = pocketSequence.next(); loadingPockets.value = true; pockets.value = []; selectedPocket.value = undefined
+  try { const all = await listStructurePockets(structureId); if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) pockets.value = all.filter(pocket => pocket.selected) }
+  catch { if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) error.value = t('design.pocket.loadFailed') }
+  finally { if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) loadingPockets.value = false }
 }
 
 async function handleStructureChange(value: unknown): Promise<void> {
-  clearBelow('pocket')
-  selectedPocket.value = undefined
-  pockets.value = []
-  if (typeof value !== 'string') {
-    return
-  }
+  pocketSequence.invalidate(); relaySequence.invalidate(); clearBelow('pocket')
+  if (typeof value !== 'string') return
   await loadPocketsForStructure(value)
 }
 
-function snapshotStructures(): void {
-  structureSnapshot.value = structures.value.map(structure => structure.id)
-}
+function snapshotStructures(): void { structureSnapshot.value = structures.value.map(structure => structure.id) }
 
 async function handleStructurePredicted(): Promise<void> {
-  if (!selectedProtein.value) return
-  loadingStructures.value = true
-  try {
-    const fresh = await listProteinStructures(selectedProtein.value)
-    structures.value = fresh
-    const added = selectNewlyAdded(structureSnapshot.value, fresh)
-    if (added) {
-      selectedStructure.value = added.id
-      await loadPocketsForStructure(added.id)
-    }
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  } finally {
-    loadingStructures.value = false
-  }
+  const proteinId = selectedProtein.value
+  if (!proteinId) return
+  const seq = predictedSequence.next(); loadingStructures.value = true
+  try { const fresh = await listProteinStructures(proteinId); if (!predictedSequence.isCurrent(seq) || selectedProtein.value !== proteinId) return; structures.value = fresh; const added = selectNewlyAdded(structureSnapshot.value, fresh); if (added) { selectedStructure.value = added.id; await loadPocketsForStructure(added.id) } }
+  catch { if (predictedSequence.isCurrent(seq)) error.value = t('design.pocket.loadFailed') }
+  finally { if (predictedSequence.isCurrent(seq)) loadingStructures.value = false }
 }
 
 async function handleRelayPocketSelected(pocket: PocketSummary): Promise<void> {
-  if (!selectedStructure.value) return
-  try {
-    const all = await listStructurePockets(selectedStructure.value)
-    pockets.value = all.filter(item => item.selected)
-    const chosen = pockets.value.find(item => item.id === pocket.id) ?? pockets.value[0]
-    if (chosen) {
-      selectedPocket.value = chosen.id
-      emitPocketSelection(chosen)
-    }
-  } catch {
-    error.value = t('design.pocket.loadFailed')
-  }
+  const structureId = selectedStructure.value
+  if (!structureId) return
+  const seq = relaySequence.next()
+  try { const all = await listStructurePockets(structureId); if (!relaySequence.isCurrent(seq) || selectedStructure.value !== structureId) return; pockets.value = all.filter(item => item.selected); const chosen = pockets.value.find(item => item.id === pocket.id) ?? pockets.value[0]; if (chosen) { selectedPocket.value = chosen.id; emitPocketSelection(chosen) } }
+  catch { if (relaySequence.isCurrent(seq) && selectedStructure.value === structureId) error.value = t('design.pocket.loadFailed') }
 }
 
-function onRelayPredicted(): void {
-  error.value = ''
-}
-
-function onRelayError(message: string): void {
-  error.value = message || t('design.pocket.loadFailed')
-}
+function onRelayPredicted(): void { error.value = '' }
+function onRelayError(message: string): void { error.value = message || t('design.pocket.loadFailed') }
 
 function handlePocketChange(value: unknown): void {
-  if (typeof value !== 'string') {
-    emit('update:modelValue', null)
-    return
-  }
+  if (typeof value !== 'string') { emit('update:modelValue', null); return }
   const pocket = pockets.value.find(item => item.id === value)
-  if (!pocket) {
-    emit('update:modelValue', null)
-    return
-  }
+  if (!pocket) { emit('update:modelValue', null); return }
   emitPocketSelection(pocket)
 }
 
 onMounted(async () => {
   await loadProjects()
-  if (!selectedProject.value && props.defaultProjectId) {
-    selectedProject.value = props.defaultProjectId
-    await handleProjectChange(props.defaultProjectId)
-  }
+  if (!selectedProject.value && props.defaultProjectId) { selectedProject.value = props.defaultProjectId; await handleProjectChange(props.defaultProjectId) }
 })
 </script>
 
