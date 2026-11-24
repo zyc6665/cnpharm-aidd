@@ -1,0 +1,19 @@
+# Pocket2Mol 增量镜像：只替换平台适配层，复用已发布的完整镜像。
+#
+# 完整镜像（Dockerfile）包含 conda 环境 + 模型代码 + 权重，重建一次要十几分钟。
+# 当只改了 postprocess_result.py 这类适配层脚本时，用本文件叠加一层即可，
+# 通常几秒完成，不需要重新导入模型环境。
+#
+# 构建上下文必须是 deploy/kubernetes/model-image-template/（内含 platform_adaptor/）：
+#   docker build -f deploy/model-images/k8s/pocket2mol/Dockerfile.adaptor \
+#     -t 127.0.0.1:30500/aidd/compute-pocket2mol:adaptor-<ver> \
+#     deploy/kubernetes/model-image-template
+ARG BASE_IMAGE=127.0.0.1:30500/aidd/compute-pocket2mol@sha256:82481106504e2f0b3aff3f572293349941f519433217ada5d0d4a8cf10731960
+FROM ${BASE_IMAGE}
+
+# 模型代码、conda 环境、权重都来自基础镜像，这里只覆盖适配层脚本。
+COPY platform_adaptor /opt/aidd/platform_adaptor
+RUN chmod +x /opt/aidd/platform_adaptor/*.sh
+
+# 保持与完整镜像一致的入口。
+ENTRYPOINT ["/usr/bin/tini","--","/opt/aidd/platform_adaptor/entrypoint.sh"]
