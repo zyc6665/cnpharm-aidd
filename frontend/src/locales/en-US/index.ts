@@ -1942,7 +1942,28 @@ export default {
       label: 'Model',
       placeholder: 'Select model',
       hint: 'Switch freely when several models share this capability; defaults to your last choice',
-      mock: 'demo model'
+      mock: 'demo model',
+      meta: {
+        duration: 'Estimated duration',
+        scenario: 'Best for',
+        selected: 'Selected model',
+        pocket2mol: {
+          duration: 'About 10–30 min',
+          scenario: 'Pocket-conditioned de novo generation for batch exploration of a known binding site'
+        },
+        diffdock: {
+          duration: 'About 1–5 min',
+          scenario: 'Protein–ligand docking to produce candidate binding poses and scores'
+        },
+        boltz2: {
+          duration: 'About 2–10 min',
+          scenario: 'Structure and affinity prediction to validate binding feasibility first'
+        },
+        generic: {
+          duration: 'Depends on pocket size and sample count',
+          scenario: 'Runs the capability declared by the tool contract'
+        }
+      }
     },
     runs: {
       title: 'Design Runs',
@@ -2033,7 +2054,52 @@ export default {
       invalidRadius: 'Pocket radius must be greater than 0 and at most 100 Å',
       invalidMw: 'MW lower bound must be positive and upper bound must exceed the lower bound',
       invalidLogp: 'logP upper bound must exceed the lower bound',
-      invalidSeed: 'Seed cannot be negative'
+      invalidSeed: 'Seed cannot be negative',
+      advancedParams: 'Advanced parameters',
+      resetParams: 'Reset defaults',
+      paramsReset: 'Defaults restored',
+      submittedStay: 'Task submitted — live progress is shown below',
+      viewResultsNow: 'View results now',
+      pocketPreview: 'Pocket 3D preview',
+      pocketPreviewMissing: 'This pocket has no usable structure file, so 3D preview is unavailable',
+      pocketPreviewUnsupportedFormat:
+        'This structure format cannot be previewed here (PDB and CIF are supported)'
+    },
+    presets: {
+      title: 'Parameter presets',
+      selectPlaceholder: 'Select a preset',
+      builtIn: 'Built-in',
+      custom: 'Custom',
+      empty: 'No custom presets yet',
+      saveCurrent: 'Save current parameters',
+      saveTitle: 'Save parameter preset',
+      name: 'Preset name',
+      namePlaceholder: 'e.g. Large pocket fine sampling',
+      nameRequired: 'Please enter a preset name',
+      saved: 'Preset saved',
+      deleted: 'Preset deleted',
+      delete: 'Delete',
+      builtInPresets: {
+        quick: 'Quick exploration',
+        standard: 'Standard generation',
+        fine: 'Fine sampling'
+      }
+    },
+    progressCard: {
+      title: 'Task progress',
+      close: 'Close',
+      status: 'Status',
+      progress: 'Progress',
+      queuing: 'Task submitted — waiting for scheduling',
+      queuePosition: 'Queue position: #{position}',
+      estimatedWait: 'Estimated wait: {time}',
+      cancel: 'Cancel task',
+      cancelConfirm: 'Cancel this task?',
+      cancelSuccess: 'Task canceled',
+      viewDetail: 'Task detail',
+      viewResults: 'View results',
+      failed: 'Task failed',
+      completed: 'Task completed'
     },
     peptide: {
       title: 'Peptide Activity & Toxicity Prediction',

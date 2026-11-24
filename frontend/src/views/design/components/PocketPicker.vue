@@ -126,13 +126,29 @@
         />
       </section>
 
+      <section v-if="showPreview && modelValue" class="pocket-preview" data-testid="pocket-preview">
+        <div class="pocket-preview__title">{{ t('design.molecule.pocketPreview') }}</div>
+        <div v-if="previewScene" class="pocket-preview__viewer">
+          <PocketPreviewViewer
+            :scene="previewScene"
+            variant="compact"
+            mode="pocket"
+            :voxel-grid="previewVoxelGrid"
+            :allow-native-fullscreen="false"
+          />
+        </div>
+        <div v-else class="pocket-preview__empty" data-testid="pocket-preview-empty">
+          {{ previewFallbackMessage }}
+        </div>
+      </section>
+
       <a-alert v-if="error" type="warning" show-icon :message="error" />
     </a-spin>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listDesignProjects,
@@ -141,9 +157,12 @@ import {
   listStructurePockets,
   loadTargetProteins,
 } from '@/api/design'
+import { getFileInfo } from '@/api/files'
 import StructurePredictForm from '@/components/design/StructurePredictForm.vue'
 import PocketPredictPanel from '@/components/design/PocketPredictPanel.vue'
 import { selectNewlyAdded } from '@/domain/design/pipeline'
+import { buildPocketBoxVoxelGrid } from '@/domain/pockets/pocket-preview'
+import type { VisualizationScene } from '@/domain/tasks'
 import type {
   PocketSummary,
   ProteinDetail,
@@ -153,10 +172,46 @@ import type {
 import type { ResearchProject } from '@/types/projects'
 import type { DesignPocketSelection } from '@/types/design'
 
-const props = defineProps<{
-  modelValue: DesignPocketSelection | null
-  defaultProjectId?: string
-}>()
+/**
+ * 三维预览按需加载：`MoleculeViewer` 会拉起 Mol* 整套渲染栈，
+ * 而大部分用户只关心口袋选择本身——没开 `showPreview` 时不该把这部分打进首屏。
+ */
+const PocketPreviewViewer = defineAsyncComponent(
+  () => import('@/components/tasks/MoleculeViewer.vue')
+)
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: DesignPocketSelection | null
+    defaultProjectId?: string
+    /** 是否在口袋选定后展示紧凑的三维预览（默认关闭，保持既有调用方行为）。 */
+    showPreview?: boolean
+  }>(),
+  { defaultProjectId: '', showPreview: false }
+)
+
+/**
+ * Mol* 的 `BuiltInTrajectoryFormat` 用 `mmcif` 表示 CIF / MMCIF，
+ * 不能写成 `'cif'`（会破坏 `VisualizationSceneEntry.format` 的类型）。
+ */
+interface PocketPreviewFormat {
+  format: 'pdb' | 'mmcif'
+  extension: string
+}
+
+const POCKET_PREVIEW_FORMAT_BY_EXTENSION: Record<string, PocketPreviewFormat> = {
+  '.pdb': { format: 'pdb', extension: '.pdb' },
+  '.ent': { format: 'pdb', extension: '.pdb' },
+  '.cif': { format: 'mmcif', extension: '.cif' },
+  '.mmcif': { format: 'mmcif', extension: '.mmcif' },
+}
+
+/** 从 URN（`file:<id>.pdb` / `s3://bucket/x.cif`）里取小写扩展名；取不到返回空串。 */
+function urnExtension(urn: string): string {
+  const base = (urn.split('?')[0] || '').split('#')[0] || ''
+  const index = base.lastIndexOf('.')
+  return index > 0 ? base.slice(index).toLowerCase() : ''
+}
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: DesignPocketSelection | null): void
@@ -169,6 +224,86 @@ const targets = ref<TargetSummary[]>([])
 const proteins = ref<ProteinDetail[]>([])
 const structures = ref<ProteinStructureDetail[]>([])
 const pockets = ref<PocketSummary[]>([])
+
+/**
+ * 预览用的结构 URN：优先用选择时携带的 `structureUrn`，否则回查当前结构。
+ * 有准备产物时以准备结构的 URN 为准（与 `structureFileId` 的取值口径一致）。
+ */
+function resolveStructureUrn(): string | null {
+  const direct = props.modelValue?.structureUrn
+  if (direct) return direct
+  const structure = structures.value.find(item => item.id === props.modelValue?.structureId)
+  if (!structure) return null
+  if (structure.prepared_file_id) {
+    return structure.prepared_urn ?? structure.structure_urn ?? null
+  }
+  return structure.structure_urn ?? structure.prepared_urn ?? null
+}
+
+const resolvedFilenames = ref<Record<string, string>>({})
+
+watch(
+  [() => props.showPreview, () => props.modelValue?.structureFileId, () => resolveStructureUrn()],
+  async ([enabled, fileId, urn]) => {
+    if (!enabled || !fileId) return
+    if (urn && urnExtension(urn)) return
+    if (resolvedFilenames.value[fileId] !== undefined) return
+    try {
+      const response = await getFileInfo(fileId)
+      resolvedFilenames.value = {
+        ...resolvedFilenames.value,
+        [fileId]: response.data?.filename ?? '',
+      }
+    } catch {
+      resolvedFilenames.value = {
+        ...resolvedFilenames.value,
+        [fileId]: '',
+      }
+    }
+  },
+  { immediate: true }
+)
+
+const previewScene = computed<VisualizationScene | null>(() => {
+  const fileId = props.modelValue?.structureFileId
+  if (!fileId) return null
+  const urn = resolveStructureUrn()
+  const directExt = urn ? urnExtension(urn) : ''
+  // 真实库里的 URN 形如 `file:<uuid>`（无扩展名），此时回退查文件元数据里的原始文件名。
+  const effectiveExt = directExt || urnExtension(resolvedFilenames.value[fileId] ?? '')
+  const detected = effectiveExt ? POCKET_PREVIEW_FORMAT_BY_EXTENSION[effectiveExt] : undefined
+  // 识别不了格式时不要按 PDB 硬渲染——Mol* 会把 CIF 当 PDB 解析出错误结构。
+  if (!detected) return null
+  const entry = {
+    key: `pocket-preview-${fileId}`,
+    url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
+    label: props.modelValue?.pocketLabel || 'pocket structure',
+    source: 'input' as const,
+    role: 'receptor' as const,
+    format: detected.format,
+    extension: detected.extension,
+  }
+  return {
+    entries: [entry],
+    inputEntries: [entry],
+    outputEntries: [],
+    supportedOutputFiles: [],
+    unsupportedOutputFiles: [],
+    hasRenderableOutput: true,
+    selectedOutputKey: entry.key,
+  }
+})
+
+const previewVoxelGrid = computed(() =>
+  buildPocketBoxVoxelGrid(props.modelValue?.center, props.modelValue?.boxSize)
+)
+
+/** 预览不可用时区分「没有结构文件」与「格式无法识别」，避免笼统的失败文案。 */
+const previewFallbackMessage = computed(() =>
+  props.modelValue?.structureFileId
+    ? t('design.molecule.pocketPreviewUnsupportedFormat')
+    : t('design.molecule.pocketPreviewMissing')
+)
 
 const selectedProject = ref<string | undefined>(props.modelValue?.projectId)
 const selectedTarget = ref<string | undefined>(props.modelValue?.targetId)
@@ -241,6 +376,11 @@ function emitPocketSelection(pocket: PocketSummary): void {
     pocketLabel: pocketLabel(pocket),
     score: pocket.score,
     structureFileId: structure?.prepared_file_id ?? structure?.structure_file_id ?? null,
+    structureUrn: structure
+      ? structure.prepared_file_id
+        ? structure.prepared_urn ?? structure.structure_urn ?? null
+        : structure.structure_urn ?? structure.prepared_urn ?? null
+      : null,
     center: pocket.center ?? null,
     boxSize: pocket.box_size ?? null,
   })
@@ -427,5 +567,33 @@ onMounted(async () => {
   margin: 8px 0 0;
   font-size: 12px;
   color: @warning-color;
+}
+
+.pocket-preview {
+  margin-top: @spacing-md;
+  padding: @spacing-md;
+  border: 1px solid @border-color;
+  border-radius: @border-radius-md;
+  background: @surface-sunken;
+}
+
+.pocket-preview__title {
+  margin-bottom: @spacing-sm;
+  color: @text-secondary;
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+}
+
+.pocket-preview__viewer {
+  height: 240px;
+  overflow: hidden;
+  border-radius: @border-radius-md;
+}
+
+.pocket-preview__empty {
+  padding: @spacing-lg;
+  color: @text-tertiary;
+  font-size: @font-size-sm;
+  text-align: center;
 }
 </style>

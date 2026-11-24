@@ -29,7 +29,7 @@
         </a-radio-group>
 
         <div v-if="sourceMode === 'project'" class="source-body">
-          <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
+          <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" show-preview />
         </div>
 
         <div v-else class="source-body source-body--fields" data-testid="molecule-upload-source">
@@ -113,18 +113,39 @@
       </section>
 
       <section class="design-section">
-        <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
+        <div class="param-header">
+          <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
+          <a-button size="small" :disabled="submitting" data-testid="molecule-reset-params" @click="resetParams">
+            {{ t('design.molecule.resetParams') }}
+          </a-button>
+        </div>
+        <ParameterPresets
+          v-if="selectedOption?.parameterSchema"
+          :schema="selectedOption.parameterSchema"
+          :values="form.params"
+          :storage-key="presetStorageKey"
+          :disabled="submitting"
+          @load="handlePresetLoad"
+        />
         <ModelParameterForm
           v-if="selectedOption?.parameterSchema"
           v-model="form.params"
           :schema="selectedOption.parameterSchema"
           :overrides="hiddenParams"
           :disabled="submitting"
+          :primary-keys="PRIMARY_PARAM_KEYS"
         />
         <p class="param-hint">{{ t('design.molecule.paramHint') }}</p>
       </section>
 
       <div class="design-actions">
+        <a-button
+          v-if="submittedTaskId"
+          data-testid="molecule-view-results-now"
+          @click="goToResults"
+        >
+          {{ t('design.molecule.viewResultsNow') }}
+        </a-button>
         <a-button
           type="primary"
           :loading="submitting"
@@ -137,6 +158,13 @@
       </div>
     </a-spin>
   </main>
+  <TaskProgressCard
+    v-if="submittedTaskId"
+    :key="submittedTaskId"
+    :task-id="submittedTaskId"
+    :task-name="t('design.molecule.taskName')"
+    @close="submittedTaskId = null"
+  />
 </template>
 
 <script setup lang="ts">
@@ -148,6 +176,8 @@
   import PocketPicker from './components/PocketPicker.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
+  import ParameterPresets from '@/components/design/ParameterPresets.vue'
+  import TaskProgressCard from '@/components/tasks/TaskProgressCard.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
   import { uploadProjectArtifact } from '@/api/artifacts'
@@ -162,6 +192,7 @@
   } from '@/domain/tools/parameterSchema'
   import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
   import type { ResearchProject } from '@/types/projects'
+  import type { ToolSchema } from '@/types/models'
   import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
   import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
@@ -233,6 +264,127 @@
   } = useModelOptions('molecule_generation', { defaultSlug: MOLECULE_GENERATION_TOOL_SLUG })
 
   const form = reactive<{ params: ParameterValues }>({ params: {} })
+
+  /** 提交成功后保留在当前页展示实时进度，而不是直接把用户踢到结果页。 */
+  const submittedTaskId = ref<string | null>(null)
+
+  /** 常用参数展开、其余收进「高级参数」；键名不存在时分组自然为空。 */
+  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'pocket_radius']
+
+  const PARAM_STORAGE_PREFIX = 'design:molecule-params:'
+  const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
+  const paramStorageKey = computed(() => `${PARAM_STORAGE_PREFIX}${selectedSlug.value}`)
+
+  interface StoredMoleculeParams {
+    sourceMode: 'project' | 'upload'
+    /** 上传模式下选过的目标项目；恢复时一并带回，避免用户重新选一次。 */
+    uploadProjectId: string
+    params: ParameterValues
+  }
+
+  function readStoredParams(): StoredMoleculeParams | null {
+    if (typeof localStorage === 'undefined') return null
+    try {
+      const raw = localStorage.getItem(paramStorageKey.value)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as Partial<StoredMoleculeParams>
+      if (!parsed || typeof parsed !== 'object' || !parsed.params) return null
+      return {
+        sourceMode: parsed.sourceMode === 'upload' ? 'upload' : 'project',
+        uploadProjectId:
+          typeof parsed.uploadProjectId === 'string' ? parsed.uploadProjectId : '',
+        params: { ...parsed.params }
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function persistParams(): void {
+    if (typeof localStorage === 'undefined') return
+    const storedParams: ParameterValues = {}
+    for (const [key, value] of Object.entries(form.params)) {
+      // 中心坐标来自当前口袋，不属于「用户配置」，不写入记忆。
+      if (key.startsWith('center_')) continue
+      storedParams[key] = value
+    }
+    try {
+      localStorage.setItem(
+        paramStorageKey.value,
+        JSON.stringify({
+          sourceMode: sourceMode.value,
+          uploadProjectId: uploadProjectId.value,
+          params: storedParams
+        })
+      )
+    } catch {
+      // 存储不可用时不阻断提交。
+    }
+  }
+
+  /** 只接受当前 schema 声明的键，避免旧模型的历史参数污染新模型。 */
+  function schemaOnly(values: ParameterValues): ParameterValues {
+    const properties = selectedOption.value?.parameterSchema?.properties ?? {}
+    const allowed = new Set(Object.keys(properties))
+    const next: ParameterValues = {}
+    for (const [key, value] of Object.entries(values)) {
+      if (key.startsWith('center_')) continue
+      if (allowed.size > 0 && !allowed.has(key)) continue
+      next[key] = value
+    }
+    return next
+  }
+
+  function queryParamHints(): ParameterValues {
+    const hints: ParameterValues = {}
+    const properties = selectedOption.value?.parameterSchema?.properties ?? {}
+    for (const key of Object.keys(properties)) {
+      const raw = route.query[key]
+      const value = Array.isArray(raw) ? raw[0] : raw
+      if (typeof value !== 'string' || value.trim() === '') continue
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) hints[key] = parsed
+    }
+    return hints
+  }
+
+  function applyDefaults(option: { parameterSchema: ToolSchema | null } | null): void {
+    const defaults = buildDefaultValues(option?.parameterSchema ?? null)
+    const stored = readStoredParams()
+    const restored = stored ? schemaOnly(stored.params) : {}
+    if (stored) {
+      if (stored.uploadProjectId) {
+        uploadProjectId.value = stored.uploadProjectId
+      }
+      sourceMode.value = stored.sourceMode
+      // 恢复成上传模式却没有目标项目时，校验必然报 needProject：
+      // 有 URL/最近项目就补上，没有就退回项目模式。
+      if (sourceMode.value === 'upload' && !uploadProjectId.value) {
+        if (defaultProjectId.value) {
+          uploadProjectId.value = defaultProjectId.value
+        } else {
+          sourceMode.value = 'project'
+        }
+      }
+    }
+    form.params = { ...defaults, ...restored, ...queryParamHints() }
+  }
+
+  function resetParams(): void {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(paramStorageKey.value)
+      } catch {
+        // ignore
+      }
+    }
+    form.params = buildDefaultValues(selectedOption.value?.parameterSchema ?? null)
+    message.success(t('design.molecule.paramsReset'))
+  }
+
+  function handlePresetLoad(params: ParameterValues): void {
+    form.params = { ...form.params, ...schemaOnly(params) }
+  }
 
   const hiddenParams: Record<string, ParameterFieldOverride> = {
     center_x: { hidden: true },
@@ -407,8 +559,9 @@
         params,
         standardInputUploads: { protein_pdb: proteinPdbFileId }
       })
-      message.success(t('design.molecule.submitted'))
-      await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
+      persistParams()
+      submittedTaskId.value = response.data.id
+      message.success(t('design.molecule.submittedStay'))
     } catch {
       message.error(t('design.molecule.failed'))
     } finally {
@@ -416,10 +569,15 @@
     }
   }
 
+  function goToResults(): void {
+    if (!submittedTaskId.value) return
+    void router.push({ name: 'GenerationResults', params: { id: submittedTaskId.value } })
+  }
+
   watch(
     selectedOption,
     option => {
-      form.params = buildDefaultValues(option?.parameterSchema ?? null)
+      applyDefaults(option)
     },
     { immediate: true }
   )
@@ -473,6 +631,18 @@
     margin: 0 0 16px;
     font-size: 16px;
     font-weight: 600;
+  }
+
+  .param-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    .design-section__title {
+      margin-bottom: 0;
+    }
   }
 
   .pocket-alert {
