@@ -31,6 +31,10 @@ vi.mock('@/api/compounds', () => ({
   addCandidateSetItems: vi.fn(),
 }))
 
+vi.mock('@/api/files', () => ({
+  uploadFile: vi.fn(),
+}))
+
 vi.mock('@/utils/protected-file-access', () => ({
   fetchProtectedFileText: vi.fn(),
   saveBlobAsFile: vi.fn(),
@@ -42,9 +46,14 @@ vi.mock('ant-design-vue', () => ({
 
 vi.mock('@ant-design/icons-vue', () => ({
   CopyOutlined: { template: '<span class="copy-icon" />' },
+  StarFilled: { template: '<span class="star-filled" />' },
+  StarOutlined: { template: '<span class="star-outlined" />' },
+  StopOutlined: { template: '<span class="stop-outlined" />' },
 }))
 
+import { message } from 'ant-design-vue'
 import { getDesignGenerationResult, findMoleculeTableArtifact, loadDesignTable } from '@/api/design'
+import { uploadFile } from '@/api/files'
 import GenerationResults from './GenerationResults.vue'
 import type { DesignTable } from '@/types/design'
 
@@ -152,6 +161,16 @@ const stubs = {
   'a-modal': { props: ['open'], template: '<div v-if="open"><slot /></div>' },
   'a-form': { template: '<form><slot /></form>' },
   'a-form-item': { template: '<div><slot /></div>' },
+  'a-popover': { template: '<div class="a-popover"><slot name="content" /><slot /></div>' },
+  'a-tooltip': {
+    props: ['title'],
+    template: '<span class="a-tooltip" :data-tooltip="title"><slot /></span>',
+  },
+  MoleculeCompareDrawer: {
+    props: ['open', 'molecules'],
+    template:
+      '<div v-if="open" data-testid="molecule-compare-drawer"><span v-for="m in molecules" :key="m.key" data-testid="molecule-compare-column" :data-index="m.index">{{ m.smiles }}</span></div>',
+  },
 }
 
 async function mountResults(): Promise<ReturnType<typeof mount>> {
@@ -177,6 +196,7 @@ describe('GenerationResults', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     push.mockReset()
+    window.localStorage.clear()
     vi.mocked(getDesignGenerationResult).mockResolvedValue({
       status: 'success',
       project_id: 'p1',
@@ -341,6 +361,194 @@ describe('GenerationResults', () => {
 
       expect(wrapper.find('[data-testid="results-save-modal"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="results-set-name"]').exists()).toBe(true)
+    })
+  })
+
+  describe('DrugFlow-style review tools', () => {
+    beforeEach(() => mockTable(fullTable))
+
+    it('tones numeric cells by druggability thresholds and explains headers', async () => {
+      const wrapper = await mountResults()
+
+      const firstRowTones = wrapper
+        .findAll('[data-testid="molecule-row"]')[0]!
+        .findAll('td.col-num .metric-value')
+        .map(cell => cell.attributes('data-tone'))
+
+      // 列顺序：score, mw, logp, hbd, hba, tpsa, qed
+      expect(firstRowTones).toEqual([undefined, 'bad', 'good', 'good', 'good', 'good', 'warn'])
+
+      const secondRowTones = wrapper
+        .findAll('[data-testid="molecule-row"]')[1]!
+        .findAll('td.col-num .metric-value')
+        .map(cell => cell.attributes('data-tone'))
+      // 缺值（hbd = ''）必须保持中性，不能染成绿色。
+      expect(secondRowTones[3]).toBeUndefined()
+
+      const tooltips = wrapper.findAll('.a-tooltip').map(node => node.attributes('data-tooltip'))
+      expect(tooltips).toContain(t('design.results.thresholds.mw.hint'))
+      expect(tooltips).toContain(t('design.results.thresholds.qed.hint'))
+    })
+
+    it('hides columns through the column toggle', async () => {
+      const wrapper = await mountResults()
+
+      expect(wrapper.get('[data-testid="molecule-table"]').text()).toContain('mw')
+
+      await wrapper.get('[data-testid="results-column-option-mw"] input').setValue(false)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="molecule-table"]').text()).not.toContain('mw')
+      expect(wrapper.get('[data-testid="molecule-table"]').text()).toContain('qed')
+    })
+
+    it('persists favorite / excluded marks and filters by them', async () => {
+      const wrapper = await mountResults()
+
+      await wrapper.findAll('[data-testid="molecule-row-favorite"]')[0]!.trigger('click')
+      await wrapper.findAll('[data-testid="molecule-row-exclude"]')[1]!.trigger('click')
+      await flushPromises()
+
+      const stored = JSON.parse(
+        window.localStorage.getItem('design:results:marks:task-1') ?? '{}'
+      ) as { favorite?: string[]; excluded?: string[] }
+      expect(stored.favorite).toEqual(['0'])
+      expect(stored.excluded).toEqual(['1'])
+
+      await wrapper.get('[data-testid="results-mark-filter"] [data-value="favorite"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(1)
+
+      await wrapper.get('[data-testid="results-mark-filter"] [data-value="hideExcluded"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(1)
+      expect(wrapper.get('[data-testid="molecule-table"]').text()).not.toContain('CCN(CC)CC')
+
+      // 重新挂载后标记从 localStorage 恢复。
+      const remounted = await mountResults()
+      expect(remounted.findAll('[data-testid="molecule-row"]')[0]!.classes()).toContain('is-favorite')
+    })
+
+    it('steps the sticky viewer with prev / next', async () => {
+      const wrapper = await mountResults()
+
+      expect(wrapper.get('[data-testid="viewer-prev"]').attributes('disabled')).toBeDefined()
+      expect(wrapper.get('[data-testid="viewer-smiles"]').text()).toContain('CC(=O)Oc1ccccc1C(=O)O')
+
+      await wrapper.get('[data-testid="viewer-next"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="viewer-smiles"]').text()).toContain('CCN(CC)CC')
+      expect(wrapper.get('[data-testid="viewer-next"]').attributes('disabled')).toBeDefined()
+
+      await wrapper.get('[data-testid="viewer-prev"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="viewer-smiles"]').text()).toContain('CC(=O)Oc1ccccc1C(=O)O')
+    })
+
+    it('only renders scaffold controls when the table really has a scaffold column', async () => {
+      const withoutScaffold = await mountResults()
+      expect(withoutScaffold.find('[data-testid="results-scaffold-filter-row"]').exists()).toBe(false)
+
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'scaffold', title: 'scaffold', numeric: false },
+          { key: 'mw', title: 'mw', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', scaffold: 'c1ccccc1', mw: '120' },
+          { __rowKey: '1', smiles: 'CCN', scaffold: 'c1ccncc1', mw: '90' },
+        ],
+      })
+      const withScaffold = await mountResults()
+
+      expect(withScaffold.find('[data-testid="results-scaffold-filter-row"]').exists()).toBe(true)
+      expect(withScaffold.get('[data-testid="molecule-table"]').text()).toContain('c1ccccc1')
+      expect(withScaffold.get('[data-testid="results-scaffold-filter"]').text()).toContain('c1ccccc1')
+    })
+  })
+
+  describe('downstream pipeline handoff', () => {
+    it('uploads the selected molecules as CSV and opens ADMET prediction', async () => {
+      vi.mocked(uploadFile).mockResolvedValue({ data: { id: 'file-9' } } as never)
+      const wrapper = await mountResults()
+
+      await wrapper.get('[data-testid="results-handoff"] [data-testid="results-send-admet"]').trigger('click')
+      await flushPromises()
+
+      expect(uploadFile).toHaveBeenCalledTimes(1)
+      const file = vi.mocked(uploadFile).mock.calls[0]![0] as File
+      expect(file.name).toContain('admet')
+      expect(file.name.endsWith('.csv')).toBe(true)
+      expect(push).toHaveBeenCalledWith({
+        name: 'PropertyPredict',
+        query: { project_id: 'p1', file_id: 'file-9', filename: file.name },
+      })
+    })
+
+    it('uploads a CSV and opens the screening setup for the screening handoff', async () => {
+      vi.mocked(uploadFile).mockResolvedValue({ data: { id: 'file-10' } } as never)
+      const wrapper = await mountResults()
+
+      await wrapper.get('[data-testid="results-send-screening"]').trigger('click')
+      await flushPromises()
+
+      expect(push).toHaveBeenCalledWith({
+        name: 'ScreenConfig',
+        query: {
+          project_id: 'p1',
+          file_id: 'file-10',
+          filename: expect.stringContaining('screening') as unknown as string,
+        },
+      })
+    })
+
+    it('warns instead of navigating when the upload fails', async () => {
+      vi.mocked(uploadFile).mockRejectedValue(new Error('upload down'))
+      const wrapper = await mountResults()
+
+      await wrapper.get('[data-testid="results-send-admet"]').trigger('click')
+      await flushPromises()
+
+      expect(push).not.toHaveBeenCalled()
+      expect(message.error).toHaveBeenCalledWith(t('design.results.handoff.failed'))
+    })
+  })
+
+  describe('multi-molecule comparison', () => {
+    it('opens the compare drawer with the selected molecules', async () => {
+      mockTable(fullTable)
+      const wrapper = await mountResults()
+      const rows = wrapper.findAll('[data-testid="molecule-row"]')
+
+      await rows[0]!.find('input[type="checkbox"]').setValue(true)
+      await rows[1]!.find('input[type="checkbox"]').setValue(true)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="results-compare-btn"]').attributes('disabled')).toBeUndefined()
+
+      await wrapper.get('[data-testid="results-compare-btn"]').trigger('click')
+      await flushPromises()
+
+      const columns = wrapper.findAll('[data-testid="molecule-compare-column"]')
+      expect(columns).toHaveLength(2)
+      expect(columns[0]!.text()).toContain('CC(=O)Oc1ccccc1C(=O)O')
+      expect(columns[1]!.text()).toContain('CCN(CC)CC')
+    })
+
+    it('keeps the compare button disabled for a single selection', async () => {
+      mockTable(fullTable)
+      const wrapper = await mountResults()
+
+      await wrapper
+        .findAll('[data-testid="molecule-row"]')[0]!
+        .find('input[type="checkbox"]')
+        .setValue(true)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="results-compare-btn"]').attributes('disabled')).toBeDefined()
     })
   })
 
