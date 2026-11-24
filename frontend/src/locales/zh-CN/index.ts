@@ -2000,7 +2000,10 @@ export default {
       projectPlaceholder: '请选择项目',
       selectPlaceholder: '请选择',
       noSelectedPockets: '该结构下没有已选中的口袋，请先在结构详情中标记口袋',
-      loadFailed: '数据加载失败，请稍后重试'
+      loadFailed: '数据加载失败，请稍后重试',
+      loadingFilename: '正在读取结构文件名…',
+      filenameLookupFailed: '结构文件信息读取失败，可重试',
+      unsupportedFormat: '结构文件格式暂不支持预览'
     },
     molecule: {
       title: '分子生成',
@@ -2663,6 +2666,7 @@ export default {
       targetPlaceholder: '选择靶点',
       proteinPlaceholder: '选择蛋白',
       structurePlaceholder: '选择结构',
+      prefillMismatch: '项目、靶点、蛋白质或结构关联不匹配，已保留可验证的选择。',
       prepared: '已准备',
       raw: '原始结构',
       selectHint: '优先使用已准备（prepared）的结构文件；若无准备文件则回退到原始结构。',
