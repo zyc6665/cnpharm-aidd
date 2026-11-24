@@ -173,19 +173,40 @@ export function buildFreeEnergyRows(raw: Array<Record<string, unknown>>): FreeEn
   })
 }
 
-/**
- * 曲线抽样：点数超过 maxPoints 时均匀抽稀（保留首尾），用于大轨迹降采样。
- */
-export function downsampleSeries<T>(items: T[], maxPoints: number): T[] {
+export function downsampleSeries<T>(
+  items: T[],
+  maxPoints: number,
+  valueOf: (item: T) => number | null = item => {
+    if (typeof item === 'number') return Number.isFinite(item) ? item : null
+    const candidate = item as unknown as { rmsd_nm?: unknown; rmsf_nm?: unknown; rg_nm?: unknown; temperature_k?: unknown }
+    for (const value of [candidate.rmsd_nm, candidate.rmsf_nm, candidate.rg_nm, candidate.temperature_k]) {
+      const parsed = toFiniteNumber(value)
+      if (parsed !== null) return parsed
+    }
+    return null
+  }
+): T[] {
   if (maxPoints <= 0 || items.length <= maxPoints) return items.slice()
   if (maxPoints === 1) return [items[0] as T]
-  const step = (items.length - 1) / (maxPoints - 1)
-  const result: T[] = []
-  for (let i = 0; i < maxPoints; i += 1) {
-    const index = Math.round(i * step)
-    result.push(items[index] as T)
+  const bucketCount = Math.max(1, Math.floor((maxPoints - 2) / 2))
+  const selected = new Set<number>([0, items.length - 1])
+  for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+    const start = 1 + Math.floor((bucket * (items.length - 2)) / bucketCount)
+    const end = 1 + Math.floor(((bucket + 1) * (items.length - 2)) / bucketCount)
+    let minIndex = -1
+    let maxIndex = -1
+    for (let index = start; index < end; index += 1) {
+      const value = valueOf(items[index] as T)
+      if (value === null) continue
+      if (minIndex < 0 || value < (valueOf(items[minIndex] as T) ?? Infinity)) minIndex = index
+      if (maxIndex < 0 || value > (valueOf(items[maxIndex] as T) ?? -Infinity)) maxIndex = index
+    }
+    if (minIndex >= 0) selected.add(minIndex)
+    else if (start < end) selected.add(start)
+    if (maxIndex >= 0) selected.add(maxIndex)
+    else if (end - 1 > start) selected.add(end - 1)
   }
-  return result
+  return [...selected].sort((a, b) => a - b).slice(0, maxPoints).map(index => items[index] as T)
 }
 
 function escapeCsvCell(value: unknown): string {

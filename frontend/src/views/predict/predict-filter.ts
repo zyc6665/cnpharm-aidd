@@ -20,6 +20,13 @@ export interface PredictFilterState {
  * - 亲和力结果只按预测亲和力下限过滤，忽略通用列筛选。
  * - SMILES 搜索只对含 SMILES 列的结果生效。
  */
+function finiteCell(value: unknown): number | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function filterPredictRows(rows: CsvPreviewRow[], state: PredictFilterState): CsvPreviewRow[] {
   const keyword = (state.searchText ?? '').trim().toLowerCase()
   return rows.filter(row => {
@@ -30,21 +37,20 @@ export function filterPredictRows(rows: CsvPreviewRow[], state: PredictFilterSta
       if (state.affinityMin === null || state.affinityMin === undefined) {
         return true
       }
-      const key = state.affinityColumnKey ?? ''
-      const value = Number(String(row[key] ?? '').trim())
-      return Number.isFinite(value) && value >= state.affinityMin
+      const value = finiteCell(row[state.affinityColumnKey ?? ''])
+      return value !== null && value >= state.affinityMin
     }
     if (!state.column) {
       return true
     }
-    const value = Number(String(row[state.column] ?? '').trim())
+    const value = finiteCell(row[state.column])
     if (state.min !== null && state.min !== undefined) {
-      if (!Number.isFinite(value) || value < state.min) {
+      if (value === null || value < state.min) {
         return false
       }
     }
     if (state.max !== null && state.max !== undefined) {
-      if (!Number.isFinite(value) || value > state.max) {
+      if (value === null || value > state.max) {
         return false
       }
     }
