@@ -11,6 +11,10 @@ interface ExpandSdfDependencies {
   objectUrl?: ObjectUrlApi
 }
 
+interface CreateSdfObjectUrlOptions extends ExpandSdfDependencies {
+  recordIndex?: number
+}
+
 interface ExpandedSdfEntries {
   entries: VisualizationSceneEntry[]
   revoke: () => void
@@ -53,15 +57,23 @@ export function normalizeSdfRecord(record: string): string {
 
 export function splitSdfRecords(text: string): string[] {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const records = normalized.match(/[\s\S]*?\${4}(?:\n|$)/g) || []
+  const lines = normalized.split('\n')
+  const records: string[] = []
+  let current: string[] = []
 
-  if (records.length > 0) {
-    return records
-      .filter(record => record.replace(/\${4}(?:\n|$)/g, '').trim().length > 0)
-      .map(withTrailingNewline)
+  for (const line of lines) {
+    if (/^\s*\$\$\$\$\s*$/.test(line)) {
+      const record = current.join('\n')
+      if (record.trim().length > 0) records.push(withTrailingNewline(`${record}\n$$$$`))
+      current = []
+      continue
+    }
+    current.push(line)
   }
 
-  return normalized.trim().length > 0 ? [withTrailingNewline(normalized)] : []
+  const finalRecord = current.join('\n')
+  if (finalRecord.trim().length > 0) records.push(withTrailingNewline(finalRecord))
+  return records
 }
 
 export function normalizeSdfText(text: string): string {
@@ -91,12 +103,23 @@ async function fetchSdfText(
 
 export async function createNormalizedSdfObjectUrl(
   fileUrl: string,
-  dependencies: ExpandSdfDependencies = {}
+  options: CreateSdfObjectUrlOptions = {}
 ): Promise<SdfObjectUrlResource> {
-  const text = await fetchSdfText(fileUrl, dependencies)
-  const objectUrlApi = dependencies.objectUrl || defaultObjectUrlApi
+  const text = await fetchSdfText(fileUrl, options)
+  const records = splitSdfRecords(text)
+  let normalizedText: string
+  if (options.recordIndex === undefined) {
+    normalizedText = records.map(normalizeSdfRecord).join('')
+  } else {
+    const { recordIndex } = options
+    if (!Number.isInteger(recordIndex) || recordIndex < 0 || recordIndex >= records.length) {
+      throw new Error(`SDF record index ${recordIndex} is unavailable (found ${records.length} record(s))`)
+    }
+    normalizedText = normalizeSdfRecord(records[recordIndex]!)
+  }
+  const objectUrlApi = options.objectUrl || defaultObjectUrlApi
   const objectUrl = objectUrlApi.createObjectURL(
-    new Blob([normalizeSdfText(text)], { type: 'chemical/x-mdl-sdfile' })
+    new Blob([normalizedText], { type: 'chemical/x-mdl-sdfile' })
   )
 
   return {
@@ -137,7 +160,8 @@ async function expandSingleSdfEntry(
         ? {
             key: `${entry.key}::${index + 1}`,
             label: `${entry.label} #${index + 1}`,
-            sdfRecordIndex: index
+            sdfRecordIndex: index,
+            sdfRecordScoped: true as const
           }
         : {}),
       url,

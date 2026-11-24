@@ -29,7 +29,7 @@
       </a-col>
     </a-row>
 
-    <PocketComplexViewer :task="task" />
+<PocketComplexViewer :task="task" :selected-pocket-id="selectedPocketId" :selected-res-ids="selectedResIds" />
 
     <a-card
       v-if="domainPockets.length"

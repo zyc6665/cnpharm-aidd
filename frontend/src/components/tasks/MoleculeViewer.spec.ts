@@ -288,6 +288,12 @@ describe('MoleculeViewer', () => {
     await flushPromises()
     expect(mockState.tryCreateComponentFromExpression).toHaveBeenCalled()
     expect(mockState.addRepresentation).toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="viewer-spin-toggle"]').trigger('click')
+    expect(wrapper.get('[data-testid="viewer-spin-toggle"]').attributes('aria-pressed')).toBe('true')
+    await wrapper.get('[data-testid="viewer-layer-receptor"]').trigger('click')
+    expect(wrapper.get('[data-testid="viewer-layer-receptor"]').attributes('aria-pressed')).toBe('false')
+    expect(mockState.resetCamera).not.toHaveBeenCalled()
   })
 
   it('renders docking receptor as polymer-cartoon and non-primary SDF ligand as atomic-detail', async () => {
