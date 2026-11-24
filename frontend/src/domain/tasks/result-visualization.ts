@@ -33,6 +33,7 @@ export interface VisualizationSceneEntry {
   relativePath?: string
   scoreLabel?: string
   sdfRecordIndex?: number
+  sdfRecordScoped?: true
 }
 
 export interface VisualizationScene {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import MoleculeViewer from '@/components/tasks/MoleculeViewer.vue'
 import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
@@ -9,96 +10,110 @@ import type { DescriptionSection } from '@/components/common/AppDescriptionList.
 import { getResult } from '@/api/results'
 import { getTaskDetail } from '@/api/tasks'
 import { fetchProtectedFileText } from '@/utils/protected-file-access'
+import { splitSdfRecords } from '@/domain/tasks/sdf-result'
 import type { ProjectResultDetail, ResultOutputArtifact } from '@/types/compounds'
 import type { Task } from '@/types/models'
 import type { PoseInteraction, PoseMetadata, PosesMetadata } from '@/types/screening'
 import type { VisualizationScene, VisualizationSceneEntry } from '@/domain/tasks'
 import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
+import { findUniquePoseByTitle, getCachedDockingTask, parseResidueFocus, resolveDockingPose, setCachedDockingTask, sortDockingPoseCatalog } from './docking-poses'
+
+interface ResidueFocusTarget {
+  chain?: string
+  authSeqId: number
+  insertionCode?: string
+}
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
-
 const loading = ref(true)
 const errorMessage = ref('')
 const poseMeta = ref<PoseMetadata | null>(null)
 const receptorUrl = ref('')
+const receptorFormatRef = ref<{ format: VisualizationSceneEntry['format']; extension: string }>({ format: 'pdb', extension: '.pdb' })
+const receptorUnavailable = ref(false)
 const poseUrl = ref('')
-const sdfRecordIndex = ref(0)
-
-const taskId = computed(() => {
-  const raw = route.query.task_id
-  return typeof raw === 'string' ? raw : ''
-})
+const sdfRecordIndex = ref<number | null>(null)
+const catalog = ref<ReturnType<typeof sortDockingPoseCatalog>>([])
+const activeFocusResidue = ref<ResidueFocusTarget | null>(null)
+const taskId = computed(() => (typeof route.query.task_id === 'string' ? route.query.task_id : ''))
 const poseId = computed(() => String(route.params.id ?? ''))
 const poseRank = computed(() => poseMeta.value?.rank ?? 0)
-
+const catalogIndex = computed(() => catalog.value.findIndex(item => item.pose.pose_id === poseMeta.value?.pose_id))
 const LIGAND_STRUCTURE_STANDARD = 'ligand_structure@1'
+let loadSeq = 0
+let loadedTaskId = ''
+let taskSdfBlobUrl = ''
+let taskReceptorBlobUrl = ''
+
+function revokeTaskBlobs(): void {
+  if (taskSdfBlobUrl) {
+    URL.revokeObjectURL(taskSdfBlobUrl)
+    taskSdfBlobUrl = ''
+  }
+  if (taskReceptorBlobUrl) {
+    URL.revokeObjectURL(taskReceptorBlobUrl)
+    taskReceptorBlobUrl = ''
+  }
+}
 
 function findLigandStructureArtifact(detail: ProjectResultDetail): ResultOutputArtifact | null {
-  const found = detail.outputs.find(
+  return detail.outputs.find(
     output =>
       output.standard_type === LIGAND_STRUCTURE_STANDARD ||
       output.artifact_type === 'ligand_structure' ||
-      (output.semantic_type ?? '').startsWith('ligand_structure')
-  )
-  return found ?? null
+      (output.semantic_type ?? '').startsWith('ligand_structure'),
+  ) ?? null
 }
 
 function pickReceptorUrl(task: Task): string {
   const files = task.input_files ?? []
-  for (const file of files) {
-    const name = (file.filename ?? file.original_name ?? '').toLowerCase()
-    if (/[.](pdb|cif|mmcif|pdbqt)$/.test(name) && typeof file.url === 'string') {
-      return file.url
-    }
-  }
-  const withUrl = files.find(file => typeof file.url === 'string')
-  return withUrl?.url ?? ''
+  const explicit = files.filter(
+    file => /^(?:protein|receptor)(?:$|[_-])/i.test(file.relative_path ?? '') && typeof file.url === 'string',
+  )
+  if (explicit.length === 1) return explicit[0]!.url!
+  const proteinExts = files.filter(
+    file =>
+      /\.(pdb|cif|mmcif|ent)$/i.test(file.filename ?? file.original_name ?? '') &&
+      !/ligand/i.test(file.relative_path ?? file.filename ?? '') &&
+      typeof file.url === 'string',
+  )
+  return proteinExts.length === 1 ? proteinExts[0]!.url! : ''
 }
 
-function inferFormat(url: string): { format: VisualizationSceneEntry['format']; extension: string } {
-  const lower = url.toLowerCase()
-  if (lower.includes('.mmcif') || lower.includes('.cif')) {
-    return { format: 'mmcif', extension: '.cif' }
-  }
-  if (lower.includes('.pdbqt')) {
-    return { format: 'pdbqt', extension: '.pdbqt' }
-  }
-  if (lower.includes('.mol2')) {
-    return { format: 'mol2', extension: '.mol2' }
-  }
-  if (lower.includes('.sdf')) {
-    return { format: 'sdf', extension: '.sdf' }
-  }
+function inferFormat(task: Task | null, url: string): { format: VisualizationSceneEntry['format']; extension: string } {
+  const matched = (task?.input_files ?? []).find(file => file.url === url)
+  const name = (matched?.filename ?? matched?.original_name ?? url.split(/[?#]/, 1)[0] ?? '').toLowerCase()
+  if (/\.mmcif$/.test(name) || /\.cif$/.test(name)) return { format: 'mmcif', extension: '.cif' }
+  if (/\.pdbqt$/.test(name)) return { format: 'pdbqt', extension: '.pdbqt' }
   return { format: 'pdb', extension: '.pdb' }
 }
 
+const taskDetailRef = ref<Task | null>(null)
+
 const scene = computed<VisualizationScene | null>(() => {
-  if (!poseUrl.value) {
-    return null
-  }
+  if (!poseUrl.value || sdfRecordIndex.value === null || sdfRecordIndex.value < 0) return null
   const ligandEntry: VisualizationSceneEntry = {
     key: 'pose',
     url: poseUrl.value,
-    label: poseId.value || `pose-${poseRank.value}`,
+    label: poseMeta.value?.pose_id || poseId.value || `pose-${poseRank.value}`,
     source: 'output',
     role: 'ligand',
     format: 'sdf',
     extension: '.sdf',
-    sdfRecordIndex: sdfRecordIndex.value
+    sdfRecordIndex: sdfRecordIndex.value,
   }
   const entries: VisualizationSceneEntry[] = []
   const inputEntries: VisualizationSceneEntry[] = []
   if (receptorUrl.value) {
-    const receptorFormat = inferFormat(receptorUrl.value)
     const receptorEntry: VisualizationSceneEntry = {
       key: 'receptor',
       url: receptorUrl.value,
       label: t('screening.detail.viewer'),
       source: 'input',
       role: 'receptor',
-      format: receptorFormat.format,
-      extension: receptorFormat.extension
+      ...receptorFormatRef.value,
     }
     entries.push(receptorEntry)
     inputEntries.push(receptorEntry)
@@ -111,7 +126,7 @@ const scene = computed<VisualizationScene | null>(() => {
     supportedOutputFiles: [ligandEntry],
     unsupportedOutputFiles: [],
     hasRenderableOutput: true,
-    selectedOutputKey: 'pose'
+    selectedOutputKey: 'pose',
   }
 })
 
@@ -123,37 +138,22 @@ interface InteractionGroup {
 
 function groupLabel(type: string): string {
   const lower = type.toLowerCase()
-  if (lower.includes('hydrogen') || lower.includes('hbond') || lower.includes('h-bond')) {
-    return t('screening.detail.groupHydrogenBond')
-  }
-  if (lower.includes('hydrophobic')) {
-    return t('screening.detail.groupHydrophobic')
-  }
-  if (lower.includes('ionic') || lower.includes('salt')) {
-    return t('screening.detail.groupIonic')
-  }
-  if (lower.includes('pi') || lower.includes('stack')) {
-    return t('screening.detail.groupPiStacking')
-  }
+  if (lower.includes('hydrogen') || lower.includes('hbond') || lower.includes('h-bond')) return t('screening.detail.groupHydrogenBond')
+  if (lower.includes('hydrophobic')) return t('screening.detail.groupHydrophobic')
+  if (lower.includes('ionic') || lower.includes('salt')) return t('screening.detail.groupIonic')
+  if (lower.includes('pi') || lower.includes('stack')) return t('screening.detail.groupPiStacking')
   return t('screening.detail.groupOther')
 }
 
 const interactionGroups = computed<InteractionGroup[]>(() => {
-  const list = poseMeta.value?.interactions ?? []
   const groups = new Map<string, PoseInteraction[]>()
-  for (const item of list) {
-    const key = item.type || 'other'
-    const bucket = groups.get(key)
-    if (bucket) {
-      bucket.push(item)
-    } else {
-      groups.set(key, [item])
-    }
+  for (const item of poseMeta.value?.interactions ?? []) {
+    groups.set(item.type || 'other', [...(groups.get(item.type || 'other') ?? []), item])
   }
   return Array.from(groups.entries()).map(([type, items]) => ({
     type,
     label: groupLabel(type),
-    items: [...items].sort((left, right) => left.distance - right.distance)
+    items: [...items].sort((a, b) => a.distance - b.distance),
   }))
 })
 
@@ -161,74 +161,258 @@ const interactionColumns = computed(() => [
   { title: t('screening.detail.type'), dataIndex: 'type', key: 'type' },
   { title: t('screening.detail.residue'), dataIndex: 'residue', key: 'residue' },
   { title: t('screening.detail.chain'), dataIndex: 'chain', key: 'chain' },
-  { title: t('screening.detail.distance'), dataIndex: 'distance', key: 'distance', align: 'right' }
+  { title: t('screening.detail.distance'), dataIndex: 'distance', key: 'distance', align: 'right' },
 ])
 
-async function load(): Promise<void> {
-  loading.value = true
+function handleInteractionFocus(record: PoseInteraction): void {
+  const parsed = parseResidueFocus(record.residue ?? '', record.chain)
+  if (!parsed) {
+    message.warning(t('screening.detail.focusNotFound'))
+    return
+  }
+  activeFocusResidue.value = parsed
+}
+
+function handleResidueFocusResult(status: 'focused' | 'not-found' | 'ambiguous'): void {
+  if (status === 'not-found') message.warning(t('screening.detail.focusNotFound'))
+  else if (status === 'ambiguous') message.warning(t('screening.detail.focusAmbiguous'))
+}
+
+function applyPoseFromCatalog(): void {
+  activeFocusResidue.value = null
+  const resolved = resolveDockingPose(catalog.value, poseId.value)
+  if (!resolved) {
+    poseMeta.value = null
+    sdfRecordIndex.value = null
+    errorMessage.value = t('screening.detail.poseMissing')
+    return
+  }
   errorMessage.value = ''
-  if (!taskId.value) {
+  poseMeta.value = resolved.pose
+  sdfRecordIndex.value = resolved.recordIndex
+}
+
+function isMissingResourceError(cause: unknown): boolean {
+  const text = cause instanceof Error ? cause.message : String(cause)
+  return /\b404\b|not found/i.test(text)
+}
+
+async function buildVinaFallbackCatalog(detail: ProjectResultDetail, seq: number): Promise<{ poses: ReturnType<typeof sortDockingPoseCatalog>; sdfText: string } | null> {
+  const tableArtifact = detail.outputs.find(o => o.standard_type === 'molecule_table@1' || o.semantic_type === 'molecule_table')
+  const sdfArtifact = detail.outputs.find(o => o.standard_type === LIGAND_STRUCTURE_STANDARD || o.semantic_type === 'ligand_structure') ?? tableArtifact
+  if (!tableArtifact?.version_id || !sdfArtifact?.version_id) return null
+  const csvUrl = `/api/v1/artifacts/${tableArtifact.id}/versions/${tableArtifact.version_id}/files/table_file/download`
+  const sdfDownloadUrl = `/api/v1/artifacts/${sdfArtifact.id}/versions/${sdfArtifact.version_id}/files/structure_file/download`
+  const [csvText, sdfText] = await Promise.all([fetchProtectedFileText(csvUrl), fetchProtectedFileText(sdfDownloadUrl)])
+  if (seq !== loadSeq) return null
+  const titles = splitSdfRecords(sdfText).map(rec => (rec.split(/\r?\n/, 1)[0] ?? '').trim())
+  const lines = csvText.trim().split(/\r?\n/)
+  const headers = (lines.shift() ?? '').split(',').map(h => h.trim().toLowerCase())
+  const idIdx = headers.findIndex(h => h === 'molecule_id' || h === 'pose_id')
+  const rankIdx = headers.indexOf('rank')
+  const scoreIdx = headers.indexOf('docking_score')
+  const smilesIdx = headers.indexOf('smiles')
+  const entries: Array<{ pose: PoseMetadata; recordIndex: number; sourceOrder: number }> = []
+  lines.forEach((line, sourceOrder) => {
+    const cols = line.split(',')
+    const molId = idIdx >= 0 ? (cols[idIdx] ?? '').trim() : `pose-${sourceOrder + 1}`
+    const rank = rankIdx >= 0 && Number(cols[rankIdx]) > 0 ? Number(cols[rankIdx]) : sourceOrder + 1
+    const matchedIdx = findUniquePoseByTitle(titles, molId)
+    entries.push({
+      pose: {
+        pose_id: molId || `pose-${rank}`,
+        rank,
+        docking_score: scoreIdx >= 0 ? Number(cols[scoreIdx] ?? 0) : 0,
+        rmsd_lb: 0,
+        rmsd_ub: 0,
+        ligand_smiles: smilesIdx >= 0 ? cols[smilesIdx]?.trim() : undefined,
+        interactions: [],
+      },
+      recordIndex: matchedIdx ?? -1,
+      sourceOrder,
+    })
+  })
+  return { poses: entries.sort((a, b) => a.pose.rank - b.pose.rank || a.sourceOrder - b.sourceOrder), sdfText }
+}
+
+async function load(): Promise<void> {
+  const currentTask = taskId.value
+  const seq = ++loadSeq
+  activeFocusResidue.value = null
+  if (!currentTask) {
     errorMessage.value = t('screening.detail.needTask')
     loading.value = false
     return
   }
-  try {
-    const resultResponse = await getResult(taskId.value)
-    const detail: ProjectResultDetail & { mock?: boolean } = resultResponse.data
-
-    const artifact = findLigandStructureArtifact(detail)
-    if (!artifact || !artifact.version_id) {
-      throw new Error(t('screening.detail.poseMissing'))
-    }
-    const base = `/api/v1/artifacts/${artifact.id}/versions/${artifact.version_id}/files`
-    const metadataText = await fetchProtectedFileText(`${base}/metadata_json/download`)
-    const metadata = JSON.parse(metadataText) as PosesMetadata
-
-    let meta = metadata.poses.find(item => item.pose_id === poseId.value)
-    if (!meta) {
-      const rankFromId = Number(poseId.value.replace(/^pose-/, ''))
-      meta = metadata.poses.find(item => item.rank === rankFromId)
-    }
-    if (!meta) {
-      throw new Error(t('screening.detail.poseMissing'))
-    }
-    poseMeta.value = meta
-    sdfRecordIndex.value = Math.max(0, meta.rank - 1)
-    poseUrl.value = `${base}/structure_3d_sdf/download`
-
-    try {
-      const taskResponse = await getTaskDetail(taskId.value)
-      receptorUrl.value = pickReceptorUrl(taskResponse.data)
-    } catch {
-      receptorUrl.value = ''
-    }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : t('screening.detail.loadFailed')
-  } finally {
+  if (loadedTaskId === currentTask && catalog.value.length > 0 && poseUrl.value) {
+    applyPoseFromCatalog()
     loading.value = false
+    return
+  }
+  const cached = getCachedDockingTask(currentTask)
+  if (cached) {
+    revokeTaskBlobs()
+    catalog.value = cached.catalog
+    taskSdfBlobUrl = URL.createObjectURL(new Blob([cached.sdfText], { type: 'chemical/x-mdl-sdfile' }))
+    poseUrl.value = taskSdfBlobUrl
+    if (cached.receptorText !== null && cached.receptorFormat) {
+      taskReceptorBlobUrl = URL.createObjectURL(new Blob([cached.receptorText], { type: 'text/plain' }))
+      receptorFormatRef.value = cached.receptorFormat
+      receptorUrl.value = taskReceptorBlobUrl
+      receptorUnavailable.value = false
+    } else {
+      receptorUrl.value = ''
+      receptorUnavailable.value = cached.receptorUnavailable
+    }
+    loadedTaskId = currentTask
+    applyPoseFromCatalog()
+    loading.value = false
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  catalog.value = []
+  poseMeta.value = null
+  poseUrl.value = ''
+  receptorUrl.value = ''
+  receptorUnavailable.value = false
+  revokeTaskBlobs()
+  try {
+    const detailResponse = await getResult(currentTask)
+    if (seq !== loadSeq) return
+    const detail = detailResponse.data as ProjectResultDetail
+    const artifact = findLigandStructureArtifact(detail)
+    let resolvedSdfText = ''
+    if (artifact && artifact.version_id) {
+      const base = `/api/v1/artifacts/${artifact.id}/versions/${artifact.version_id}/files`
+      try {
+        const [metadataText, sdfText] = await Promise.all([
+          fetchProtectedFileText(`${base}/metadata_json/download`),
+          fetchProtectedFileText(`${base}/structure_3d_sdf/download`),
+        ])
+        if (seq !== loadSeq) return
+        resolvedSdfText = sdfText
+        const metadata = JSON.parse(metadataText) as PosesMetadata
+        const rawPoses = metadata.poses ?? []
+        const sdfRecords = splitSdfRecords(sdfText)
+        const sdfTitles = sdfRecords.map(rec => (rec.split(/\r?\n/, 1)[0] ?? '').trim())
+        const canPairOrdinally = rawPoses.length === sdfRecords.length
+        catalog.value = rawPoses
+          .map((pose, sourceOrder) => {
+            const matched = findUniquePoseByTitle(sdfTitles, pose.pose_id)
+            const recordIndex = matched !== null ? matched : canPairOrdinally ? sourceOrder : -1
+            return { pose, recordIndex, sourceOrder }
+          })
+          .sort((a, b) => a.pose.rank - b.pose.rank || a.sourceOrder - b.sourceOrder)
+        taskSdfBlobUrl = URL.createObjectURL(new Blob([sdfText], { type: 'chemical/x-mdl-sdfile' }))
+        poseUrl.value = taskSdfBlobUrl
+      } catch (metaCause) {
+        if (!isMissingResourceError(metaCause)) throw metaCause
+        const fallback = await buildVinaFallbackCatalog(detail, seq)
+        if (!fallback) throw metaCause
+        resolvedSdfText = fallback.sdfText
+        catalog.value = fallback.poses
+        taskSdfBlobUrl = URL.createObjectURL(new Blob([fallback.sdfText], { type: 'chemical/x-mdl-sdfile' }))
+        poseUrl.value = taskSdfBlobUrl
+      }
+    } else {
+      const fallback = await buildVinaFallbackCatalog(detail, seq)
+      if (!fallback) throw new Error(t('screening.detail.poseMissing'))
+      resolvedSdfText = fallback.sdfText
+      catalog.value = fallback.poses
+      taskSdfBlobUrl = URL.createObjectURL(new Blob([fallback.sdfText], { type: 'chemical/x-mdl-sdfile' }))
+      poseUrl.value = taskSdfBlobUrl
+    }
+    loadedTaskId = currentTask
+    applyPoseFromCatalog()
+    let receptorText: string | null = null
+    let receptorFmt: { format: 'pdb' | 'mmcif' | 'pdbqt'; extension: string } | null = null
+    try {
+      const taskData = (await getTaskDetail(currentTask)).data
+      if (seq !== loadSeq) return
+      taskDetailRef.value = taskData
+      const rawReceptorUrl = pickReceptorUrl(taskData)
+      if (rawReceptorUrl) {
+        const inferred = inferFormat(taskData, rawReceptorUrl)
+        if (inferred.format === 'pdb' || inferred.format === 'mmcif' || inferred.format === 'pdbqt') {
+          receptorFmt = { format: inferred.format, extension: inferred.extension }
+          receptorText = await fetchProtectedFileText(rawReceptorUrl)
+          if (seq !== loadSeq) return
+          receptorFormatRef.value = receptorFmt
+          taskReceptorBlobUrl = URL.createObjectURL(new Blob([receptorText], { type: 'text/plain' }))
+          receptorUrl.value = taskReceptorBlobUrl
+          receptorUnavailable.value = false
+        } else {
+          receptorUrl.value = rawReceptorUrl
+          receptorFormatRef.value = inferred
+          receptorUnavailable.value = false
+        }
+      } else {
+        receptorUnavailable.value = true
+      }
+    } catch {
+      if (seq === loadSeq) {
+        receptorUrl.value = ''
+        receptorUnavailable.value = true
+        receptorText = null
+      }
+    }
+    if (seq === loadSeq) {
+      setCachedDockingTask({
+        taskId: currentTask,
+        catalog: catalog.value,
+        sdfText: resolvedSdfText,
+        receptorText,
+        receptorFormat: receptorFmt,
+        receptorUnavailable: receptorUnavailable.value,
+      })
+    }
+  } catch (cause) {
+    if (seq === loadSeq) {
+      errorMessage.value = cause instanceof Error ? cause.message : t('screening.detail.loadFailed')
+    }
+  } finally {
+    if (seq === loadSeq) loading.value = false
   }
 }
 
-onMounted(() => {
+function stepPose(delta: -1 | 1): void {
+  const target = catalog.value[catalogIndex.value + delta]
+  if (!target || !taskId.value) return
+  void router.push({
+    name: 'DockingResultDetail',
+    params: { id: target.pose.pose_id },
+    query: { ...route.query, task_id: taskId.value },
+  })
+}
+
+onMounted(() => { void load() })
+watch(taskId, () => {
+  loadedTaskId = ''
   void load()
 })
+watch(poseId, () => {
+  if (loadedTaskId === taskId.value && catalog.value.length > 0) applyPoseFromCatalog()
+})
+onUnmounted(() => {
+  loadSeq += 1
+  revokeTaskBlobs()
+})
 
-  const poseSections = computed<DescriptionSection[]>(() => {
-    const pose = poseMeta.value
-    if (!pose) {
-      return []
-    }
-    const fields: DescriptionSection['fields'] = [
-      { key: 'rank', label: t('screening.detail.rank'), value: String(pose.rank) },
-      { key: 'score', label: t('screening.detail.score'), value: String(pose.docking_score), hint: t('screening.detail.hints.score') },
-      { key: 'rmsdLb', label: t('screening.detail.rmsdLb'), value: String(pose.rmsd_lb), hint: t('screening.detail.hints.rmsd') },
-      { key: 'rmsdUb', label: t('screening.detail.rmsdUb'), value: String(pose.rmsd_ub), hint: t('screening.detail.hints.rmsd') },
-    ]
-    if (pose.ligand_smiles) {
-      fields.push({ key: 'ligandSmiles', label: t('screening.detail.ligandSmiles'), value: pose.ligand_smiles, mono: true, span: 4 })
-    }
-    return [{ key: 'pose', fields }]
-  })
+const poseSections = computed<DescriptionSection[]>(() => {
+  const pose = poseMeta.value
+  if (!pose) return []
+  const fields: DescriptionSection['fields'] = [
+    { key: 'rank', label: t('screening.detail.rank'), value: String(pose.rank) },
+    { key: 'score', label: t('screening.detail.score'), value: String(pose.docking_score), hint: t('screening.detail.hints.score') },
+    { key: 'rmsdLb', label: t('screening.detail.rmsdLb'), value: String(pose.rmsd_lb), hint: t('screening.detail.hints.rmsd') },
+    { key: 'rmsdUb', label: t('screening.detail.rmsdUb'), value: String(pose.rmsd_ub), hint: t('screening.detail.hints.rmsd') },
+  ]
+  if (pose.ligand_smiles) {
+    fields.push({ key: 'ligandSmiles', label: t('screening.detail.ligandSmiles'), value: pose.ligand_smiles, mono: true, span: 4 })
+  }
+  return [{ key: 'pose', fields }]
+})
 </script>
 
 <template>
@@ -246,27 +430,36 @@ onMounted(() => {
       </template>
     </AppPageHeader>
 
-    <a-alert
-      v-if="errorMessage"
-      type="error"
-      show-icon
-      data-testid="docking-detail-error"
-      :message="errorMessage"
-    />
-
-    <div v-if="loading" data-testid="docking-detail-loading">
-      <a-spin /> {{ t('screening.detail.loading') }}
-    </div>
+    <a-alert v-if="errorMessage" type="error" show-icon data-testid="docking-detail-error" :message="errorMessage" />
+    <div v-if="loading" data-testid="docking-detail-loading"><a-spin /> {{ t('screening.detail.loading') }}</div>
 
     <template v-else-if="!errorMessage && poseMeta">
       <a-card :title="poseMeta.pose_id" data-testid="docking-detail-score">
         <AppDescriptionList :sections="poseSections" :columns="4" />
       </a-card>
 
+      <a-space v-if="catalog.length > 1" class="docking-detail__stepper">
+        <a-button data-testid="docking-detail-previous" :disabled="catalogIndex <= 0" @click="stepPose(-1)">
+          {{ t('screening.detail.previousPose') }}
+        </a-button>
+        <span>{{ catalogIndex + 1 }} / {{ catalog.length }}</span>
+        <a-button data-testid="docking-detail-next" :disabled="catalogIndex < 0 || catalogIndex >= catalog.length - 1" @click="stepPose(1)">
+          {{ t('screening.detail.nextPose') }}
+        </a-button>
+      </a-space>
+
+      <a-alert
+        v-if="receptorUnavailable"
+        type="info"
+        show-icon
+        data-testid="docking-detail-receptor-warning"
+        :message="t('screening.detail.receptorUnavailable')"
+      />
+
       <a-card :title="t('screening.detail.viewer')">
         <div data-testid="docking-detail-viewer">
-          <MoleculeViewer v-if="scene" :scene="scene" mode="docking" variant="full" />
-          <a-empty v-else :description="t('screening.detail.noStructure')" />
+          <MoleculeViewer v-if="scene" :scene="scene" mode="docking" variant="full" :focus-residue="activeFocusResidue" :enable-nearby-residues="true" @residue-focus-result="handleResidueFocusResult" />
+          <a-empty v-else :description="t('screening.detail.poseUnavailable')" data-testid="docking-detail-unavailable" />
         </div>
       </a-card>
 
@@ -279,9 +472,23 @@ onMounted(() => {
               :columns="interactionColumns"
               :data-source="group.items"
               :pagination="false"
-              :row-key="(_record: Record<string, string>, index: number) => index"
+              :row-key="(_record: PoseInteraction, index: number) => index"
+              :custom-row="(record: PoseInteraction) => ({ style: 'cursor: pointer;', onClick: () => handleInteractionFocus(record) })"
               size="small"
-            />
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'residue'">
+                  <button
+                    type="button"
+                    class="docking-detail__residue-btn"
+                    data-testid="docking-interaction-residue"
+                    @click.stop="handleInteractionFocus(record as PoseInteraction)"
+                  >
+                    {{ (record as PoseInteraction).residue }}
+                  </button>
+                </template>
+              </template>
+            </a-table>
           </div>
         </div>
       </a-card>
@@ -308,5 +515,15 @@ onMounted(() => {
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.docking-detail__residue-btn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ant-color-primary, #1677ff);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>
