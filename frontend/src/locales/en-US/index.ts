@@ -126,7 +126,19 @@ export default {
     designGroupEvaluate: 'Evaluation',
     designGroupRecord: 'Records',
     structurePredict: 'Structure Prediction',
-    pocketPredict: 'Pocket Prediction'
+    pocketPredict: 'Pocket Prediction',
+    downloads: 'Downloads'
+  },
+  downloads: {
+    title: 'Downloads',
+    hint: 'Tracks downloads triggered in this session; failed items can be retried here.',
+    empty: 'No downloads in this session yet',
+    clearFinished: 'Clear finished',
+    status: {
+      pending: 'Preparing',
+      done: 'Started',
+      error: 'Failed'
+    }
   },
   command: {
     placeholder: 'Search pages, commands…',

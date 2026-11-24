@@ -1,5 +1,7 @@
 <template>
   <main class="design-pipeline-page" data-testid="design-pipeline-page">
+    <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
+    <ProjectViewSwitcher v-if="projectId" :items="flowViewTabs" active="design" />
     <AppPageHeader :title="t('design.pipeline.title')" :subtitle="t('design.pipeline.subtitle')">
       <template #actions>
         <a-space>
@@ -12,14 +14,13 @@
             @change="onProjectChange"
           />
           <a-button
-            type="primary"
             :disabled="!projectId"
             data-testid="design-pipeline-continue"
             @click="showGuided = !showGuided"
           >
             {{ showGuided ? t('design.pipeline.hideFlow') : t('design.pipeline.continueFlow') }}
           </a-button>
-          <a-button data-testid="design-pipeline-advanced" @click="goAdvanced">
+          <a-button type="primary" data-testid="design-pipeline-advanced" @click="goAdvanced">
             {{ t('design.pipeline.advanced') }}
           </a-button>
         </a-space>
@@ -70,6 +71,27 @@
         </div>
       </div>
 
+      <div class="design-shortcuts" data-testid="design-pipeline-shortcuts">
+        <div
+          v-for="group in designNavGroups"
+          :key="group.groupKey"
+          class="shortcut-group"
+        >
+          <span class="shortcut-group__label">{{ t(group.labelKey) }}</span>
+          <div class="shortcut-group__items">
+            <router-link
+              v-for="item in group.items"
+              :key="item.key"
+              :to="item.to"
+              class="shortcut-link"
+              :data-testid="`design-shortcut-${item.key}`"
+            >
+              {{ t(item.labelKey) }}
+            </router-link>
+          </div>
+        </div>
+      </div>
+
       <div v-if="showGuided && projectId" class="guided-wrap" data-testid="design-pipeline-guided">
         <GuidedWorkflow :key="focusStage || 'default'" :project-id="projectId" :initial-step="focusStep" />
       </div>
@@ -83,10 +105,14 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppInlineError from '@/components/common/AppInlineError.vue'
+import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
+import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
 import GuidedWorkflow from '@/views/workflow/GuidedWorkflow.vue'
 import { listDesignProjects } from '@/api/design'
 import { getProjectStage } from '@/api/decisions'
+import { buildDesignNavGroups } from '@/domain/design/navigation'
 import { buildDesignStages, firstMissingStage, type DesignStageState } from '@/domain/design/pipeline'
+import { buildProjectFlowViewTabs } from '@/domain/projects'
 import type { ProjectStage } from '@/types/decisions'
 import type { ResearchProject } from '@/types/projects'
 
@@ -104,6 +130,8 @@ const showGuided = ref(false)
 const projectOptions = computed(() => projects.value.map(p => ({ value: p.id, label: p.name })))
 const stages = computed<DesignStageState[]>(() => buildDesignStages(stage.value, projectId.value))
 const nextStage = computed<DesignStageState | null>(() => firstMissingStage(stages.value))
+const designNavGroups = computed(() => buildDesignNavGroups(projectId.value))
+const flowViewTabs = computed(() => buildProjectFlowViewTabs(projectId.value))
 const focusStage = computed(() => {
   const raw = route.query.focus
   return typeof raw === 'string' ? raw : ''
@@ -285,6 +313,51 @@ watch(
 
   .guided-wrap {
     margin-top: @spacing-lg;
+  }
+
+  .design-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-md;
+    margin-top: @spacing-lg;
+    padding: @spacing-md;
+    border: 1px solid @border-color;
+    border-radius: @border-radius-lg;
+    background: @bg-surface;
+  }
+
+  .shortcut-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: @spacing-xs;
+  }
+
+  .shortcut-group__label {
+    color: @text-tertiary;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-semibold;
+    margin-right: @spacing-xs;
+  }
+
+  .shortcut-group__items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-xs;
+  }
+
+  .shortcut-link {
+    padding: 4px 10px;
+    border: 1px solid @border-color-split;
+    border-radius: @border-radius-base;
+    color: @text-secondary;
+    font-size: @font-size-sm;
+    text-decoration: none;
+
+    &:hover {
+      border-color: @accent-color;
+      color: @accent-color;
+    }
   }
 
   @media (max-width: @screen-md) {

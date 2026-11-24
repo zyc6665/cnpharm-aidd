@@ -1,8 +1,15 @@
+import {
+  MOLECULE_GENERATION_TOOL_SLUG,
+  PEPTIDE_DESIGN_TOOL_SLUG,
+  POCKET_PREDICT_TOOL_SLUG,
+  STRUCTURE_PREDICT_TOOL_SLUG,
+} from '@/types/design'
+
 /**
- * 「设计流程」侧栏分组（按 AIDD 阶段组织，而非工具清单）。
+ * 「研发流程」工具分组（按 AIDD 阶段组织）。
  *
- * 说明：结构预测 / 口袋预测落到 `/design` 流程总览页并聚焦对应阶段（`?focus=`），
- * 避免为两个入口各造一个只在选择项目时才成立的独立页面。
+ * 默认每个工具都是独立入口（可直接选项目数据或本地上传运行，不强绑定前置步骤）；
+ * 需要多步串联时再走工作流编排。
  */
 export interface DesignNavItem {
   key: string
@@ -17,31 +24,36 @@ export interface DesignNavGroup {
   items: DesignNavItem[]
 }
 
-export function buildDesignNavGroups(): DesignNavGroup[] {
+export function buildDesignNavGroups(projectId?: string): DesignNavGroup[] {
+  const withProject = (base: string): string => {
+    if (!projectId) return base
+    const sep = base.includes('?') ? '&' : '?'
+    return `${base}${sep}project_id=${encodeURIComponent(projectId)}`
+  }
   return [
     {
       groupKey: 'prepare',
       labelKey: 'nav.designGroupPrepare',
       items: [
-        { key: 'structurePredict', to: '/design?focus=structure', labelKey: 'nav.structurePredict' },
-        { key: 'pocketPredict', to: '/design?focus=pocket', labelKey: 'nav.pocketPredict' },
+        { key: 'structurePredict', to: withProject(`/tools/${STRUCTURE_PREDICT_TOOL_SLUG}`), labelKey: 'nav.structurePredict' },
+        { key: 'pocketPredict', to: withProject(`/tools/${POCKET_PREDICT_TOOL_SLUG}`), labelKey: 'nav.pocketPredict' },
       ],
     },
     {
       groupKey: 'design',
       labelKey: 'nav.designGroupDesign',
       items: [
-        { key: 'molecules', to: '/design/molecules', labelKey: 'nav.molecules' },
-        { key: 'peptides', to: '/design/peptides', labelKey: 'nav.peptides' },
-        { key: 'screen', to: '/screen', labelKey: 'nav.screen' },
+        { key: 'molecules', to: withProject('/design/molecules'), labelKey: 'nav.molecules' },
+        { key: 'peptides', to: withProject('/design/peptides'), labelKey: 'nav.peptides' },
+        { key: 'screen', to: withProject('/screen'), labelKey: 'nav.screen' },
       ],
     },
     {
       groupKey: 'evaluate',
       labelKey: 'nav.designGroupEvaluate',
       items: [
-        { key: 'predict', to: '/predict', labelKey: 'nav.predict' },
-        { key: 'md', to: '/md', labelKey: 'nav.md' },
+        { key: 'predict', to: withProject('/predict'), labelKey: 'nav.predict' },
+        { key: 'md', to: withProject('/md'), labelKey: 'nav.md' },
       ],
     },
   ]

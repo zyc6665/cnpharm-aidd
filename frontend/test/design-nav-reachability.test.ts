@@ -28,13 +28,15 @@ test('5 个直达页必须在路由表注册', () => {
   }
 })
 
-test('5 个直达页必须在侧边栏导航可达', () => {
+test('5 个直达页必须在研发流程页内可达（侧边栏不再重复挂载设计分组）', () => {
   const appShell = readSource('src/components/layout/AppShell.vue')
+  const pipelinePage = readSource('src/views/design/Pipeline.vue')
   const designNav = readSource('src/domain/design/navigation.ts')
-  // 设计流程导航数据集中在 domain/design/navigation.ts，侧栏消费它渲染。
-  assert.equal(appShell.includes('buildDesignNavGroups'), true, '侧边栏必须消费设计流程导航分组')
+  // 设计流程工具入口收敛到项目内「研发流程」（Pipeline.vue），全局侧栏不再重复列出。
+  assert.equal(appShell.includes('sidebar-design-nav'), false, '全局侧边栏不应再保留设计流程分组')
+  assert.equal(pipelinePage.includes('buildDesignNavGroups'), true, '研发流程页必须消费设计流程分组提供直达入口')
   for (const path of DESIGN_ROUTES) {
-    assert.equal(designNav.includes(`to: '${path}'`), true, `侧边栏缺少入口: ${path}`)
+    assert.equal(designNav.includes(`withProject('${path}')`), true, `设计流程分组缺少入口: ${path}`)
   }
 })
 
@@ -45,10 +47,8 @@ test('5 个直达页必须在命令面板可达', () => {
   }
 })
 
-test('直达页导航在移动端抽屉中仍可达，入口不再被隐藏', () => {
+test('移动端抽屉复用主侧边栏，不隐藏底部入口', () => {
   const appShell = readSource('src/components/layout/AppShell.vue')
-  // 移动端由「底部 Tab 隐藏设计导航」改为「抽屉复用同一套导航」，入口零丢失
-  assert.equal(appShell.includes('sidebar-nav sidebar-design-nav'), true)
   assert.equal(appShell.includes('.mobile-topbar {'), true)
   assert.equal(appShell.includes('.sidebar-footer {\n    display: none;'), false)
 })

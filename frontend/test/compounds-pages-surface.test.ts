@@ -64,61 +64,62 @@ test('router 在 WorkflowRunDetail 之后注册 7 条新路由', () => {
   assert.ok(routerSource.includes('path: \'/results/:taskId\''))
 })
 
-test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既有 active 判定', async () => {
-  const { buildProjectWorkspaceNavItems, isProjectWorkspaceNavItemActive } = await import(
-    '../src/domain/projects/navigation'
-  )
+test('项目导航的 assets / candidates 项紧接在 tasks 之后且覆盖合并后的子视图', async () => {
+  const {
+    buildProjectCandidateViewTabs,
+    buildProjectDataViewTabs,
+    buildProjectWorkspaceNavItems,
+    isProjectWorkspaceNavItemActive
+  } = await import('../src/domain/projects/navigation')
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
-  // targets 由 PR3 加入（锚点：overview 之后），design 取代了原来的 workflow 顶级位，此处只断言新增项的相对位置。
-  // decisions 由 P-39 决策记录页加入（锚点：results 之后、lineage 之前），因此需补进本清单。
   assert.deepEqual(keys, [
     'overview',
-    'targets',
     'design',
     'tasks',
     'assets',
     'candidates',
-    'results',
-    'decisions',
-    'lineage',
     'settings'
   ])
   assert.equal(keys.indexOf('assets'), keys.indexOf('tasks') + 1)
+  assert.equal(keys.indexOf('candidates'), keys.indexOf('assets') + 1)
   assert.equal(keys.indexOf('overview'), 0)
 
   const assets = items.find(item => item.key === 'assets')
   assert.ok(assets, '缺少 assets 导航项')
-  assert.equal(assets?.label, '数据资产')
+  assert.equal(assets?.label, '数据与产物')
   assert.equal(assets?.to, '/projects/project-1/assets')
 
-  assert.equal(
-    isProjectWorkspaceNavItemActive(assets!, {
-      currentPath: '/projects/project-1/assets',
-      currentProjectId: 'project-1'
-    }),
-    true
+  // 数据资产、结果中心、Artifact 谱系三个视图合在「数据与产物」下，通过二级视图切换可达。
+  for (const path of [
+    '/projects/project-1/assets',
+    '/projects/project-1/results',
+    '/projects/project-1/lineage'
+  ]) {
+    assert.equal(
+      isProjectWorkspaceNavItemActive(assets!, {
+        currentPath: path,
+        currentProjectId: 'project-1'
+      }),
+      true
+    )
+  }
+  assert.deepEqual(
+    buildProjectDataViewTabs('project-1').map(tab => tab.to),
+    [
+      '/projects/project-1/assets',
+      '/projects/project-1/results',
+      '/projects/project-1/lineage'
+    ]
   )
-  assert.equal(
-    isProjectWorkspaceNavItemActive(assets!, {
-      currentPath: '/projects/project-1/lineage',
-      currentProjectId: 'project-1'
-    }),
-    false
+  assert.deepEqual(
+    buildProjectCandidateViewTabs('project-1').map(tab => tab.to),
+    [
+      '/projects/project-1/candidates',
+      '/projects/project-1/decisions'
+    ]
   )
-
-  // P-33 结果中心必须从项目导航可达（assets 之后、lineage 之前）
-  const results = items.find(item => item.key === 'results')
-  assert.ok(results, '缺少 results 导航项')
-  assert.equal(results?.label, '结果中心')
-  assert.equal(results?.to, '/projects/project-1/results')
-  // P-12 之后候选物从资产页签移出、在导航中以独立入口紧随 assets；结果中心仍在 lineage 之前。
-  assert.equal(keys.indexOf('candidates'), keys.indexOf('assets') + 1)
-  assert.equal(keys.indexOf('results'), keys.indexOf('candidates') + 1)
-  // P-39 在 results 与 lineage 之间插入了 decisions，results 的直接后继因此不再是 lineage。
-  assert.equal(keys.indexOf('decisions'), keys.indexOf('results') + 1)
-  assert.equal(keys.indexOf('decisions') + 1, keys.indexOf('lineage'))
 })
 
 test('i18n 中英双语均补齐 compounds / candidates / results 三个命名空间', () => {

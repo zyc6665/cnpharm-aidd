@@ -44,11 +44,21 @@ export const useToolsStore = defineStore('tools', () => {
     }
   }
 
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   const fetchToolDetail = async (id: string) => {
     const requestId = ++currentToolRequestId
     loading.value = true
     try {
-      const res = await getToolDetail(id)
+      let resolvedId = id
+      if (!UUID_PATTERN.test(id)) {
+        const listRes = await getToolList({ page_size: 100 })
+        const matched = listRes.data.items.find(item => item.slug === id)
+        if (matched) {
+          resolvedId = matched.id
+        }
+      }
+      const res = await getToolDetail(resolvedId)
       if (requestId === currentToolRequestId) {
         currentTool.value = res.data
       }

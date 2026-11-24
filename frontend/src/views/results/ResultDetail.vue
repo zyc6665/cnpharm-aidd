@@ -1,5 +1,6 @@
 <template>
   <main class="result-detail-page">
+    <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
     <AppBackLink
       v-if="projectId"
       :fallback="`/projects/${projectId}/results`"
@@ -348,11 +349,12 @@
 
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
 import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { formatDateTimeOrDash } from '@/domain/common/format'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppRawJson from '@/components/common/AppRawJson.vue'
@@ -388,7 +390,10 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
 
   const resultTitle = computed(() => result.value?.name || t('results.detail.title'))
 
+  const router = useRouter()
   const projectId = computed(() => {
+    const fromParam = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
+    if (fromParam) return fromParam
     const fromResult = result.value?.project_id
     if (fromResult) return fromResult
     return String(route.query.project_id || '')
@@ -469,6 +474,15 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     try {
       const response = await getResult(taskId.value)
       result.value = response.data
+      if (
+        response.data?.project_id &&
+        !route.params?.projectId &&
+        typeof router.replace === 'function'
+      ) {
+        void router.replace(
+          `/projects/${encodeURIComponent(response.data.project_id)}/results/${encodeURIComponent(taskId.value)}`
+        )
+      }
     } catch {
       loadError.value = true
       result.value = null

@@ -1,13 +1,16 @@
 <template>
   <div class="task-detail-page">
     <div class="container">
+      <ProjectWorkspaceNav v-if="effectiveProjectId" :project-id="effectiveProjectId" />
       <!-- 面包屑导航 -->
       <a-breadcrumb class="breadcrumb">
         <a-breadcrumb-item>
           <router-link to="/">{{ t('common.home') }}</router-link>
         </a-breadcrumb-item>
         <a-breadcrumb-item>
-          <router-link to="/tasks">{{ t('tasks.title') }}</router-link>
+          <router-link :to="effectiveProjectId ? `/projects/${encodeURIComponent(effectiveProjectId)}/tasks` : '/tasks'">
+            {{ t('tasks.title') }}
+          </router-link>
         </a-breadcrumb-item>
         <a-breadcrumb-item>{{ task?.name || task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
       </a-breadcrumb>
@@ -351,6 +354,7 @@ import { useTaskDetailLiveUpdates } from '@/composables/useTaskDetailLiveUpdates
 import type { TaskStatus } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
 import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
@@ -430,9 +434,27 @@ const detailSubtitle = computed(() => {
 
   return `${getStatusText(taskStatus.value)} · ${formatTime(task.value.created_at)}`
 })
+const effectiveProjectId = computed(() => {
+  const fromParam = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
+  return fromParam || task.value?.project_id || ''
+})
+
 // 只有存在「独立结果页」的任务才显示运行结果入口；结构/口袋预测返回 null。
 const taskResultPath = computed(() =>
-  resolveTaskResultPath(task.value?.tool_slug ?? task.value?.tool?.slug, taskId.value)
+  resolveTaskResultPath(
+    task.value?.tool_slug ?? task.value?.tool?.slug,
+    taskId.value,
+    effectiveProjectId.value
+  )
+)
+
+watch(
+  () => task.value?.project_id,
+  pid => {
+    if (pid && !route.params?.projectId && taskId.value && typeof router.replace === 'function') {
+      void router.replace(`/projects/${encodeURIComponent(pid)}/tasks/${encodeURIComponent(taskId.value)}`)
+    }
+  }
 )
 const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value))
 const resourceWait = computed(() => {

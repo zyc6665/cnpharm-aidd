@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
 import { buildDesignNavGroups, isDesignNavItemActive } from './navigation'
 
 describe('buildDesignNavGroups', () => {
@@ -15,8 +16,10 @@ describe('isDesignNavItemActive', () => {
   const structureItem = buildDesignNavGroups()[0]!.items[0]!
   const moleculeItem = buildDesignNavGroups()[1]!.items[0]!
 
-  it('matches a query-bearing item by path and focus', () => {
-    expect(isDesignNavItemActive(structureItem, { path: '/design', focus: 'structure' })).toBe(true)
+  it('matches standalone structure tool route directly', () => {
+    expect(
+      isDesignNavItemActive(structureItem, { path: `/tools/${STRUCTURE_PREDICT_TOOL_SLUG}` })
+    ).toBe(true)
     expect(isDesignNavItemActive(structureItem, { path: '/design', focus: 'pocket' })).toBe(false)
   })
 

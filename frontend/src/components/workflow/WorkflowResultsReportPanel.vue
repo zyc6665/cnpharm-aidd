@@ -59,6 +59,7 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { saveBlobAsFile } from '@/utils/protected-file-access'
   import { buildWorkflowReportMarkdown, type WorkflowReportRow } from '@/workflow/report'
 
   const props = defineProps<{
@@ -122,15 +123,11 @@
       decisionSummary: decisionSummary.value,
       labels: reportLabels.value
     })
-    const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = t('workflow.resultsReport.downloadFilename')
-    document.body.appendChild(anchor)
-    anchor.click()
-    document.body.removeChild(anchor)
-    URL.revokeObjectURL(url)
+    void saveBlobAsFile(
+      report,
+      t('workflow.resultsReport.downloadFilename'),
+      'text/markdown;charset=utf-8'
+    )
   }
 </script>
 

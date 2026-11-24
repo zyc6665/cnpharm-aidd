@@ -4,6 +4,7 @@
       {{ t('compounds.backToProject') }}
     </router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="dataViewTabs" active="assets" />
 
     <AppPageHeader :title="t('compounds.title')" :subtitle="t('compounds.subtitle')">
       <template #actions>
@@ -334,8 +335,10 @@
   import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
+  import { buildProjectDataViewTabs } from '@/domain/projects'
   import { uploadFile } from '@/api/files'
   import { listProjectAssets } from '@/api/assets'
   import {
@@ -358,6 +361,7 @@
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId || ''))
+  const dataViewTabs = computed(() => buildProjectDataViewTabs(projectId.value))
   const pageSize = 20
 
   /** 后端导入错误清单最多回 500 条，达到上限才提示「已截断」。 */

@@ -1,6 +1,7 @@
 <template>
   <div class="task-result-page" data-testid="task-result-page">
     <div class="container">
+      <ProjectWorkspaceNav v-if="effectiveProjectId" :project-id="effectiveProjectId" />
       <SkeletonList v-if="loading && !task" :count="4" />
       <AppInlineError
         v-else-if="loadError"
@@ -73,6 +74,7 @@
   import { LoadingOutlined } from '@ant-design/icons-vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import { getTaskDetail } from '@/api/tasks'
@@ -94,6 +96,10 @@
 
   const taskId = computed(() => String(route.params.id ?? ''))
   const task = ref<Task | null>(null)
+  const effectiveProjectId = computed(() => {
+    const fromParam = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
+    return fromParam || task.value?.project_id || ''
+  })
   const loading = ref(false)
   const loadError = ref(false)
   const kind = computed(() =>
@@ -129,6 +135,15 @@
     try {
       const response = await getTaskDetail(taskId.value, { silent: true })
       task.value = response.data
+      if (
+        response.data?.project_id &&
+        !route.params?.projectId &&
+        typeof router.replace === 'function'
+      ) {
+        void router.replace(
+          `/projects/${encodeURIComponent(response.data.project_id)}/tasks/${encodeURIComponent(taskId.value)}/result`
+        )
+      }
       syncPolling()
     } catch {
       if (!task.value) loadError.value = true
@@ -138,7 +153,12 @@
   }
 
   function goDetail(): void {
-    void router.push(`/tasks/${taskId.value}`)
+    const pid = effectiveProjectId.value
+    void router.push(
+      pid
+        ? `/projects/${encodeURIComponent(pid)}/tasks/${encodeURIComponent(taskId.value)}`
+        : `/tasks/${taskId.value}`
+    )
   }
 
   watch(isActive, syncPolling)

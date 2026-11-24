@@ -2,6 +2,7 @@
   <main class="project-lineage-page">
     <router-link :to="`/projects/${projectId}`" class="back-link">返回项目总览</router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="dataViewTabs" active="lineage" />
 
     <AppPageHeader
       title="Artifact 谱系"
@@ -33,11 +34,14 @@
   import { getProjectArtifactLineage } from '@/api/artifacts'
   import ArtifactLineageGraph from '@/components/artifacts/ArtifactLineageGraph.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
+  import { buildProjectDataViewTabs } from '@/domain/projects'
   import type { ArtifactLineageGraph as ArtifactLineageGraphData } from '@/types/artifacts'
 
   const route = useRoute()
   const projectId = computed(() => String(route.params.projectId || ''))
+  const dataViewTabs = computed(() => buildProjectDataViewTabs(projectId.value))
   const graph = ref<ArtifactLineageGraphData | null>(null)
   const loading = ref(false)
   const lineageLoadError = ref(false)

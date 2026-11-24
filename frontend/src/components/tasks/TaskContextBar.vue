@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getTaskDetail } from '@/api/tasks'
 import { resolveTaskResultPath } from '@/domain/design/runs'
 import { getTaskStatusColor, getTaskStatusTextKey, normalizeTaskStatus } from '@/domain/tasks'
@@ -32,15 +32,21 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const loadedTask = ref<Task | null>(null)
 
 const taskRecord = computed(() => props.task ?? loadedTask.value)
+const routeProjectId = computed(() => {
+  const raw = route?.params?.projectId
+  return typeof raw === 'string' && raw ? raw : undefined
+})
+const resolvedProjectId = computed(() => taskRecord.value?.project_id ?? routeProjectId.value)
 const taskSlug = computed(() => taskRecord.value?.tool_slug ?? taskRecord.value?.tool?.slug)
 const resolvedResultPath = computed(() =>
   props.resultPath !== undefined
     ? props.resultPath
-    : resolveTaskResultPath(taskSlug.value, props.taskId)
+    : resolveTaskResultPath(taskSlug.value, props.taskId, resolvedProjectId.value)
 )
 const canShowResult = computed(() => props.showResult ?? Boolean(resolvedResultPath.value))
 const status = computed(() => normalizeTaskStatus(taskRecord.value?.status))
@@ -64,7 +70,12 @@ watch(
 
 function goDetail(): void {
   if (props.active !== 'detail') {
-    void router.push(`/tasks/${props.taskId}`)
+    const pid = resolvedProjectId.value
+    void router.push(
+      pid
+        ? `/projects/${encodeURIComponent(pid)}/tasks/${encodeURIComponent(props.taskId)}`
+        : `/tasks/${props.taskId}`
+    )
   }
 }
 
@@ -88,7 +99,11 @@ function goResult(): void {
         <span aria-hidden="true">←</span>
         {{ t('tasks.taskWorkspace.backToProject') }}
       </router-link>
-      <router-link class="task-context-bar__back" to="/tasks" data-testid="task-context-back">
+      <router-link
+        class="task-context-bar__back"
+        :to="resolvedProjectId ? `/projects/${encodeURIComponent(resolvedProjectId)}/tasks` : '/tasks'"
+        data-testid="task-context-back"
+      >
         <span aria-hidden="true">←</span>
         {{ t('tasks.taskWorkspace.backToCenter') }}
       </router-link>

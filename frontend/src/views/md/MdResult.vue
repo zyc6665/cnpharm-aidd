@@ -135,6 +135,7 @@
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
+  import { message } from 'ant-design-vue'
   import type { EChartsOption } from 'echarts'
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -365,7 +366,11 @@
   async function downloadRole(role: MdTrajectoryRole): Promise<void> {
     const file = roleFile(role)
     if (!file) return
-    await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined })
+    try {
+      await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined })
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   onMounted(() => {

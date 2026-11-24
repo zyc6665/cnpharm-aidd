@@ -21,6 +21,8 @@ import Pipeline from './Pipeline.vue'
 // AppPageHeader exposes a named `actions` slot (not `extra`).
 const stubs = {
   AppPageHeader: { template: '<div><slot name="actions" /></div>' },
+  ProjectWorkspaceNav: true,
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }
 
 function mockStage() {

@@ -4,6 +4,7 @@
       {{ t('targets.backToProject') }}
     </router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="flowViewTabs" active="targets" />
 
     <AppPageHeader :title="t('targets.list.title')" :subtitle="t('targets.list.subtitle')">
       <template #actions>
@@ -170,8 +171,10 @@
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { createTarget, deleteTarget, listTargets } from '@/api/targets'
+  import { buildProjectFlowViewTabs } from '@/domain/projects'
   import {
     formatOptionalText,
     formatTargetDateTime,
@@ -187,6 +190,7 @@
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId || ''))
+  const flowViewTabs = computed(() => buildProjectFlowViewTabs(projectId.value))
 
   const targets = ref<TargetSummary[]>([])
   const total = ref(0)

@@ -127,6 +127,7 @@
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { compareCandidates, listCandidates } from '@/api/compounds'
+  import { saveBlobAsFile } from '@/utils/protected-file-access'
   import {
     MAX_COMPARE_CANDIDATES,
     buildComparisonMatrix,
@@ -266,18 +267,7 @@
       return
     }
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    try {
-      anchor.href = url
-      anchor.download = 'candidate-comparison.csv'
-      document.body.appendChild(anchor)
-      anchor.click()
-    } finally {
-      anchor.remove()
-      URL.revokeObjectURL(url)
-    }
+    void saveBlobAsFile(csv, 'candidate-comparison.csv', 'text/csv;charset=utf-8')
   }
 
   async function loadComparison(): Promise<void> {

@@ -5,9 +5,15 @@
       :key="item.key"
       :to="item.to"
       class="project-workspace-nav-item"
-      :class="{ 'is-active': isActive(item) }"
+      :class="{
+        'is-active': isActive(item),
+        'is-settings': item.key === 'settings'
+      }"
+      :title="item.key === 'settings' ? item.label : undefined"
+      :aria-label="item.key === 'settings' ? item.label : undefined"
     >
-      {{ item.label }}
+      <SettingOutlined v-if="item.key === 'settings'" class="nav-settings-icon" />
+      <span :class="{ 'nav-settings-label': item.key === 'settings' }">{{ item.label }}</span>
     </router-link>
   </nav>
 </template>
@@ -15,6 +21,7 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useRoute } from 'vue-router'
+  import { SettingOutlined } from '@ant-design/icons-vue'
   import {
     buildProjectWorkspaceNavItems,
     isProjectWorkspaceNavItemActive,
@@ -67,6 +74,21 @@
   .project-workspace-nav-item.is-active {
     color: @accent-color;
     background: @accent-color-light;
+  }
+
+  .project-workspace-nav-item.is-settings {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .nav-settings-icon {
+    font-size: @font-size-md;
+  }
+
+  .nav-settings-label {
+    font-size: @font-size-xs;
   }
 
   @media (max-width: @screen-sm) {

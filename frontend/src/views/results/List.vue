@@ -4,6 +4,7 @@
       {{ t('compounds.backToProject') }}
     </router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="dataViewTabs" active="results" />
 
     <AppPageHeader :title="t('results.title')" :subtitle="t('results.subtitle')">
       <template #actions>
@@ -67,7 +68,10 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'name'">
-          <router-link :to="`/results/${record.task_id}`" class="result-link">
+          <router-link
+            :to="`/projects/${encodeURIComponent(projectId)}/results/${encodeURIComponent(record.task_id)}`"
+            class="result-link"
+          >
             {{ record.name || record.task_id }}
           </router-link>
         </template>
@@ -121,9 +125,11 @@
   import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { listProjectResults } from '@/api/results'
+  import { buildProjectDataViewTabs } from '@/domain/projects'
   import { RESULT_STATUSES, formatExecutionSeconds, sortResultsByFinishedDesc } from '@/domain/results'
   import { mergeCursorPage } from '@/utils/pagination'
   import type { ProjectResultSummary } from '@/types/compounds'
@@ -139,6 +145,7 @@
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId || ''))
+  const dataViewTabs = computed(() => buildProjectDataViewTabs(projectId.value))
   const pageSize = 20
 
   const loading = ref(false)

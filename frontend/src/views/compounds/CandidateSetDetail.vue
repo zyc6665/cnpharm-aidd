@@ -452,19 +452,9 @@
     }
   }
 
-  function triggerBlobDownload(content: string, filename: string): void {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    try {
-      anchor.href = url
-      anchor.download = filename
-      document.body.appendChild(anchor)
-      anchor.click()
-    } finally {
-      anchor.remove()
-      URL.revokeObjectURL(url)
-    }
+  async function triggerBlobDownload(content: string, filename: string): Promise<void> {
+    const { saveBlobAsFile } = await import('@/utils/protected-file-access')
+    await saveBlobAsFile(content, filename, 'text/csv;charset=utf-8')
   }
 
   async function handleExport(): Promise<void> {

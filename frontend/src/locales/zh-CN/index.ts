@@ -126,7 +126,19 @@ export default {
     designGroupEvaluate: '评估验证',
     designGroupRecord: '记录',
     structurePredict: '结构预测',
-    pocketPredict: '口袋预测'
+    pocketPredict: '口袋预测',
+    downloads: '下载'
+  },
+  downloads: {
+    title: '下载记录',
+    hint: '记录本次登录期间触发的下载；失败项可在此重试。',
+    empty: '本次会话还没有触发过下载',
+    clearFinished: '清除已完成',
+    status: {
+      pending: '准备中',
+      done: '已开始',
+      error: '失败'
+    }
   },
   command: {
     placeholder: '搜索页面、命令…',

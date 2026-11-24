@@ -387,7 +387,10 @@
         }
 
         initializeFromSurface()
-        await Promise.allSettled([loadStandardProjectArtifacts(), fetchExample(id)])
+        await Promise.allSettled([
+          loadStandardProjectArtifacts(),
+          fetchExample(tool.value?.id ?? id)
+        ])
       } finally {
         if (requestId === detailLoadId) {
           loading.value = false
