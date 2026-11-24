@@ -12,6 +12,7 @@ const listTargetsMock = vi.fn()
 const getTargetMock = vi.fn()
 const listStructuresMock = vi.fn()
 const submitToolTaskMock = vi.fn()
+const uploadFileMock = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
@@ -46,7 +47,15 @@ vi.mock('@/api/predict', () => ({
 }))
 
 vi.mock('@/api/files', () => ({
-  uploadFile: vi.fn().mockResolvedValue({ data: { id: 'file-uploaded' } })
+  uploadFile: (...args: unknown[]) => uploadFileMock(...args)
+}))
+
+vi.mock('@/components/tasks/Smiles2DCell.vue', () => ({
+  default: {
+    name: 'Smiles2DCell',
+    props: ['smiles', 'block', 'width', 'height'],
+    template: '<div class="smiles-cell">{{ smiles }}</div>'
+  }
 }))
 
 vi.mock('@/components/design/ModelSelect.vue', () => ({
@@ -116,6 +125,12 @@ function mountPage(props: Record<string, unknown> = {}) {
         'a-radio-group': ARadioGroupStub,
         'a-radio-button': { template: '<button class="radio-button"><slot /></button>' },
         'a-upload': { template: '<div class="upload"><slot /></div>' },
+        'a-textarea': {
+          props: ['value'],
+          emits: ['update:value'],
+          template:
+            '<textarea class="a-textarea" :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
+        },
         'a-checkbox-group': { template: '<div class="checkbox-group" />' },
         'a-alert': { props: ['message'], template: '<div class="alert">{{ message }}</div>' }
       }
@@ -130,7 +145,7 @@ describe('PropertyPredictSubmit', () => {
     replaceMock.mockReset()
     pushMock.mockReset()
     listProjectsMock.mockResolvedValue({
-      data: { items: [{ id: 'p1', name: '演示项目' }] }
+      data: { items: [{ id: 'p1', name: '演示项目' }, { id: 'proj-a', name: '项目 A' }, { id: 'proj-b', name: '项目 B' }] }
     })
     listCandidateSetsMock.mockResolvedValue({
       data: { items: [{ id: 'set-1', name: '候选集 A' }] }
@@ -146,6 +161,8 @@ describe('PropertyPredictSubmit', () => {
       }
     })
     submitToolTaskMock.mockResolvedValue({ id: 'task-1' })
+    uploadFileMock.mockReset()
+    uploadFileMock.mockResolvedValue({ data: { id: 'file-uploaded' } })
   })
 
   it('无 project_id 时给出项目选择器与明确提示，而不是静默空下拉', async () => {
@@ -209,6 +226,102 @@ describe('PropertyPredictSubmit', () => {
           protein_pdb: 'file-receptor',
           ligand_smiles: 'file-ligands'
         }
+      })
+    )
+  })
+
+  it('上游 file_id 交接：upload 模式下展示已落盘文件并直接复用，不重复上传', async () => {
+    route.query = {
+      project_id: 'p1',
+      file_id: 'file-generated',
+      filename: 'generated_molecules.csv'
+    }
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const badge = wrapper.find('[data-testid="predict-submit-preuploaded"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('generated_molecules.csv')
+
+    await wrapper.find('[data-testid="predict-submit-button"]').trigger('click')
+    await flushPromises()
+
+    expect(uploadFileMock).not.toHaveBeenCalled()
+    expect(submitToolTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        standardInputUploads: { smiles_csv: 'file-generated' }
+      })
+    )
+  })
+
+  it('project switch clears upstream handoff and candidate mode', async () => {
+    route.query = { project_id: 'proj-a', file_id: 'file-a', filename: 'a.csv' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').exists()).toBe(true)
+
+    const sources = wrapper.findAllComponents(ARadioGroupStub)
+    sources[1]!.vm.$emit('update:value', 'candidate')
+    await flushPromises()
+    exportCandidateSetMock.mockClear()
+    submitToolTaskMock.mockClear()
+    await wrapper.find('[data-testid="predict-submit-project"]').setValue('proj-b')
+    await flushPromises()
+
+    expect(replaceMock).toHaveBeenCalledWith({ query: { project_id: 'proj-b' } })
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="predict-submit-button"]').attributes('disabled')).toBeDefined()
+    expect(exportCandidateSetMock).not.toHaveBeenCalled()
+    expect(submitToolTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('上游 candidate_set_id 交接：直接切到候选集模式并选中该集合', async () => {
+    route.query = { project_id: 'p1', candidate_set_id: 'set-1' }
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="predict-submit-button"]').trigger('click')
+    await flushPromises()
+
+    expect(exportCandidateSetMock).toHaveBeenCalledWith('set-1')
+    expect(uploadFileMock).not.toHaveBeenCalled()
+  })
+
+  it('手动输入 SMILES：加载示例后即时预览，并按 CSV 上传提交', async () => {
+    route.query = { project_id: 'p1' }
+    const wrapper = mountPage()
+    await flushPromises()
+
+    // ADMET 模式下有两个 radio-group：预测类型 + 分子来源，后者切到「手动输入」
+    const radioGroups = wrapper.findAllComponents(ARadioGroupStub)
+    radioGroups[1]!.vm.$emit('update:value', 'smiles')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="predict-submit-load-example"]').trigger('click')
+    await flushPromises()
+
+    const preview = wrapper.find('[data-testid="predict-submit-preview"]')
+    expect(preview.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="predict-submit-preview-count"]').text()).toContain(
+      'predict.submit.previewCount'
+    )
+    expect(wrapper.findAll('[data-testid="predict-submit-preview-item"]')).toHaveLength(6)
+    expect(wrapper.findAll('.smiles-cell')).toHaveLength(6)
+    expect(wrapper.html()).toContain('CC(=O)Oc1ccccc1C(=O)O')
+
+    await wrapper.find('[data-testid="predict-submit-button"]').trigger('click')
+    await flushPromises()
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(1)
+    const uploaded = uploadFileMock.mock.calls[0]![0] as File
+    const csv = await uploaded.text()
+    expect(csv.split('\n')[0]).toBe('smiles')
+    expect(csv.split('\n')).toHaveLength(7)
+    expect(submitToolTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        standardInputUploads: { smiles_csv: 'file-uploaded' }
       })
     )
   })
