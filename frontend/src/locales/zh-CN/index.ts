@@ -2228,6 +2228,65 @@ export default {
           hba: '氢键受体',
           tpsa: 'TPSA'
         }
+      },
+      handoff: {
+        hint: '把结果直接带到下游环节：选中分子（未选中时用全部可用分子）会导出 CSV 并自动上传。',
+        sendAdmet: '送去 ADMET 预测',
+        sendScreening: '送去虚拟筛选',
+        noProject: '缺少项目信息，无法送去下游环节',
+        noSmiles: '选中结果里没有可用的 SMILES，无法导出 CSV',
+        sentAdmet: '已上传 {count} 个分子，正在跳转 ADMET 预测',
+        sentScreening: '已上传 {count} 个分子，正在跳转虚拟筛选',
+        failed: '交接失败，请检查文件上传服务后重试'
+      },
+      columns: {
+        toggle: '显示列',
+        title: '勾选需要展示的列'
+      },
+      marks: {
+        column: '标记',
+        favorite: '标记为喜欢',
+        unfavorite: '取消喜欢',
+        exclude: '排除该分子',
+        unexclude: '取消排除',
+        all: '全部',
+        favorites: '喜欢',
+        hideExcluded: '隐藏已排除'
+      },
+      scaffold: {
+        column: '骨架',
+        filter: '骨架筛选',
+        all: '全部骨架',
+        count: '共 {count} 种骨架'
+      },
+      viewer: {
+        prev: '上一个',
+        next: '下一个',
+        position: '第 {index} / {total} 个'
+      },
+      thresholds: {
+        mw: { hint: '分子量（MW）：建议 ≤ 500，500~600 为临界区，超过 600 不利于口服吸收。' },
+        logp: { hint: '脂水分配系数（LogP）：建议 ≤ 5，5~6 为临界区，过高提示溶解性差。' },
+        hbd: { hint: '氢键供体数（HBD）：建议 ≤ 5，5~7 为临界区。' },
+        hba: { hint: '氢键受体数（HBA）：建议 ≤ 10，10~12 为临界区。' },
+        tpsa: { hint: '极性表面积（TPSA）：建议 ≤ 140 Å²，140~160 为临界区，过高影响膜通透性。' },
+        qed: { hint: '类药性综合评分（QED）：取值 0~1，建议 ≥ 0.5；0.35~0.5 为临界区。' },
+        violations: { hint: 'Lipinski 五规则越界项数：理想值为 0，1 项为临界，≥ 2 项风险较高。' },
+        rotatable: { hint: '可旋转键数：建议 ≤ 10，10~12 为临界区，过多提示构象熵高。' },
+        scaffold: { hint: 'Murcko 骨架（scaffold）：去掉侧链后的核心骨架，同骨架分子通常具有相近活性趋势。' }
+      },
+      compare: {
+        button: '对比',
+        title: '多分子对比',
+        needTwo: '至少选择 2 个分子才能对比',
+        capped: '单次最多对比 {count} 个分子，已取前 {count} 个',
+        empty: '没有可对比的分子',
+        property: '属性',
+        smiles: 'SMILES',
+        rating: '类药性',
+        violations: '规则越界',
+        copy: '复制 SMILES',
+        noValue: '暂无数据'
       }
     }
   },

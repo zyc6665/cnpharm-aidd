@@ -103,6 +103,22 @@
             <a-button size="small" @click="resetFilters">{{ t('design.results.reset') }}</a-button>
           </div>
 
+          <div v-if="scaffoldColumn" class="results-filters__sort" data-testid="results-scaffold-filter-row">
+            <span class="results-filters__label">{{ t('design.results.scaffold.filter') }}</span>
+            <a-select
+              v-model:value="scaffoldFilter"
+              class="filter-control"
+              allow-clear
+              data-testid="results-scaffold-filter"
+            >
+              <a-select-option value="">{{ t('design.results.scaffold.all') }}</a-select-option>
+              <a-select-option v-for="option in scaffoldOptions" :key="option" :value="option">
+                {{ shortenScaffold(option) }}
+              </a-select-option>
+            </a-select>
+            <span class="results-filters__label">{{ t('design.results.scaffold.count', { count: scaffoldOptions.length }) }}</span>
+          </div>
+
           <div v-if="hasRangeFilters" class="results-filters__sliders" data-testid="results-range-filters">
             <div v-if="mwColumn" class="filter-slider">
               <span class="results-filters__label">{{ mwColumn.title }}</span>
@@ -195,11 +211,55 @@
               <a-button size="small" data-testid="results-export-sdf" @click="exportSdf">
                 {{ t('design.results.exportSdf') }}
               </a-button>
+              <a-button
+                size="small"
+                data-testid="results-compare-btn"
+                :disabled="selectedRows.length < 2"
+                @click="openCompare"
+              >
+                {{ t('design.results.compare.button') }} ({{ selectedRows.length }})
+              </a-button>
+              <a-button
+                size="small"
+                data-testid="results-send-admet"
+                :loading="handoffPending === 'admet'"
+                @click="sendToPipeline('admet')"
+              >
+                {{ t('design.results.handoff.sendAdmet') }}
+              </a-button>
+              <a-button
+                size="small"
+                data-testid="results-send-screening"
+                :loading="handoffPending === 'screening'"
+                @click="sendToPipeline('screening')"
+              >
+                {{ t('design.results.handoff.sendScreening') }}
+              </a-button>
               <a-button size="small" type="primary" data-testid="results-save-selected" @click="openSaveModal('selected')">
                 {{ t('design.results.saveSelected') }}
               </a-button>
               <a-button size="small" data-testid="results-clear-selection" @click="clearSelection">
                 {{ t('design.results.clearSelection') }}
+              </a-button>
+            </div>
+
+            <div v-else-if="saveableRows.length" class="results-handoff" data-testid="results-handoff">
+              <span class="results-handoff__hint">{{ t('design.results.handoff.hint') }}</span>
+              <a-button
+                size="small"
+                data-testid="results-send-admet"
+                :loading="handoffPending === 'admet'"
+                @click="sendToPipeline('admet')"
+              >
+                {{ t('design.results.handoff.sendAdmet') }}
+              </a-button>
+              <a-button
+                size="small"
+                data-testid="results-send-screening"
+                :loading="handoffPending === 'screening'"
+                @click="sendToPipeline('screening')"
+              >
+                {{ t('design.results.handoff.sendScreening') }}
               </a-button>
             </div>
 
@@ -215,6 +275,31 @@
               </a-checkbox>
               <span v-else />
               <div class="results-list__head-right">
+                <a-segmented
+                  v-model:value="markFilter"
+                  :options="markFilterOptions"
+                  size="small"
+                  data-testid="results-mark-filter"
+                />
+                <a-popover v-if="viewMode === 'table' && columnToggleOptions.length" trigger="click" placement="bottomRight">
+                  <template #content>
+                    <div class="column-toggle" data-testid="results-column-popover">
+                      <p class="column-toggle__title">{{ t('design.results.columns.title') }}</p>
+                      <a-checkbox
+                        v-for="option in columnToggleOptions"
+                        :key="option.key"
+                        :checked="!hiddenColumnKeys.includes(option.key)"
+                        :data-testid="`results-column-option-${option.key}`"
+                        @change="toggleColumn(option.key, $event)"
+                      >
+                        {{ option.label }}
+                      </a-checkbox>
+                    </div>
+                  </template>
+                  <a-button size="small" data-testid="results-column-toggle">
+                    {{ t('design.results.columns.toggle') }}
+                  </a-button>
+                </a-popover>
                 <span v-if="!selectedRows.length" class="results-list__hint">
                   {{ t('design.results.batchActions') }}
                 </span>
@@ -245,12 +330,21 @@
                       />
                     </th>
                     <th class="col-index">#</th>
+                    <th class="col-mark">{{ t('design.results.marks.column') }}</th>
                     <th class="col-structure">{{ t('design.results.structureColumn') }}</th>
                     <th class="col-smiles">{{ t('design.results.smilesColumn') }}</th>
-                    <th v-for="column in numericColumns" :key="column.key" class="col-num">
-                      {{ column.title }}
+                    <th v-for="column in tableNumericColumns" :key="column.key" class="col-num">
+                      <a-tooltip v-if="metricKindForColumn(column)" :title="metricHint(column)">
+                        <span class="results-table__th">{{ column.title }}</span>
+                      </a-tooltip>
+                      <template v-else>{{ column.title }}</template>
                     </th>
-                    <th v-if="hasAnyDruglikenessData" class="col-druglikeness">
+                    <th v-if="showScaffoldColumn" class="col-scaffold">
+                      <a-tooltip :title="t('design.results.thresholds.scaffold.hint')">
+                        <span class="results-table__th">{{ scaffoldColumn?.title ?? t('design.results.scaffold.column') }}</span>
+                      </a-tooltip>
+                    </th>
+                    <th v-if="showDruglikenessColumn" class="col-druglikeness">
                       {{ t('design.results.druglikenessColumn') }}
                     </th>
                   </tr>
@@ -260,7 +354,12 @@
                     v-for="row in pagedRows"
                     :key="row.__rowKey"
                     class="results-table__row"
-                    :class="{ 'is-active': row.__rowKey === activeRowKey }"
+                    :class="{
+                      'is-active': row.__rowKey === activeRowKey,
+                      'is-favorite': isFavorite(row),
+                      'is-excluded': isExcluded(row),
+                    }"
+                    :data-row-key="row.__rowKey"
                     data-testid="molecule-row"
                     @click="setActive(row)"
                   >
@@ -268,6 +367,33 @@
                       <a-checkbox :checked="isRowSelected(row)" @change="toggleRow(row, $event)" />
                     </td>
                     <td class="col-index">{{ rowIndex(row) }}</td>
+                    <td class="col-mark" @click.stop>
+                      <a-button
+                        type="text"
+                        size="small"
+                        class="row-mark"
+                        :class="{ 'row-mark--on': isFavorite(row) }"
+                        :aria-pressed="isFavorite(row)"
+                        :aria-label="isFavorite(row) ? t('design.results.marks.unfavorite') : t('design.results.marks.favorite')"
+                        data-testid="molecule-row-favorite"
+                        @click.stop="toggleFavorite(row)"
+                      >
+                        <StarFilled v-if="isFavorite(row)" />
+                        <StarOutlined v-else />
+                      </a-button>
+                      <a-button
+                        type="text"
+                        size="small"
+                        class="row-mark"
+                        :class="{ 'row-mark--off': isExcluded(row) }"
+                        :aria-pressed="isExcluded(row)"
+                        :aria-label="isExcluded(row) ? t('design.results.marks.unexclude') : t('design.results.marks.exclude')"
+                        data-testid="molecule-row-exclude"
+                        @click.stop="toggleExclude(row)"
+                      >
+                        <StopOutlined />
+                      </a-button>
+                    </td>
                     <td class="col-structure">
                       <Smiles2DCell
                         v-if="rowSmiles(row)"
@@ -296,10 +422,22 @@
                         </a-button>
                       </div>
                     </td>
-                    <td v-for="column in numericColumns" :key="column.key" class="col-num">
-                      {{ formatMetric(row[column.key]) }}
+                    <td v-for="column in tableNumericColumns" :key="column.key" class="col-num">
+                      <span
+                        class="metric-value"
+                        :class="toneClassFor(column, row[column.key])"
+                        :data-tone="toneForColumn(column, row[column.key]) ?? undefined"
+                      >{{ formatMetric(row[column.key]) }}</span>
                     </td>
-                    <td v-if="hasAnyDruglikenessData" class="col-druglikeness">
+                    <td v-if="showScaffoldColumn" class="col-scaffold">
+                      <code
+                        v-if="rowScaffold(row)"
+                        class="results-table__scaffold"
+                        :title="rowScaffold(row)"
+                      >{{ rowScaffold(row) }}</code>
+                      <span v-else class="results-table__na">-</span>
+                    </td>
+                    <td v-if="showDruglikenessColumn" class="col-druglikeness">
                       <a-rate
                         v-if="starsForRow(row) !== null"
                         :value="starsForRow(row) ?? 0"
@@ -337,6 +475,31 @@
                     class="molecule-card__rating"
                     data-testid="molecule-card-rating"
                   />
+                  <span class="molecule-card__marks" @click.stop>
+                    <a-button
+                      type="text"
+                      size="small"
+                      class="row-mark"
+                      :class="{ 'row-mark--on': isFavorite(row) }"
+                      :aria-label="t('design.results.marks.favorite')"
+                      data-testid="molecule-card-favorite"
+                      @click.stop="toggleFavorite(row)"
+                    >
+                      <StarFilled v-if="isFavorite(row)" />
+                      <StarOutlined v-else />
+                    </a-button>
+                    <a-button
+                      type="text"
+                      size="small"
+                      class="row-mark"
+                      :class="{ 'row-mark--off': isExcluded(row) }"
+                      :aria-label="t('design.results.marks.exclude')"
+                      data-testid="molecule-card-exclude"
+                      @click.stop="toggleExclude(row)"
+                    >
+                      <StopOutlined />
+                    </a-button>
+                  </span>
                 </header>
 
                 <div class="molecule-card__structure">
@@ -347,7 +510,9 @@
                 <dl v-if="rowMetrics(row).length" class="molecule-card__metrics">
                   <div v-for="metric in rowMetrics(row)" :key="metric.key" class="molecule-card__metric">
                     <dt>{{ metric.label }}</dt>
-                    <dd>{{ metric.value }}</dd>
+                    <dd :class="metricToneClass(metric.tone)" :data-tone="metric.tone ?? undefined">
+                      {{ metric.value }}
+                    </dd>
                   </div>
                 </dl>
               </article>
@@ -375,6 +540,28 @@
                   <a-switch v-model:checked="simplifiedMode" size="small" data-testid="results-simplified-toggle" />
                   <span>{{ t('design.results.simplifiedMode') }}</span>
                 </label>
+              </div>
+
+              <div class="results-viewer__nav">
+                <a-button
+                  size="small"
+                  data-testid="viewer-prev"
+                  :disabled="!canStep(-1)"
+                  @click="stepActive(-1)"
+                >
+                  {{ t('design.results.viewer.prev') }}
+                </a-button>
+                <span class="results-viewer__position">
+                  {{ t('design.results.viewer.position', { index: activePosition, total: sortedRows.length }) }}
+                </span>
+                <a-button
+                  size="small"
+                  data-testid="viewer-next"
+                  :disabled="!canStep(1)"
+                  @click="stepActive(1)"
+                >
+                  {{ t('design.results.viewer.next') }}
+                </a-button>
               </div>
 
               <div class="results-viewer__smiles" data-testid="viewer-smiles">
@@ -425,7 +612,9 @@
                   <dl class="results-viewer__metrics">
                     <div v-for="metric in rowMetrics(activeRow)" :key="metric.key" class="results-viewer__metric">
                       <dt>{{ metric.label }}</dt>
-                      <dd>{{ metric.value }}</dd>
+                      <dd :class="metricToneClass(metric.tone)" :data-tone="metric.tone ?? undefined">
+                        {{ metric.value }}
+                      </dd>
                     </div>
                   </dl>
                 </template>
@@ -508,21 +697,27 @@
       </a-form>
     </a-modal>
   </main>
+
+  <MoleculeCompareDrawer v-model:open="compareOpen" :molecules="compareMolecules" />
+
   <ResultDisclaimer />
 </template>
 
 <script setup lang="ts">
   import { formatNumber } from '@/domain/common/format'
-  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
-  import { CopyOutlined } from '@ant-design/icons-vue'
+  import { CopyOutlined, StarFilled, StarOutlined, StopOutlined } from '@ant-design/icons-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import MoleculeViewer from '@/components/tasks/MoleculeViewer.vue'
   import DruglikenessRadar from '@/components/design/DruglikenessRadar.vue'
+  import MoleculeCompareDrawer, {
+    type CompareMolecule,
+  } from '@/components/design/MoleculeCompareDrawer.vue'
   import {
     findMoleculeTableArtifact,
     getDesignGenerationResult,
@@ -544,13 +739,19 @@
     type VisualizationScene,
   } from '@/domain/tasks'
   import {
+    classifyMetricTone,
+    countLipinskiViolations,
     druglikenessStars,
     evaluateLipinski,
     hasLipinskiData,
+    metricKind,
     type LipinskiProperties,
     type LipinskiRuleId,
+    type MetricKind,
+    type MetricTone,
   } from '@/domain/molecules/druglikeness'
   import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecule-export'
+  import { uploadFile } from '@/api/files'
   import type { CandidateCreateInput } from '@/types/compounds'
   import type { DesignGenerationResult, DesignTableColumn, DesignTableRow } from '@/types/design'
   import type { Task, TaskStatus } from '@/types/models'
@@ -616,6 +817,25 @@
   const selectedKeys = ref<string[]>([])
   const simplifiedMode = ref(false)
 
+  /** 评审标记（喜欢 / 排除）与快捷筛选。 */
+  const favoriteKeys = ref<string[]>([])
+  const excludedKeys = ref<string[]>([])
+  const markFilter = ref<'all' | 'favorite' | 'hideExcluded'>('all')
+
+  /** 表格列显示控制：默认全开，只记住本次会话的隐藏项。 */
+  const hiddenColumnKeys = ref<string[]>([])
+  const COLUMN_DRUGLIKENESS_KEY = '__druglikeness__'
+
+  /** 骨架筛选：仅当结果表真的带 scaffold / murcko_scaffold 列时启用。 */
+  const scaffoldFilter = ref('')
+
+  /** 多分子对比（最多 6 个）。 */
+  const MAX_COMPARE = 6
+  const compareOpen = ref(false)
+
+  /** 下游管线交接（ADMET / 虚拟筛选）进行中的目标。 */
+  const handoffPending = ref<'admet' | 'screening' | null>(null)
+
   const saveModalOpen = ref(false)
   const saving = ref(false)
   const setName = ref('')
@@ -655,10 +875,58 @@
   const sequenceColumn = computed(() => findColumn([/sequence/i, /序列/i]))
   const isPeptideResult = computed(() => Boolean(sequenceColumn.value) && !smilesColumn.value)
 
+  /** 骨架列（scaffold / murcko_scaffold）；CSV 没有这一列时整块骨架 UI 都不渲染。 */
+  const scaffoldColumn = computed(() =>
+    findColumn([/murcko[_\s-]*scaffold/i, /scaffold/i, /骨架/i])
+  )
+
   const numericColumns = computed(() => columns.value.filter((column) => column.numeric))
   const hasRangeFilters = computed(() =>
     Boolean(mwColumn.value || logpColumn.value || hbdColumn.value || hbaColumn.value || qedColumn.value)
   )
+
+  const markFilterOptions = computed(() => [
+    { label: t('design.results.marks.all'), value: 'all' },
+    { label: t('design.results.marks.favorites'), value: 'favorite' },
+    { label: t('design.results.marks.hideExcluded'), value: 'hideExcluded' },
+  ])
+
+  const tableNumericColumns = computed(() =>
+    numericColumns.value.filter(column => !hiddenColumnKeys.value.includes(column.key))
+  )
+
+  const showScaffoldColumn = computed(
+    () => Boolean(scaffoldColumn.value) && !hiddenColumnKeys.value.includes(scaffoldColumn.value!.key)
+  )
+
+  const hasAnyDruglikenessData = computed(() =>
+    rows.value.some(row => hasLipinskiData(propertiesForRow(row)))
+  )
+
+  const showDruglikenessColumn = computed(
+    () => hasAnyDruglikenessData.value && !hiddenColumnKeys.value.includes(COLUMN_DRUGLIKENESS_KEY)
+  )
+
+  const columnToggleOptions = computed(() => {
+    const options = numericColumns.value.map(column => ({ key: column.key, label: column.title }))
+    if (scaffoldColumn.value) {
+      options.push({ key: scaffoldColumn.value.key, label: scaffoldColumn.value.title })
+    }
+    if (hasAnyDruglikenessData.value) {
+      options.push({ key: COLUMN_DRUGLIKENESS_KEY, label: t('design.results.druglikenessColumn') })
+    }
+    return options
+  })
+
+  const scaffoldOptions = computed(() => {
+    if (!scaffoldColumn.value) return []
+    const seen = new Set<string>()
+    rows.value.forEach(row => {
+      const value = rowScaffold(row)
+      if (value) seen.add(value)
+    })
+    return Array.from(seen).sort((a, b) => a.localeCompare(b))
+  })
 
   function numericValue(row: DesignTableRow, key: string | undefined): number | null {
     if (!key) {
@@ -721,6 +989,9 @@
   const filteredRows = computed(() => {
     const keyword = search.value.trim().toLowerCase()
     return rows.value.filter((row) => {
+      if (markFilter.value === 'favorite' && !isFavorite(row)) return false
+      if (markFilter.value === 'hideExcluded' && isExcluded(row)) return false
+      if (scaffoldFilter.value && rowScaffold(row) !== scaffoldFilter.value) return false
       if (keyword) {
         const hit =
           rowSmiles(row).toLowerCase().includes(keyword) ||
@@ -809,9 +1080,6 @@
   })
 
   /** 只有整张表里真的存在理化性质时才展示类药性列/星级，避免一排空灰星。 */
-  const hasAnyDruglikenessData = computed(() =>
-    rows.value.some(row => hasLipinskiData(propertiesForRow(row)))
-  )
 
   const pageKeys = computed(() => pagedRows.value.map(row => row.__rowKey))
   const allPageSelected = computed(
@@ -926,7 +1194,9 @@
     return formatNumber(value, 3)
   }
 
-  function rowMetrics(row: DesignTableRow): Array<{ key: string; label: string; value: string }> {
+  function rowMetrics(
+    row: DesignTableRow
+  ): Array<{ key: string; label: string; value: string; tone: MetricTone | null }> {
     // 直接遍历 CSV 实际列：只输出结构/序列之外的所有属性，CSV 里多出来的列也能展示。
     return columns.value
       .filter(
@@ -936,7 +1206,211 @@
         key: column.key,
         label: column.title,
         value: formatMetric(row[column.key]),
+        tone: classifyMetricTone(column.key, row[column.key]),
       }))
+  }
+
+  /** 骨架值；表里没有 scaffold 列时恒为空，骨架相关 UI 自然不会出现。 */
+  function rowScaffold(row: DesignTableRow): string {
+    return scaffoldColumn.value ? (row[scaffoldColumn.value.key] ?? '').trim() : ''
+  }
+
+  function shortenScaffold(value: string, limit = 28): string {
+    if (value.length <= limit) return value
+    return `${value.slice(0, limit - 1)}…`
+  }
+
+  function metricKindForColumn(column: DesignTableColumn): MetricKind | null {
+    return metricKind(column.key)
+  }
+
+  /** 表头 Tooltip 的解释 + 推荐范围；未知列不挂 tooltip。 */
+  function metricHint(column: DesignTableColumn): string {
+    const kind = metricKindForColumn(column)
+    if (!kind) return ''
+    return t(`design.results.thresholds.${kind}.hint`)
+  }
+
+  /** 单元格语义配色：仅有明确阈值的列（MW/LogP/HBD/HBA/TPSA/QED/违规数/可旋转键）着色。 */
+  function toneForColumn(column: DesignTableColumn, raw: string | undefined): MetricTone | null {
+    return classifyMetricTone(column.key, raw)
+  }
+
+  function toneClassFor(column: DesignTableColumn, raw: string | undefined): string {
+    const tone = toneForColumn(column, raw)
+    return tone ? `metric-value--${tone}` : ''
+  }
+
+  function metricToneClass(tone: MetricTone | null): string {
+    return tone ? `metric-value--${tone}` : ''
+  }
+
+  function isFavorite(row: DesignTableRow): boolean {
+    return favoriteKeys.value.includes(row.__rowKey)
+  }
+
+  function isExcluded(row: DesignTableRow): boolean {
+    return excludedKeys.value.includes(row.__rowKey)
+  }
+
+  function toggleFavorite(row: DesignTableRow): void {
+    const key = row.__rowKey
+    favoriteKeys.value = isFavorite(row)
+      ? favoriteKeys.value.filter(item => item !== key)
+      : [...favoriteKeys.value, key]
+    if (isFavorite(row)) {
+      // 喜欢与排除互斥：标了喜欢就撤销排除，避免同一行既收藏又隐藏。
+      excludedKeys.value = excludedKeys.value.filter(item => item !== key)
+    }
+    persistMarks()
+  }
+
+  function toggleExclude(row: DesignTableRow): void {
+    const key = row.__rowKey
+    excludedKeys.value = isExcluded(row)
+      ? excludedKeys.value.filter(item => item !== key)
+      : [...excludedKeys.value, key]
+    if (isExcluded(row)) {
+      favoriteKeys.value = favoriteKeys.value.filter(item => item !== key)
+    }
+    persistMarks()
+  }
+
+  function marksStorageKey(): string {
+    return `design:results:marks:${taskId.value}`
+  }
+
+  function loadMarks(): void {
+    favoriteKeys.value = []
+    excludedKeys.value = []
+    if (!taskId.value) return
+    try {
+      const raw = window.localStorage.getItem(marksStorageKey())
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { favorite?: unknown; excluded?: unknown }
+      favoriteKeys.value = Array.isArray(parsed.favorite)
+        ? parsed.favorite.filter((item): item is string => typeof item === 'string')
+        : []
+      excludedKeys.value = Array.isArray(parsed.excluded)
+        ? parsed.excluded.filter((item): item is string => typeof item === 'string')
+        : []
+    } catch {
+      // localStorage 被禁用或内容损坏时静默降级：只是标记不持久化，不影响结果浏览。
+      favoriteKeys.value = []
+      excludedKeys.value = []
+    }
+  }
+
+  function persistMarks(): void {
+    if (!taskId.value) return
+    try {
+      window.localStorage.setItem(
+        marksStorageKey(),
+        JSON.stringify({ favorite: favoriteKeys.value, excluded: excludedKeys.value })
+      )
+    } catch {
+      // 配额写满 / 隐私模式下忽略写入失败。
+    }
+  }
+
+  function toggleColumn(key: string, event?: Event): void {
+    const checked = event?.target instanceof HTMLInputElement
+      ? event.target.checked
+      : hiddenColumnKeys.value.includes(key)
+    hiddenColumnKeys.value = checked
+      ? hiddenColumnKeys.value.filter(item => item !== key)
+      : [...hiddenColumnKeys.value, key]
+  }
+
+  const activePosition = computed(() => {
+    if (!activeRow.value) return 0
+    return sortedRows.value.findIndex(row => row.__rowKey === activeRow.value?.__rowKey) + 1
+  })
+
+  function canStep(offset: number): boolean {
+    const next = activePosition.value + offset
+    return next >= 1 && next <= sortedRows.value.length
+  }
+
+  async function stepActive(offset: number): Promise<void> {
+    const next = sortedRows.value[activePosition.value - 1 + offset]
+    if (!next) return
+    activeRowKey.value = next.__rowKey
+    await nextTick()
+    // 卡片视图下把目标卡片滚进视野；表格分页外的行不强求。
+    const element = document.querySelector<HTMLElement>(`[data-row-key="${next.__rowKey}"]`)
+    if (element && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }
+
+  const compareMolecules = computed<CompareMolecule[]>(() =>
+    selectedRows.value.slice(0, MAX_COMPARE).map(row => ({
+      key: row.__rowKey,
+      index: rowIndex(row),
+      smiles: rowSmiles(row),
+      sequence: rowSequence(row),
+      rating: starsForRow(row),
+      violations: countLipinskiViolations(propertiesForRow(row)),
+      favorite: isFavorite(row),
+      metrics: rowMetrics(row),
+    }))
+  )
+
+  function openCompare(): void {
+    if (selectedRows.value.length < 2) {
+      message.warning(t('design.results.compare.needTwo'))
+      return
+    }
+    if (selectedRows.value.length > MAX_COMPARE) {
+      message.warning(t('design.results.compare.capped', { count: MAX_COMPARE }))
+    }
+    compareOpen.value = true
+  }
+
+  /** 下游管线交接：选中行 → CSV → 上传 → 带 file_id 跳到 ADMET 预测 / 虚拟筛选配置页。 */
+  async function sendToPipeline(target: 'admet' | 'screening'): Promise<void> {
+    const projectId = detail.value?.project_id
+    if (!projectId) {
+      message.warning(t('design.results.handoff.noProject'))
+      return
+    }
+    const rowsForExport = (selectedRows.value.length ? selectedRows.value : saveableRows.value).filter(
+      row => rowSmiles(row)
+    )
+    if (!rowsForExport.length) {
+      message.warning(t('design.results.handoff.noSmiles'))
+      return
+    }
+    const csv = buildMoleculeCsv(
+      columns.value.map(column => ({ key: column.key, title: column.title })),
+      rowsForExport
+    )
+    const fileName = `generation-${taskId.value || 'result'}-${
+      target === 'admet' ? 'admet' : 'screening'
+    }.csv`
+    handoffPending.value = target
+    try {
+      const file = new File([csv], fileName, { type: 'text/csv' })
+      const uploaded = await uploadFile(file)
+      const fileId = uploaded.data?.id
+      if (!fileId) {
+        throw new Error('missing file id')
+      }
+      await router.push({
+        name: target === 'admet' ? 'PropertyPredict' : 'ScreenConfig',
+        query: { project_id: projectId, file_id: fileId, filename: fileName },
+      })
+      message.success(
+        t(target === 'admet' ? 'design.results.handoff.sentAdmet' : 'design.results.handoff.sentScreening', {
+          count: rowsForExport.length,
+        })
+      )
+    } catch {
+      message.error(t('design.results.handoff.failed'))
+    } finally {
+      handoffPending.value = null
+    }
   }
 
   function resetFilters(): void {
@@ -1222,6 +1696,7 @@
   }
 
   onMounted(() => {
+    loadMarks()
     void loadResult()
   })
 
@@ -1758,6 +2233,116 @@
     padding: 48px 0;
     text-align: center;
     color: @text-tertiary;
+  }
+
+  /* ---------- 评审标记 / 列控制 / 下游交接 ---------- */
+
+  .results-handoff {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: @surface-sunken;
+    border: 1px dashed @border-color;
+    border-radius: 8px;
+  }
+
+  .results-handoff__hint {
+    flex: 1 1 220px;
+    color: @text-tertiary;
+    font-size: @font-size-xs;
+  }
+
+  .column-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    min-width: 180px;
+    overflow-y: auto;
+  }
+
+  .column-toggle__title {
+    margin: 0 0 2px;
+    color: @text-secondary;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-medium;
+  }
+
+  .results-table .col-mark {
+    width: 72px;
+  }
+
+  .row-mark {
+    color: @text-tertiary;
+    padding: 0 4px;
+  }
+
+  .row-mark--on {
+    color: @warning-color;
+  }
+
+  .row-mark--off {
+    color: @error-color;
+  }
+
+  .results-table tbody tr.is-favorite {
+    box-shadow: inset 2px 0 0 @warning-color;
+  }
+
+  .results-table tbody tr.is-excluded {
+    opacity: 0.55;
+  }
+
+  .results-table tbody tr.is-excluded .col-smiles code {
+    text-decoration: line-through;
+  }
+
+  .results-table .col-scaffold {
+    max-width: 200px;
+  }
+
+  .results-table__scaffold {
+    display: inline-block;
+    max-width: 190px;
+    overflow: hidden;
+    color: @text-secondary;
+    font-family: @font-family-mono;
+    font-size: @font-size-xs;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  /* 语义配色：好=绿、临界=琥珀、越界=红；缺值保持中性（无 tone）。 */
+  .metric-value--good {
+    color: @success-color;
+    font-weight: @font-weight-medium;
+  }
+
+  .metric-value--warn {
+    color: @warning-color;
+    font-weight: @font-weight-medium;
+  }
+
+  .metric-value--bad {
+    color: @error-color;
+    font-weight: @font-weight-medium;
+  }
+
+  .results-viewer__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .results-viewer__position {
+    color: @text-tertiary;
+    font-size: @font-size-xs;
   }
 
   .results-pagination {
