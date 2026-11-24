@@ -1931,7 +1931,28 @@ export default {
       label: '模型',
       placeholder: '选择模型',
       hint: '存在同类多模型时可自由切换；默认沿用上次选择',
-      mock: '演示模型'
+      mock: '演示模型',
+      meta: {
+        duration: '预计耗时',
+        scenario: '适用场景',
+        selected: '当前模型',
+        pocket2mol: {
+          duration: '约 10 ~ 30 分钟',
+          scenario: '口袋条件的从头分子生成，适合已知结合位点的批量探索'
+        },
+        diffdock: {
+          duration: '约 1 ~ 5 分钟',
+          scenario: '蛋白-配体对接，输出候选结合姿态与打分'
+        },
+        boltz2: {
+          duration: '约 2 ~ 10 分钟',
+          scenario: '结构与亲和力预测，适合先验证结合可能性'
+        },
+        generic: {
+          duration: '耗时取决于口袋规模与采样数量',
+          scenario: '按工具契约声明的能力执行'
+        }
+      }
     },
     runs: {
       title: '设计任务',
@@ -2022,7 +2043,50 @@ export default {
       invalidRadius: '口袋半径需大于 0 且不超过 100 Å',
       invalidMw: '分子量下限需大于 0，且上限必须大于下限',
       invalidLogp: 'logP 上限必须大于下限',
-      invalidSeed: '随机种子不能为负数'
+      invalidSeed: '随机种子不能为负数',
+      advancedParams: '高级参数',
+      resetParams: '重置默认参数',
+      paramsReset: '已恢复默认参数',
+      submittedStay: '任务已提交，可在下方查看实时进度',
+      viewResultsNow: '立即查看结果',
+      pocketPreview: '口袋三维预览',
+      pocketPreviewMissing: '该口袋缺少可用的结构文件，暂时无法预览三维结构'
+    },
+    presets: {
+      title: '参数预设',
+      selectPlaceholder: '选择参数预设',
+      builtIn: '内置',
+      custom: '自定义',
+      empty: '还没有自定义预设',
+      saveCurrent: '保存当前参数',
+      saveTitle: '保存参数预设',
+      name: '预设名称',
+      namePlaceholder: '例如：大口袋精细采样',
+      nameRequired: '请填写预设名称',
+      saved: '参数预设已保存',
+      deleted: '参数预设已删除',
+      delete: '删除',
+      builtInPresets: {
+        quick: '快速探索',
+        standard: '标准生成',
+        fine: '精细采样'
+      }
+    },
+    progressCard: {
+      title: '任务进度',
+      close: '关闭',
+      status: '状态',
+      progress: '进度',
+      queuing: '任务已提交，正在等待调度',
+      queuePosition: '排队位置：第 {position} 位',
+      estimatedWait: '预计等待：{time}',
+      cancel: '取消任务',
+      cancelConfirm: '确定取消该任务？',
+      cancelSuccess: '任务已取消',
+      viewDetail: '任务详情',
+      viewResults: '查看结果',
+      failed: '任务执行失败',
+      completed: '任务已完成'
     },
     peptide: {
       title: '多肽活性与毒性预测',

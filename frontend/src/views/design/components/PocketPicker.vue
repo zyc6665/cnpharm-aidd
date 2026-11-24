@@ -126,13 +126,29 @@
         />
       </section>
 
+      <section v-if="showPreview && modelValue" class="pocket-preview" data-testid="pocket-preview">
+        <div class="pocket-preview__title">{{ t('design.molecule.pocketPreview') }}</div>
+        <div v-if="previewScene" class="pocket-preview__viewer">
+          <PocketPreviewViewer
+            :scene="previewScene"
+            variant="compact"
+            mode="pocket"
+            :voxel-grid="previewVoxelGrid"
+            :allow-native-fullscreen="false"
+          />
+        </div>
+        <div v-else class="pocket-preview__empty" data-testid="pocket-preview-empty">
+          {{ t('design.molecule.pocketPreviewMissing') }}
+        </div>
+      </section>
+
       <a-alert v-if="error" type="warning" show-icon :message="error" />
     </a-spin>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listDesignProjects,
@@ -144,6 +160,8 @@ import {
 import StructurePredictForm from '@/components/design/StructurePredictForm.vue'
 import PocketPredictPanel from '@/components/design/PocketPredictPanel.vue'
 import { selectNewlyAdded } from '@/domain/design/pipeline'
+import { buildPocketBoxVoxelGrid } from '@/domain/pockets/pocket-preview'
+import type { VisualizationScene } from '@/domain/tasks'
 import type {
   PocketSummary,
   ProteinDetail,
@@ -153,10 +171,50 @@ import type {
 import type { ResearchProject } from '@/types/projects'
 import type { DesignPocketSelection } from '@/types/design'
 
-const props = defineProps<{
-  modelValue: DesignPocketSelection | null
-  defaultProjectId?: string
-}>()
+/**
+ * 三维预览按需加载：`MoleculeViewer` 会拉起 Mol* 整套渲染栈，
+ * 而大部分用户只关心口袋选择本身——没开 `showPreview` 时不该把这部分打进首屏。
+ */
+const PocketPreviewViewer = defineAsyncComponent(
+  () => import('@/components/tasks/MoleculeViewer.vue')
+)
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: DesignPocketSelection | null
+    defaultProjectId?: string
+    /** 是否在口袋选定后展示紧凑的三维预览（默认关闭，保持既有调用方行为）。 */
+    showPreview?: boolean
+  }>(),
+  { defaultProjectId: '', showPreview: false }
+)
+
+const previewScene = computed<VisualizationScene | null>(() => {
+  const fileId = props.modelValue?.structureFileId
+  if (!fileId) return null
+  const entry = {
+    key: `pocket-preview-${fileId}`,
+    url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
+    label: props.modelValue?.pocketLabel || 'pocket structure',
+    source: 'input' as const,
+    role: 'receptor' as const,
+    format: 'pdb' as const,
+    extension: '.pdb',
+  }
+  return {
+    entries: [entry],
+    inputEntries: [entry],
+    outputEntries: [],
+    supportedOutputFiles: [],
+    unsupportedOutputFiles: [],
+    hasRenderableOutput: true,
+    selectedOutputKey: entry.key,
+  }
+})
+
+const previewVoxelGrid = computed(() =>
+  buildPocketBoxVoxelGrid(props.modelValue?.center, props.modelValue?.boxSize)
+)
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: DesignPocketSelection | null): void
@@ -427,5 +485,33 @@ onMounted(async () => {
   margin: 8px 0 0;
   font-size: 12px;
   color: @warning-color;
+}
+
+.pocket-preview {
+  margin-top: @spacing-md;
+  padding: @spacing-md;
+  border: 1px solid @border-color;
+  border-radius: @border-radius-md;
+  background: @surface-sunken;
+}
+
+.pocket-preview__title {
+  margin-bottom: @spacing-sm;
+  color: @text-secondary;
+  font-size: @font-size-sm;
+  font-weight: @font-weight-medium;
+}
+
+.pocket-preview__viewer {
+  height: 240px;
+  overflow: hidden;
+  border-radius: @border-radius-md;
+}
+
+.pocket-preview__empty {
+  padding: @spacing-lg;
+  color: @text-tertiary;
+  font-size: @font-size-sm;
+  text-align: center;
 }
 </style>
