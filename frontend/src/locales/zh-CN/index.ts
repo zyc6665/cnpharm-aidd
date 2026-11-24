@@ -2760,6 +2760,51 @@ export default {
       nextAttempt: '下一次调度：{time}',
       retryCount: '资源重试次数：{count}'
     },
+    queue: {
+      title: '任务排队中',
+      generic: '任务已进入队列，等待可用计算资源',
+      position: '排队位置：第 {position} 位',
+      estimatedWait: '预计等待：{time}',
+      queue: '队列：{queue}'
+    },
+    progressDetail: {
+      generated: '已生成 {generated} / {total}',
+      generatedOnly: '已生成 {generated} 个',
+      bestScore: '最佳评分：{score}'
+    },
+    failureAdvice: {
+      title: '失败诊断与建议',
+      adjustRetry: '调整参数重试',
+      retryNow: '原样重试',
+      viewLogs: '查看日志',
+      causes: {
+        pocketTooSmall: '口袋体积过小或未命中有效原子，生成器没有足够的空间放置分子。',
+        invalidProtein: '受体结构无法解析或格式不符合要求。',
+        gpuOom: 'GPU 显存不足，推理过程中被中断。',
+        timeout: '任务执行超过工具时限，尚未产出完整结果。',
+        missingArtifact: '任务执行完成，但缺少标准产物（结果表 / 配体结构）。',
+        inputMissing: '输入文件缺失或路径不可访问。',
+        unknown: '任务执行失败，暂未从日志中识别出明确原因。'
+      },
+      suggestions: {
+        pocketTooSmall: '重新预测并选定一个更大的口袋，或适当增大口袋半径后重试。',
+        invalidProtein: '回到靶点页重新准备受体结构，确认能正常打开后再提交。',
+        gpuOom: '减少采样数量（例如 20），或等 GPU 资源空闲后再提交。',
+        timeout: '减少采样数量 / 口袋范围后重试；必要时拆分任务。',
+        missingArtifact: '查看任务日志确认工具输出目录，必要时调整工具契约后重新提交。',
+        inputMissing: '检查输入文件是否仍存在，重新上传缺失的结构或口袋文件。',
+        unknown: '查看完整日志（stderr / stdout）定位具体报错，再决定是否重试。'
+      },
+      retry: {
+        pocketTooSmall: '建议带入口袋半径提示重新提交。',
+        invalidProtein: '先修复输入，原样重试不会解决问题。',
+        gpuOom: '建议降低采样数量后重试。',
+        timeout: '建议降低工作量后重试。',
+        missingArtifact: '先确认产物生成链路，再决定是否重试。',
+        inputMissing: '补齐输入文件后再重试。',
+        unknown: '可直接重试；若再次失败请查看日志。'
+      }
+    },
     resourceReservation: {
       title: '资源调度预留',
       status: '状态：{status}',

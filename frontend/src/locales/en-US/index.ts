@@ -2774,6 +2774,51 @@ export default {
       nextAttempt: 'Next dispatch: {time}',
       retryCount: 'Resource retry count: {count}'
     },
+    queue: {
+      title: 'Task queued',
+      generic: 'The task is queued and waiting for available compute resources',
+      position: 'Queue position: #{position}',
+      estimatedWait: 'Estimated wait: {time}',
+      queue: 'Queue: {queue}'
+    },
+    progressDetail: {
+      generated: 'Generated {generated} / {total}',
+      generatedOnly: 'Generated {generated}',
+      bestScore: 'Best score: {score}'
+    },
+    failureAdvice: {
+      title: 'Failure diagnosis & suggestions',
+      adjustRetry: 'Adjust parameters & retry',
+      retryNow: 'Retry as-is',
+      viewLogs: 'View logs',
+      causes: {
+        pocketTooSmall: 'The pocket is too small or contains no usable atoms, so the generator has no room to place molecules.',
+        invalidProtein: 'The receptor structure could not be parsed or does not match the expected format.',
+        gpuOom: 'GPU memory ran out and inference was interrupted.',
+        timeout: 'Execution exceeded the tool time limit before producing complete results.',
+        missingArtifact: 'Execution finished but standard artifacts (result table / ligand structures) are missing.',
+        inputMissing: 'An input file is missing or its path is not accessible.',
+        unknown: 'The task failed and no clear cause could be identified from the logs.'
+      },
+      suggestions: {
+        pocketTooSmall: 'Re-predict and select a larger pocket, or increase the pocket radius before retrying.',
+        invalidProtein: 'Prepare the receptor structure again on the target page and confirm it opens correctly before resubmitting.',
+        gpuOom: 'Reduce the sample count (e.g. 20) or wait for idle GPU capacity before resubmitting.',
+        timeout: 'Reduce samples / pocket size and retry; split the task if necessary.',
+        missingArtifact: 'Inspect task logs to confirm the tool output directory, then adjust the tool contract if needed.',
+        inputMissing: 'Verify the input file still exists and re-upload the missing structure or pocket file.',
+        unknown: 'Inspect the full logs (stderr / stdout) to locate the error before deciding whether to retry.'
+      },
+      retry: {
+        pocketTooSmall: 'Resubmit with the suggested pocket radius hint.',
+        invalidProtein: 'Fix the input first — retrying as-is will not help.',
+        gpuOom: 'Retry with a lower sample count.',
+        timeout: 'Retry with a smaller workload.',
+        missingArtifact: 'Confirm the artifact generation pipeline before retrying.',
+        inputMissing: 'Provide the missing input files before retrying.',
+        unknown: 'You can retry directly; check the logs again if it fails.'
+      }
+    },
     resourceReservation: {
       title: 'Resource dispatch reservation',
       status: 'Status: {status}',
