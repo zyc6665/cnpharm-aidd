@@ -103,6 +103,24 @@
             <div v-if="task.progress_message" class="progress-info">
               {{ task.progress_message }}
             </div>
+            <div
+              v-if="progressDetail.generated !== null || progressDetail.bestScore !== null"
+              class="progress-detail"
+              data-testid="task-progress-detail"
+            >
+              <span v-if="progressDetail.generated !== null && progressDetail.total !== null">
+                {{ t('tasks.progressDetail.generated', {
+                  generated: progressDetail.generated,
+                  total: progressDetail.total
+                }) }}
+              </span>
+              <span v-else-if="progressDetail.generated !== null">
+                {{ t('tasks.progressDetail.generatedOnly', { generated: progressDetail.generated }) }}
+              </span>
+              <span v-if="progressDetail.bestScore !== null">
+                {{ t('tasks.progressDetail.bestScore', { score: progressDetail.bestScore }) }}
+              </span>
+            </div>
           </div>
 
           <div v-if="resourceWait" class="resource-wait-notice">
@@ -119,10 +137,37 @@
                 <div v-if="resourceWait.category === 'quota'" class="resource-wait-code">
                   <a-typography-text code>{{ resourceWait.reason }}</a-typography-text>
                 </div>
+                <div v-if="queueInfo.queue">
+                  {{ t('tasks.queue.queue', { queue: queueInfo.queue }) }}
+                </div>
+                <div v-if="queueInfo.queuePosition !== null">
+                  {{ t('tasks.queue.position', { position: queueInfo.queuePosition }) }}
+                </div>
+                <div v-if="queueInfo.estimatedWaitSeconds !== null">
+                  {{ t('tasks.queue.estimatedWait', { time: queueWaitText }) }}
+                </div>
                 <div>{{ t('tasks.resourceWait.retryCount', { count: resourceWait.retry_count }) }}</div>
                 <div v-if="resourceWait.next_attempt_at">
                   {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
                 </div>
+              </template>
+            </a-alert>
+          </div>
+
+          <div v-if="showStandaloneQueueNotice" class="queue-notice" data-testid="task-pending-queue">
+            <a-alert type="info" show-icon>
+              <template #message>{{ t('tasks.queue.title') }}</template>
+              <template #description>
+                <div v-if="queueInfo.queue">
+                  {{ t('tasks.queue.queue', { queue: queueInfo.queue }) }}
+                </div>
+                <div v-if="queueInfo.queuePosition !== null">
+                  {{ t('tasks.queue.position', { position: queueInfo.queuePosition }) }}
+                </div>
+                <div v-if="queueInfo.estimatedWaitSeconds !== null">
+                  {{ t('tasks.queue.estimatedWait', { time: queueWaitText }) }}
+                </div>
+                <div v-if="!hasQueueDetails">{{ t('tasks.queue.generic') }}</div>
               </template>
             </a-alert>
           </div>
@@ -250,6 +295,33 @@
                 </div>
               </div>
 
+              <div v-if="showFailureAdvice" class="info-card failure-advice" data-testid="task-failure-advice">
+                <h3 class="card-title">
+                  <WarningOutlined />
+                  {{ t('tasks.failureAdvice.title') }}
+                </h3>
+                <a-alert
+                  type="warning"
+                  show-icon
+                  :message="t(failureAdvice.messageKey)"
+                  :description="`${t(failureAdvice.suggestionKey)} ${t(failureAdvice.retryKey)}`"
+                />
+                <div class="failure-advice__actions">
+                  <a-button
+                    type="primary"
+                    data-testid="task-failure-adjust-retry"
+                    @click="handleFailureRetry"
+                  >
+                    {{ failureAdvice.canAdjustParams && isMoleculeGenerationTask
+                      ? t('tasks.failureAdvice.adjustRetry')
+                      : t('tasks.failureAdvice.retryNow') }}
+                  </a-button>
+                  <a-button data-testid="task-failure-view-logs" @click="expandLogs">
+                    {{ t('tasks.failureAdvice.viewLogs') }}
+                  </a-button>
+                </div>
+              </div>
+
             </a-col>
 
             <!-- 右侧：工具信息 -->
@@ -346,7 +418,8 @@ import {
   FileOutlined,
   ReloadOutlined,
   ToolOutlined,
-  PlayCircleOutlined
+  PlayCircleOutlined,
+  WarningOutlined
 } from '@ant-design/icons-vue'
 import { message, Modal, theme } from 'ant-design-vue'
 import { useTasksStore, useUserStore } from '@/stores'
@@ -366,13 +439,18 @@ import {
   canRetryTask as canRetryTaskForActor,
   formatTaskDetailTime,
   formatTaskFileSize,
+  formatWaitSeconds,
+  buildTaskFailureAdvice,
   buildTaskFailureDiagnostics,
   getTaskCompletedTitleKey,
   getTaskStatusColor,
   getTaskStatusTextKey,
   normalizeTaskStatus,
+  parseTaskProgressDetail,
+  readTaskQueueInfo,
 } from '@/domain/tasks'
 import { resolveTaskResultPath } from '@/domain/design/runs'
+import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
 const route = useRoute()
 const router = useRouter()
@@ -459,8 +537,32 @@ watch(
 const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value))
 const resourceWait = computed(() => {
   const wait = task.value?.resource_wait
-  return taskStatus.value === 'pending' && wait ? wait : null
+  const isWaiting = taskStatus.value === 'pending' || taskStatus.value === 'queued'
+  return isWaiting && wait ? wait : null
 })
+const queueInfo = computed(() => readTaskQueueInfo(task.value))
+const queueWaitText = computed(() => formatWaitSeconds(queueInfo.value.estimatedWaitSeconds))
+const hasQueueDetails = computed(
+  () =>
+    queueInfo.value.queue !== null ||
+    queueInfo.value.queuePosition !== null ||
+    queueInfo.value.estimatedWaitSeconds !== null
+)
+const showStandaloneQueueNotice = computed(
+  () =>
+    (taskStatus.value === 'pending' || taskStatus.value === 'queued') &&
+    !resourceWait.value
+)
+const progressDetail = computed(() => parseTaskProgressDetail(task.value))
+const isMoleculeGenerationTask = computed(
+  () =>
+    (task.value?.tool_slug ?? task.value?.tool?.slug) ===
+    MOLECULE_GENERATION_TOOL_SLUG
+)
+const failureAdvice = computed(() => buildTaskFailureAdvice(task.value))
+const showFailureAdvice = computed(
+  () => taskStatus.value === 'failure' || taskStatus.value === 'timeout'
+)
 const resourceWaitText = computed(() => {
   if (!resourceWait.value) return ''
   if (resourceWait.value.category === 'quota') {
@@ -585,6 +687,26 @@ const handleRetry = async () => {
   } catch {
     // 请求层已经展示具体错误，避免失败时误报成功。
   }
+}
+
+/**
+ * 失败卡片的主按钮：能定位到提交参数的（分子生成）带回建议值跳回提交页，
+ * 其余工具直接走原样重试。建议值走 query，提交页按 schema 白名单读取。
+ */
+const handleFailureRetry = () => {
+  if (failureAdvice.value.canAdjustParams && isMoleculeGenerationTask.value) {
+    const query: Record<string, string> = { retry_from: taskId.value }
+    for (const [key, value] of Object.entries(failureAdvice.value.suggestedParams ?? {})) {
+      query[key] = String(value)
+    }
+    void router.push({ name: 'MoleculeGeneration', query })
+    return
+  }
+  void handleRetry()
+}
+
+const expandLogs = () => {
+  logCollapseKeys.value = ['logs']
 }
 
 const handleDelete = () => {
@@ -765,6 +887,33 @@ onUnmounted(() => {
 
 .reservation-notice {
   margin-bottom: @spacing-xl;
+}
+
+.queue-notice {
+  margin-bottom: @spacing-xl;
+}
+
+.progress-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: @spacing-md;
+  margin-top: @spacing-xs;
+  color: @text-color-light-secondary;
+  font-size: @font-size-sm;
+
+  span + span {
+    padding-left: @spacing-md;
+    border-left: 1px solid @border-color-light;
+  }
+}
+
+.failure-advice {
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-sm;
+    margin-top: @spacing-md;
+  }
 }
 
 // 运行日志卡片
