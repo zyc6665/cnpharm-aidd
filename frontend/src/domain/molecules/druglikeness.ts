@@ -22,7 +22,7 @@ export type LipinskiRuleId = 'mw' | 'logp' | 'hbd' | 'hba' | 'tpsa'
 
 export interface LipinskiRuleDefinition {
   id: LipinskiRuleId
-  /** 规则上限（不含等于）。 */
+  /** 规则上限（含等于，即 value <= limit）。 */
   limit: number
 }
 

@@ -535,6 +535,7 @@
     createCandidateSet,
   } from '@/api/compounds'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
+  import { failureStatuses, getTaskStatusTextKey } from '@/domain/tasks'
   import { fetchProtectedFileText, saveBlobAsFile } from '@/utils/protected-file-access'
   import { splitSdfRecords } from '@/domain/tasks/sdf-result'
   import {
@@ -620,28 +621,22 @@
   const setName = ref('')
   const saveMode = ref<'all' | 'selected'>('all')
 
+  /** 与虚拟筛选结果页口径一致：单次最多保存 200 个候选，分批 20 个并发创建，避免一次性打爆接口。 */
+  const MAX_SAVE_CANDIDATES = 200
+  const SAVE_BATCH_SIZE = 20
+
   let stream: TaskEventStreamHandle | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   const isTerminal = computed(() => (status.value ? isTaskTerminalStatus(status.value) : false))
-  const isFailure = computed(() => status.value === 'failure' || status.value === 'canceled')
-
-  const statusText = computed(() => {
-    switch (status.value) {
-      case 'success':
-        return t('design.status.success')
-      case 'failure':
-        return t('design.status.failure')
-      case 'canceled':
-        return t('design.status.canceled')
-      case 'running':
-        return t('design.status.running')
-      case 'pending':
-        return t('design.status.pending')
-      default:
-        return '-'
-    }
+  // `timeout` 属于 failureStatuses；`rejected` 是「没让跑」的终态，同样不能当作成功展示或允许保存。
+  const isFailure = computed(() => {
+    const current = status.value
+    if (!current) return false
+    return current === 'rejected' || failureStatuses.includes(current)
   })
+
+  const statusText = computed(() => (status.value ? t(getTaskStatusTextKey(status.value)) : '-'))
 
   function findColumn(patterns: RegExp[]): DesignTableColumn | undefined {
     return columns.value.find(
@@ -782,9 +777,13 @@
     sortedRows.value.filter(row => selectedKeys.value.includes(row.__rowKey))
   )
 
-  const rowsToSave = computed(() =>
+  /** 当前待保存池：选中项或「当前筛选列表里所有含 SMILES/序列的行」。 */
+  const saveCandidatePool = computed(() =>
     saveMode.value === 'selected' ? selectedRows.value : saveableRows.value
   )
+
+  /** 真正提交的行数封顶 200，保证弹窗里的 `{count}` 与实际保存数量一致。 */
+  const rowsToSave = computed(() => saveCandidatePool.value.slice(0, MAX_SAVE_CANDIDATES))
 
   const canSave = computed(
     () => isTerminal.value && !isFailure.value && saveableRows.value.length > 0
@@ -915,10 +914,14 @@
     })
   }
 
-  function formatMetric(raw: string | undefined): string {
-    const value = Number((raw ?? '').trim())
+  function formatMetric(raw: string | null | undefined): string {
+    // 空单元格绝不能走 Number('')（结果是 0），否则缺失的理化性质会被显示成 0。
+    if (raw === undefined || raw === null || raw.trim() === '') {
+      return '-'
+    }
+    const value = Number(raw.trim())
     if (!Number.isFinite(value)) {
-      return raw && raw.trim() !== '' ? raw : '-'
+      return raw
     }
     return formatNumber(value, 3)
   }
@@ -1172,25 +1175,35 @@
       return
     }
 
+    if (saveCandidatePool.value.length > MAX_SAVE_CANDIDATES) {
+      message.warning(t('design.results.saveCapped', { max: MAX_SAVE_CANDIDATES }))
+    }
+
     saving.value = true
     try {
-      const candidateIds = await Promise.all(
-        rowsToSave.value.map(async (row) => {
-          const smiles = rowSmiles(row)
-          const sequence = rowSequence(row)
-          const payload: CandidateCreateInput = {
-            candidate_type: smiles ? 'SMALL_MOLECULE' : 'PEPTIDE',
-            source: 'DESIGN',
-            task_id: taskId.value,
-            ...(smiles ? { smiles } : {}),
-            ...(sequence ? { peptide_sequence: sequence } : {}),
-            design_score: numericValue(row, scoreColumn.value?.key) ?? undefined,
-            attrs: { ...row },
-          }
-          const created = await createCandidate(projectId, payload)
-          return created.data.id
-        })
-      )
+      // 分批创建候选，避免一次 Promise.all 打出数百个并发请求。
+      const candidateIds: string[] = []
+      for (let offset = 0; offset < rowsToSave.value.length; offset += SAVE_BATCH_SIZE) {
+        const batch = rowsToSave.value.slice(offset, offset + SAVE_BATCH_SIZE)
+        const batchIds = await Promise.all(
+          batch.map(async (row) => {
+            const smiles = rowSmiles(row)
+            const sequence = rowSequence(row)
+            const payload: CandidateCreateInput = {
+              candidate_type: smiles ? 'SMALL_MOLECULE' : 'PEPTIDE',
+              source: 'DESIGN',
+              task_id: taskId.value,
+              ...(smiles ? { smiles } : {}),
+              ...(sequence ? { peptide_sequence: sequence } : {}),
+              design_score: numericValue(row, scoreColumn.value?.key) ?? undefined,
+              attrs: { ...row },
+            }
+            const created = await createCandidate(projectId, payload)
+            return created.data.id
+          })
+        )
+        candidateIds.push(...batchIds)
+      }
 
       const set = await createCandidateSet(projectId, {
         name: setName.value.trim(),

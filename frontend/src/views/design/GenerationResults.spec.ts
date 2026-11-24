@@ -21,7 +21,8 @@ vi.mock('@/api/task-events', () => ({
 
 vi.mock('@/api/tasks', () => ({
   getTaskDetail: vi.fn().mockRejectedValue(new Error('no task detail in unit test')),
-  isTaskTerminalStatus: (status: string) => ['success', 'failure', 'canceled'].includes(status),
+  isTaskTerminalStatus: (status: string) =>
+    ['success', 'failure', 'timeout', 'canceled', 'rejected'].includes(status),
 }))
 
 vi.mock('@/api/compounds', () => ({
@@ -248,6 +249,35 @@ describe('GenerationResults', () => {
       expect(wrapper.find('[data-testid="results-viewer-rating"]').exists()).toBe(true)
     })
 
+    it('renders empty numeric cells as "-" and never as "0"', async () => {
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'score', title: 'score', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', score: '' },
+          { __rowKey: '1', smiles: 'CCN', score: '0.5' },
+        ],
+      })
+      const wrapper = await mountResults()
+
+      const numericCells = wrapper
+        .findAll('[data-testid="molecule-table"] td.col-num')
+        .map(cell => cell.text().trim())
+      expect(numericCells).toEqual(['0.5', '-'])
+      expect(numericCells).not.toContain('0')
+
+      await wrapper.get('[data-value="card"]').trigger('click')
+      await flushPromises()
+
+      const cardMetrics = wrapper
+        .findAll('.molecule-card__metric dd')
+        .map(cell => cell.text().trim())
+      expect(cardMetrics).toContain('-')
+      expect(cardMetrics).not.toContain('0')
+    })
+
     it('marks passing, violating and missing Lipinski rules correctly', async () => {
       const wrapper = await mountResults()
 
@@ -312,5 +342,28 @@ describe('GenerationResults', () => {
       expect(wrapper.find('[data-testid="results-save-modal"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="results-set-name"]').exists()).toBe(true)
     })
+  })
+
+  describe('non-success terminal statuses', () => {
+    it.each(['timeout', 'rejected'] as const)(
+      'treats %s tasks as failures and blocks saving',
+      async (terminalStatus) => {
+        vi.mocked(getDesignGenerationResult).mockResolvedValue({
+          status: terminalStatus,
+          project_id: 'p1',
+          outputs: [],
+        } as never)
+
+        const wrapper = await mountResults()
+
+        expect(wrapper.find('[data-testid="results-task-failed"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="results-summary"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="molecule-table"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="molecule-grid"]').exists()).toBe(false)
+
+        const saveButton = wrapper.get('[data-testid="results-save-set"]')
+        expect(saveButton.attributes('disabled')).toBeDefined()
+      }
+    )
   })
 })
