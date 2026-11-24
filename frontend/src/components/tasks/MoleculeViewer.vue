@@ -81,6 +81,83 @@
           </button>
 
           <button
+            class="viewer-tool-btn"
+            :class="{ 'is-active': spinEnabled }"
+            type="button"
+            data-testid="viewer-spin-toggle"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="spinEnabled"
+            @click="toggleSpin"
+          >
+            {{ t('tasks.visualizationSpin') }}
+          </button>
+
+          <button
+            v-if="availableLayers.receptor"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': layerVisibility.receptor }"
+            type="button"
+            data-testid="viewer-layer-receptor"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="layerVisibility.receptor"
+            @click="toggleLayer('receptor')"
+          >
+            {{ t('tasks.visualizationLayerReceptor') }}
+          </button>
+
+          <button
+            v-if="availableLayers.ligand"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': layerVisibility.ligand }"
+            type="button"
+            data-testid="viewer-layer-ligand"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="layerVisibility.ligand"
+            @click="toggleLayer('ligand')"
+          >
+            {{ t('tasks.visualizationLayerLigand') }}
+          </button>
+
+          <button
+            v-if="availableLayers.pocket"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': layerVisibility.pocket }"
+            type="button"
+            data-testid="viewer-layer-pocket"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="layerVisibility.pocket"
+            @click="toggleLayer('pocket')"
+          >
+            {{ t('tasks.visualizationLayerPocket') }}
+          </button>
+
+          <button
+            v-if="availableLayers.voxels"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': layerVisibility.voxels }"
+            type="button"
+            data-testid="viewer-layer-voxels"
+            :disabled="loading || Boolean(error)"
+            :aria-pressed="layerVisibility.voxels"
+            @click="toggleLayer('voxels')"
+          >
+            {{ t('tasks.visualizationLayerVoxels') }}
+          </button>
+
+          <button
+            v-if="enableNearbyResidues || effectiveMode === 'docking'"
+            class="viewer-tool-btn"
+            :class="{ 'is-active': nearbyActive }"
+            type="button"
+            data-testid="viewer-nearby-residues"
+            :disabled="loading || Boolean(error) || !hasReceptorAndLigand"
+            :aria-pressed="nearbyActive"
+            @click="toggleNearbyResidues"
+          >
+            {{ t('tasks.visualizationNearbyResidues') }}
+          </button>
+
+          <button
             v-if="sequenceChains.length > 0"
             class="viewer-tool-btn"
             :class="{ 'is-active': sequenceOpen }"
@@ -132,11 +209,12 @@
 <script setup lang="ts">
 import 'molstar/build/viewer/molstar.css'
 
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
+import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state'
 import { PresetStructureRepresentations } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset'
 import { BoxShape3D } from 'molstar/lib/mol-plugin-state/transforms/shape'
 import { ShapeRepresentation3D } from 'molstar/lib/mol-plugin-state/transforms/representation'
@@ -184,11 +262,16 @@ const props = withDefaults(defineProps<{
   mode?: MolstarViewerMode
   allowNativeFullscreen?: boolean
   voxelGrid?: PocketVoxelGrid | null
+  focusResidue?: { chain?: string; authSeqId: number; insertionCode?: string } | null
+  enableNearbyResidues?: boolean
 }>(), {
   variant: 'full',
   allowNativeFullscreen: true,
   voxelGrid: null,
+  focusResidue: null,
+  enableNearbyResidues: false,
 })
+const emit = defineEmits<{ 'residue-focus-result': [status: 'focused' | 'not-found' | 'ambiguous'] }>()
 
 const { t } = useI18n()
 const isCompact = computed(() => props.variant === 'compact')
@@ -210,6 +293,24 @@ const sequenceChains = ref<SequenceChain[]>([])
 const selectedResidueKeys = ref<string[]>([])
 const lastAnchorKey = ref<string | null>(null)
 const sequenceOpen = ref(false)
+const spinEnabled = ref(false)
+const nearbyActive = ref(false)
+const layerVisibility = reactive<Record<'receptor' | 'ligand' | 'pocket' | 'voxels', boolean>>({
+  receptor: true,
+  ligand: true,
+  pocket: true,
+  voxels: true,
+})
+const hasReceptorAndLigand = computed(() =>
+  props.scene.entries.some(entry => entry.role === 'receptor' || entry.role === 'structure') &&
+  props.scene.entries.some(entry => entry.role === 'ligand'),
+)
+const availableLayers = computed(() => ({
+  receptor: props.scene.entries.some(entry => entry.role === 'receptor' || entry.role === 'structure'),
+  ligand: props.scene.entries.some(entry => entry.role === 'ligand'),
+  pocket: props.scene.entries.some(entry => entry.role === 'pocket'),
+  voxels: Boolean(props.voxelGrid?.boxes.length),
+}))
 
 interface LoadedEntryRecord {
   role: VisualizationScene['entries'][number]['role']
@@ -218,12 +319,25 @@ interface LoadedEntryRecord {
 }
 
 let viewer: MolstarViewer | null = null
+let viewerInitPromise: Promise<MolstarViewer> | null = null
+let renderSeq = 0
+let disposed = false
+let mutationQueue: Promise<void> = Promise.resolve()
+function enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = mutationQueue.then(operation, operation)
+  mutationQueue = result.then(() => undefined, () => undefined)
+  return result
+}
 let resizeObserver: ResizeObserver | null = null
 const entryResourcesRegistry = createRevocableResourceRegistry()
 let removeLayoutSyncListener: (() => void) | null = null
 let removeClickListener: (() => void) | null = null
 let loadedEntries: LoadedEntryRecord[] = []
 let selectionHighlightRefs: string[] = []
+let voxelRefs: string[] = []
+let nearbyRefs: string[] = []
+let focusHighlightRefs: string[] = []
+let cachedNearbyResidues: Array<{ chain: string; authSeqId: number }> | null = null
 
 function representationLabel(rep: MolstarRepresentation): string {
   switch (rep) {
@@ -439,6 +553,7 @@ async function addVoxelGrid(currentViewer: MolstarViewer, grid: PocketVoxelGrid)
   const state = currentViewer.plugin.state.data.build()
   const color = Color(grid.color ?? 0x22d3ee)
   const radius = grid.radius ?? 0.05
+  const createdRefs: string[] = []
 
   for (const box of grid.boxes) {
     const [x, y, z] = box.center
@@ -449,10 +564,12 @@ async function addVoxelGrid(currentViewer: MolstarViewer, grid: PocketVoxelGrid)
       radius,
       color,
     })
+    createdRefs.push(shape.ref)
     shape.apply(ShapeRepresentation3D, {})
   }
 
   await state.commit()
+  voxelRefs = createdRefs
 
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
@@ -649,6 +766,9 @@ async function handleRepresentationChange() {
   const currentViewer = viewer
   const savedCamera = currentViewer.plugin.canvas3d?.camera.getSnapshot()
   const targetRecords = loadedEntries.filter(record => record.isPrimaryTarget)
+  nearbyRefs = []
+  nearbyActive.value = false
+  focusHighlightRefs = []
 
   for (const record of targetRecords) {
     const structureRef = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
@@ -713,6 +833,229 @@ function toggleBackground() {
   setMolstarBackgroundColor(viewer, activeBackground.value)
 }
 
+function toggleSpin() {
+  spinEnabled.value = !spinEnabled.value
+  if (!viewer) return
+  try {
+    viewer.plugin.canvas3d?.setProps({
+      trackball: {
+        animate: spinEnabled.value
+          ? { name: 'spin', params: { speed: 1 } }
+          : { name: 'off', params: {} },
+      },
+    } as any)
+  } catch {
+    // Trackball spin is best-effort and must not reset camera.
+  }
+}
+
+function toggleLayer(layer: 'receptor' | 'ligand' | 'pocket' | 'voxels') {
+  layerVisibility[layer] = !layerVisibility[layer]
+  if (!viewer) return
+  const hidden = !layerVisibility[layer]
+  const refs = layer === 'voxels'
+    ? voxelRefs
+    : loadedEntries
+        .filter(record =>
+          layer === 'receptor'
+            ? record.role === 'receptor' || record.role === 'structure'
+            : record.role === layer,
+        )
+        .map(record => record.structureRefKey)
+  for (const ref of refs) {
+    if (viewer.plugin.state.data?.transforms?.get?.(ref)) {
+      setSubtreeVisibility(viewer.plugin.state.data, ref, hidden)
+    }
+  }
+}
+
+function isHeavyAtom(unit: any, element: any): boolean {
+  try {
+    if (Unit.isAtomic(unit)) {
+      const idx = unit.model.atomicHierarchy.atoms.type_symbol
+      const sym = idx?.value?.(element)
+      if (typeof sym === 'string') return sym.toUpperCase() !== 'H' && sym.toUpperCase() !== 'D'
+    }
+  } catch { /* fall through */ }
+  return true
+}
+
+function computeNearbyResidues(currentViewer: MolstarViewer): Array<{ chain: string; authSeqId: number }> {
+  const structures = currentViewer.plugin.managers.structure.hierarchy.current.structures
+  const receptorKeys = new Set(loadedEntries.filter(r => r.role === 'receptor' || r.role === 'structure').map(r => r.structureRefKey))
+  const ligandKeys = new Set(loadedEntries.filter(r => r.role === 'ligand').map(r => r.structureRefKey))
+  const ligandCoords: Array<[number, number, number]> = []
+  const pos = Vec3.zero()
+
+  for (const sRef of structures) {
+    if (!ligandKeys.has(sRef.cell.transform.ref)) continue
+    const data = sRef.cell.obj?.data
+    if (!data?.units) continue
+    for (const unit of data.units) {
+      const elements = unit.elements
+      for (let i = 0; i < elements.length; i += 1) {
+        if (!isHeavyAtom(unit, elements[i])) continue
+        unit.conformation.position(elements[i]!, pos)
+        ligandCoords.push([pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0])
+      }
+    }
+  }
+  if (!ligandCoords.length) return []
+
+  const matched = new Map<string, { chain: string; authSeqId: number }>()
+  const limitSq = 25
+  for (const sRef of structures) {
+    if (!receptorKeys.has(sRef.cell.transform.ref)) continue
+    const data = sRef.cell.obj?.data
+    if (!data?.units) continue
+    for (const unit of data.units) {
+      if (!Unit.isAtomic(unit)) continue
+      const elements = unit.elements
+      for (let i = 0; i < elements.length; i += 1) {
+        const el = elements[i]!
+        if (!isHeavyAtom(unit, el)) continue
+        const loc = StructureElement.Location.create(data, unit, el)
+        if (StructureProperties.entity.type(loc) !== 'polymer') continue
+        unit.conformation.position(el, pos)
+        const px = pos[0] ?? 0
+        const py = pos[1] ?? 0
+        const pz = pos[2] ?? 0
+        for (const [lx, ly, lz] of ligandCoords) {
+          const dx = px - lx
+          const dy = py - ly
+          const dz = pz - lz
+          if (dx * dx + dy * dy + dz * dz <= limitSq) {
+            const chain = StructureProperties.chain.auth_asym_id(loc) || StructureProperties.chain.label_asym_id(loc) || 'A'
+            const authSeqId = StructureProperties.residue.auth_seq_id(loc)
+            matched.set(`${chain}:${authSeqId}`, { chain, authSeqId })
+            break
+          }
+        }
+      }
+    }
+  }
+  return Array.from(matched.values())
+}
+
+async function toggleNearbyResidues() {
+  if (!viewer || !hasReceptorAndLigand.value) {
+    message.warning(t('tasks.visualizationNearbyUnavailable'))
+    return
+  }
+  nearbyActive.value = !nearbyActive.value
+  const visible = nearbyActive.value
+  await enqueueMutation(async () => {
+    if (!viewer || disposed) return
+    if (nearbyRefs.length) {
+      for (const ref of nearbyRefs) {
+        if (viewer.plugin.state.data?.transforms?.get?.(ref)) {
+          setSubtreeVisibility(viewer.plugin.state.data, ref, !visible)
+        }
+      }
+      return
+    }
+    if (!visible) return
+    if (cachedNearbyResidues === null) cachedNearbyResidues = computeNearbyResidues(viewer)
+    if (!cachedNearbyResidues.length) {
+      nearbyActive.value = false
+      message.info(t('tasks.visualizationNearbyEmpty'))
+      return
+    }
+    const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
+    const receptorRefs = new Set(loadedEntries.filter(r => r.role === 'receptor' || r.role === 'structure').map(r => r.structureRefKey))
+    const byChain = new Map<string, number[]>()
+    for (const item of cachedNearbyResidues) byChain.set(item.chain, [...(byChain.get(item.chain) ?? []), item.authSeqId])
+    const createdRefs: string[] = []
+    for (const sRef of viewer.plugin.managers.structure.hierarchy.current.structures) {
+      if (!receptorRefs.has(sRef.cell.transform.ref)) continue
+      for (const [chain, ids] of byChain.entries()) {
+        const expr = MS.struct.generator.atomGroups({
+          'chain-test': MS.core.rel.eq([MS.ammp('auth_asym_id'), chain]),
+          'residue-test': MS.core.set.has([MS.set(...ids), MS.ammp('auth_seq_id')]),
+        })
+        const comp = await viewer.plugin.builders.structure.tryCreateComponentFromExpression(
+          sRef.cell, expr, `nearby-${sRef.cell.transform.ref}-${chain}`, { label: `Nearby ${chain}` },
+        )
+        if (comp) {
+          createdRefs.push(comp.ref)
+          await viewer.plugin.builders.structure.representation.addRepresentation(comp, {
+            type: 'ball-and-stick', color: 'uniform', colorParams: { value: Color(0xfbbf24) },
+          } as any)
+        }
+      }
+    }
+    nearbyRefs = createdRefs
+  })
+}
+
+async function applyFocusResidue(target: { chain?: string; authSeqId: number; insertionCode?: string } | null) {
+  await enqueueMutation(async () => {
+    if (!viewer || disposed) return
+    if (focusHighlightRefs.length) {
+      const update = viewer.plugin.state.data.build()
+      for (const ref of focusHighlightRefs) update.delete(ref)
+      focusHighlightRefs = []
+      await update.commit()
+    }
+    if (!target) return
+    const receptorRefs = new Set(loadedEntries.filter(r => r.role === 'receptor' || r.role === 'structure').map(r => r.structureRefKey))
+    const candidates = new Map<string, { chain: string; authSeqId: number; points: Array<[number, number, number]>; sRef: any }>()
+    const pos = Vec3.zero()
+    for (const sRef of viewer.plugin.managers.structure.hierarchy.current.structures) {
+      if (receptorRefs.size > 0 && !receptorRefs.has(sRef.cell.transform.ref)) continue
+      const data = sRef.cell.obj?.data
+      if (!data?.units) continue
+      for (const unit of data.units) {
+        if (!Unit.isAtomic(unit)) continue
+        for (let i = 0; i < unit.elements.length; i += 1) {
+          const el = unit.elements[i]!
+          const loc = StructureElement.Location.create(data, unit, el)
+          if (StructureProperties.entity.type(loc) !== 'polymer') continue
+          const seqId = StructureProperties.residue.auth_seq_id(loc)
+          if (seqId !== target.authSeqId) continue
+          const chain = StructureProperties.chain.auth_asym_id(loc) || StructureProperties.chain.label_asym_id(loc) || 'A'
+          if (target.chain && chain !== target.chain) continue
+          const ins = StructureProperties.residue.pdbx_PDB_ins_code(loc) || ''
+          if (target.insertionCode && ins !== target.insertionCode) continue
+          unit.conformation.position(el, pos)
+          const key = `${sRef.cell.transform.ref}:${chain}:${seqId}:${ins}`
+          const entry = candidates.get(key) ?? { chain, authSeqId: seqId, points: [], sRef }
+          entry.points.push([pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0])
+          candidates.set(key, entry)
+        }
+      }
+    }
+    if (candidates.size === 0) { emit('residue-focus-result', 'not-found'); return }
+    if (candidates.size > 1) { emit('residue-focus-result', 'ambiguous'); return }
+    const hit = Array.from(candidates.values())[0]!
+    const { MolScriptBuilder: MS } = await import('molstar/lib/mol-script/language/builder')
+    const expr = MS.struct.generator.atomGroups({
+      'chain-test': MS.core.rel.eq([MS.ammp('auth_asym_id'), hit.chain]),
+      'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), hit.authSeqId]),
+    })
+    const comp = await viewer.plugin.builders.structure.tryCreateComponentFromExpression(
+      hit.sRef.cell, expr, `focus-residue-${hit.chain}-${hit.authSeqId}`, { label: `Focus ${hit.chain}:${hit.authSeqId}` },
+    )
+    if (comp) {
+      focusHighlightRefs = [comp.ref]
+      await viewer.plugin.builders.structure.representation.addRepresentation(comp, {
+        type: 'ball-and-stick', color: 'uniform', colorParams: { value: Color(0x22d3ee) },
+      } as any)
+    }
+    let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+    for (const [px, py, pz] of hit.points) {
+      minX = Math.min(minX, px); minY = Math.min(minY, py); minZ = Math.min(minZ, pz)
+      maxX = Math.max(maxX, px); maxY = Math.max(maxY, py); maxZ = Math.max(maxZ, pz)
+    }
+    if (Number.isFinite(minX)) {
+      const center = Vec3.create((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+      const radius = Math.max(0.5 * Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) + 4, 6)
+      viewer.plugin.managers.camera.focusSphere(Sphere3D.create(center, radius), { durationMs: 250 })
+    }
+    emit('residue-focus-result', 'focused')
+  })
+}
+
 async function exportScreenshot() {
   const firstLabel = props.scene.entries[0]?.label || 'structure'
   const safeName = firstLabel.replace(/[^a-zA-Z0-9._-]+/g, '_')
@@ -724,59 +1067,40 @@ async function exportScreenshot() {
   }
 }
 
-async function ensureViewer() {
-  if (viewer || !containerRef.value) {
-    return
+async function ensureViewer(): Promise<MolstarViewer | null> {
+  if (viewer) return viewer
+  if (disposed || !containerRef.value) return null
+  if (!viewerInitPromise) {
+    viewerInitPromise = createMolstarViewer(containerRef.value, {
+      allowNativeFullscreen: props.allowNativeFullscreen,
+      showControls: viewerPreset.value.showControls,
+      backgroundColor: activeBackground.value === 'white' ? 0xffffff : 0x0b1a2e,
+    }).then(created => {
+      viewer = created
+      const layoutSub = created.plugin.layout.events.updated.subscribe(syncFullscreenLayout)
+      removeLayoutSyncListener = () => layoutSub.unsubscribe()
+      const clickSub = created.plugin.behaviors.interaction.click.subscribe(event => {
+        if (isCompact.value || !sequenceChains.value.length) return
+        const loci = event.current.loci
+        if (!StructureElement.Loci.is(loci) || loci.elements.length === 0) return
+        const first = loci.elements[0]!
+        if (!Unit.isAtomic(first.unit) || OrderedSet.size(first.indices) === 0) return
+        const elementIndex = OrderedSet.getAt(first.indices, 0)
+        const element = first.unit.elements[elementIndex]
+        if (element === undefined) return
+        const loc = StructureElement.Location.create(loci.structure, first.unit, element)
+        if (StructureProperties.entity.type(loc) !== 'polymer') return
+        const chain = StructureProperties.chain.auth_asym_id(loc) || StructureProperties.chain.label_asym_id(loc) || 'A'
+        const seqId = StructureProperties.residue.auth_seq_id(loc)
+        const key = residueSelectionKey(chain, seqId)
+        if (!sequenceChains.value.some(c => c.chain === chain && c.residues.some(r => r.key === key))) return
+        handleToggleResidue({ chain, seqId, shiftKey: Boolean((event.modifiers as { shift?: boolean } | undefined)?.shift) })
+      })
+      removeClickListener = () => clickSub.unsubscribe()
+      return created
+    }).catch(cause => { viewerInitPromise = null; throw cause })
   }
-
-  viewer = await createMolstarViewer(containerRef.value, {
-    allowNativeFullscreen: props.allowNativeFullscreen,
-    showControls: viewerPreset.value.showControls,
-    backgroundColor: activeBackground.value === 'white' ? 0xffffff : 0x0b1a2e,
-  })
-
-  const layoutSub = viewer.plugin.layout.events.updated.subscribe(() => {
-    syncFullscreenLayout()
-  })
-  removeLayoutSyncListener = () => layoutSub.unsubscribe()
-
-  const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(event => {
-    if (isCompact.value || !sequenceChains.value.length) {
-      return
-    }
-    const loci = event.current.loci
-    if (!StructureElement.Loci.is(loci) || loci.elements.length === 0) {
-      return
-    }
-    const first = loci.elements[0]!
-    if (!Unit.isAtomic(first.unit) || OrderedSet.size(first.indices) === 0) {
-      return
-    }
-    const elementIndex = OrderedSet.getAt(first.indices, 0)
-    const element = first.unit.elements[elementIndex]
-    if (element === undefined) {
-      return
-    }
-    const loc = StructureElement.Location.create(loci.structure, first.unit, element)
-    if (StructureProperties.entity.type(loc) !== 'polymer') {
-      return
-    }
-    const chain = StructureProperties.chain.auth_asym_id(loc) || StructureProperties.chain.label_asym_id(loc) || 'A'
-    const seqId = StructureProperties.residue.auth_seq_id(loc)
-    const key = residueSelectionKey(chain, seqId)
-    const existsInSequence = sequenceChains.value.some(
-      c => c.chain === chain && c.residues.some(r => r.key === key),
-    )
-    if (!existsInSequence) {
-      return
-    }
-    handleToggleResidue({
-      chain,
-      seqId,
-      shiftKey: Boolean((event.modifiers as { shift?: boolean } | undefined)?.shift),
-    })
-  })
-  removeClickListener = () => clickSub.unsubscribe()
+  return viewerInitPromise
 }
 
 function resetCamera() {
@@ -785,67 +1109,57 @@ function resetCamera() {
 }
 
 async function renderScene() {
+  const seq = ++renderSeq
   loading.value = true
   error.value = ''
   entryResourcesRegistry.clear()
   loadedEntries = []
   selectionHighlightRefs = []
+  voxelRefs = []
+  nearbyRefs = []
+  focusHighlightRefs = []
+  cachedNearbyResidues = null
+  nearbyActive.value = false
+  layerVisibility.receptor = true
+  layerVisibility.ligand = true
+  layerVisibility.pocket = true
+  layerVisibility.voxels = true
   sequenceChains.value = []
   selectedResidueKeys.value = []
   lastAnchorKey.value = null
-
   try {
-    if (!props.scene.entries.length) {
-      loading.value = false
-      return
-    }
-
-    await ensureViewer()
-
-    if (!viewer) {
-      throw new Error('Mol* viewer unavailable')
-    }
-
-    await viewer.plugin.clear()
-    setMolstarBackgroundColor(viewer, activeBackground.value)
-
-    const entryResourcesList = await Promise.all(
-      props.scene.entries.map(async entry => ({
-        entry,
-        resource: entry.format === 'sdf'
-          ? await createNormalizedSdfObjectUrl(entry.url)
-          : await createProtectedObjectUrl(entry.url),
-      })),
-    )
-
-    try {
-      for (const { entry, resource } of entryResourcesList) {
-        const loaded = await loadEntryStructure(viewer, entry, resource.url)
-        if (loaded) {
-          loadedEntries.push(loaded)
-        }
+    await enqueueMutation(async () => {
+      if (seq !== renderSeq || disposed) return
+      const currentViewer = await ensureViewer()
+      if (seq !== renderSeq || disposed) return
+      if (!props.scene.entries.length) {
+        if (currentViewer) await currentViewer.plugin.clear()
+        return
       }
-
-      if (props.voxelGrid?.boxes.length) {
-        await addVoxelGrid(viewer, props.voxelGrid)
+      if (!currentViewer) throw new Error('Mol* viewer unavailable')
+      await currentViewer.plugin.clear()
+      if (seq !== renderSeq || disposed) return
+      setMolstarBackgroundColor(currentViewer, activeBackground.value)
+      for (const entry of props.scene.entries) {
+        const resource = entry.format === 'sdf'
+          ? await createNormalizedSdfObjectUrl(entry.url, entry.sdfRecordIndex !== undefined && !entry.sdfRecordScoped ? { recordIndex: entry.sdfRecordIndex } : {})
+          : await createProtectedObjectUrl(entry.url)
+        entryResourcesRegistry.add(resource.revoke)
+        if (seq !== renderSeq || disposed) return
+        const loaded = await loadEntryStructure(currentViewer, entry, resource.url)
+        if (seq !== renderSeq || disposed) return
+        if (loaded) loadedEntries.push(loaded)
       }
-
-      sequenceChains.value = collectPolymerSequences(viewer)
-      if (!isCompact.value && sequenceChains.value.length > 0) {
-        sequenceOpen.value = true
-      }
-
-      entryResourcesList.forEach(({ resource }) => entryResourcesRegistry.add(resource.revoke))
-    } catch (cause) {
-      entryResourcesList.forEach(({ resource }) => resource.revoke())
-      throw cause
-    }
-
-    viewer.handleResize()
+      if (props.voxelGrid?.boxes.length) await addVoxelGrid(currentViewer, props.voxelGrid)
+      if (seq !== renderSeq || disposed) return
+      sequenceChains.value = collectPolymerSequences(currentViewer)
+      if (!isCompact.value && sequenceChains.value.length) sequenceOpen.value = true
+      currentViewer.handleResize()
+    })
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    if (seq === renderSeq) error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    loading.value = false
+    if (seq === renderSeq) loading.value = false
   }
 }
 
@@ -874,15 +1188,27 @@ watch(
   { deep: true },
 )
 
+watch(
+  () => props.focusResidue,
+  next => {
+    void applyFocusResidue(next ?? null)
+  },
+  { deep: true },
+)
+
 onUnmounted(() => {
+  disposed = true
+  renderSeq += 1
   entryResourcesRegistry.clear()
   resizeObserver?.disconnect()
   removeLayoutSyncListener?.()
   removeLayoutSyncListener = null
   removeClickListener?.()
   removeClickListener = null
-  disposeMolstarViewer(viewer)
-  viewer = null
+  void Promise.resolve(viewerInitPromise).finally(() => {
+    disposeMolstarViewer(viewer)
+    viewer = null
+  })
 })
 </script>
 
