@@ -610,7 +610,15 @@
                 <template v-if="rowMetrics(activeRow).length">
                   <h4 class="results-viewer__subtitle">{{ t('design.results.metricsTitle') }}</h4>
                   <dl class="results-viewer__metrics">
-                    <div v-for="metric in rowMetrics(activeRow)" :key="metric.key" class="results-viewer__metric">
+                    <div
+                      v-for="metric in rowMetrics(activeRow)"
+                      :key="metric.key"
+                      class="results-viewer__metric"
+                      :class="{
+                        'results-viewer__metric--wide':
+                          metric.value.length > 24 || metric.key === scaffoldColumn?.key,
+                      }"
+                    >
                       <dt>{{ metric.label }}</dt>
                       <dd :class="metricToneClass(metric.tone)" :data-tone="metric.tone ?? undefined">
                         {{ metric.value }}
@@ -1747,12 +1755,18 @@
     background: @surface-sunken;
   }
 
-  .results-filters__sort,
-  .results-filters__sliders {
+  .results-filters__sort {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
+  }
+
+  .results-filters__sliders {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+    align-items: center;
+    gap: 12px 20px;
   }
 
   .results-filters__search {
@@ -1785,31 +1799,35 @@
   .filter-slider {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-width: 230px;
-    flex: 1 1 240px;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .filter-slider .results-filters__label {
+    flex: 0 0 auto;
   }
 
   .filter-slider__control {
-    flex: 1 1 110px;
-    min-width: 100px;
+    flex: 1 1 80px;
+    min-width: 72px;
   }
 
   .filter-slider__readout {
+    flex: 0 0 auto;
     color: @text-tertiary;
     font-size: @font-size-xs;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
   .filter-slider--inline {
-    flex: 0 1 220px;
-    min-width: 180px;
+    min-width: 0;
   }
 
-  /* 桌面端约 45% 列表 / 55% 黏性详情面板；窄屏自动堆叠。 */
+  /* 桌面端 50% 列表 / 50% 黏性详情面板；窄屏自动堆叠。 */
   .results-workbench {
     display: grid;
-    grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
   }
@@ -1853,7 +1871,7 @@
 
   .results-table th,
   .results-table td {
-    padding: 6px 8px;
+    padding: 6px;
     border-bottom: 1px solid @border-color;
     text-align: left;
     vertical-align: middle;
@@ -2172,6 +2190,12 @@
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     margin: 0;
+  }
+
+  .results-viewer__metric--wide {
+    grid-column: 1 / -1;
+    word-break: break-all;
+    overflow-wrap: anywhere;
   }
 
   .results-viewer__metric dt {

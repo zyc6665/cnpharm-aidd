@@ -221,6 +221,8 @@
     border-bottom: 1px solid @border-color;
     text-align: left;
     vertical-align: middle;
+    word-break: break-all;
+    overflow-wrap: anywhere;
   }
 
   .compare-table thead th {
@@ -238,10 +240,13 @@
     color: @text-secondary;
     font-weight: 500;
     white-space: nowrap;
+    word-break: normal;
   }
 
   .compare-table__molecule {
-    min-width: 180px;
+    width: 220px;
+    min-width: 200px;
+    max-width: 260px;
   }
 
   .compare-table__mark {
