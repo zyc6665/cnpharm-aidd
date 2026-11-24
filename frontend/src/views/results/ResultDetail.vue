@@ -10,9 +10,14 @@
 
     <AppPageHeader :title="resultTitle" :subtitle="t('results.detail.summary')">
       <template #actions>
-        <a-button :loading="loading" data-testid="result-refresh" @click="loadAll">
-          {{ t('common.refresh') }}
-        </a-button>
+        <a-space>
+          <router-link :to="interactiveResultPath" data-testid="result-open-interactive">
+            <a-button type="primary">打开交互结果 / 筛选候选 →</a-button>
+          </router-link>
+          <a-button :loading="loading" data-testid="result-refresh" @click="loadAll">
+            {{ t('common.refresh') }}
+          </a-button>
+        </a-space>
       </template>
     </AppPageHeader>
 
@@ -398,6 +403,12 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     if (fromResult) return fromResult
     return String(route.query.project_id || '')
   })
+
+  const interactiveResultPath = computed(() =>
+    projectId.value
+      ? `/projects/${encodeURIComponent(projectId.value)}/tasks/${encodeURIComponent(taskId.value)}/result`
+      : `/tasks/${encodeURIComponent(taskId.value)}/result`
+  )
 
   const inputRows = computed<ResultInputSnapshot[]>(() => result.value?.inputs ?? [])
 

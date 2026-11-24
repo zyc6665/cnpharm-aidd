@@ -1,10 +1,14 @@
 <template>
   <main class="candidate-set-page">
+    <ProjectWorkspaceNav
+      v-if="candidateSet?.project_id"
+      :project-id="candidateSet.project_id"
+    />
     <AppBackLink
       v-if="candidateSet?.project_id"
-      :fallback="`/projects/${candidateSet.project_id}/assets`"
+      :fallback="`/projects/${candidateSet.project_id}/candidates`"
       test-id="set-back-assets"
-      :parent-label="t('compounds.backToAssets')"
+      parent-label="返回候选与决策"
     />
 
     <AppPageHeader :title="setTitle" :subtitle="t('candidates.set.subtitle')">
@@ -109,6 +113,20 @@
           data-testid="set-items-error"
           :message="t('candidates.set.errors.loadItems')"
         />
+
+        <a-alert
+          v-else-if="items.length === 0 && candidateSet?.project_id"
+          class="set-alert"
+          type="info"
+          show-icon
+          message="候选集通常在虚拟筛选 / 分子生成的结果页中按打分筛选后一键保存；也可点右侧「添加成员」补充已有候选物。"
+        >
+          <template #action>
+            <router-link :to="`/projects/${candidateSet.project_id}/results`">
+              去结果中心挑选 →
+            </router-link>
+          </template>
+        </a-alert>
 
         <a-table
           :scroll="{ x: 'max-content' }"
@@ -228,6 +246,7 @@
   import { message } from 'ant-design-vue'
   import { isAxiosError } from 'axios'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import {
     addCandidateSetItems,

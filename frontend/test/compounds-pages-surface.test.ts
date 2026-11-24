@@ -77,6 +77,7 @@ test('项目导航的 assets / candidates 项紧接在 tasks 之后且覆盖合�
   assert.deepEqual(keys, [
     'overview',
     'design',
+    'workflow',
     'tasks',
     'assets',
     'candidates',
@@ -162,28 +163,20 @@ test('Assets.vue 提供批量导入入口并展示导入汇总', () => {
   assert.ok(source.includes('duplicate'), 'Assets.vue 需要展示 duplicate 统计')
 })
 
-test('数据资产页 Tab 为 化合物/蛋白/数据集，候选物移到独立页面', () => {
+test('数据资产页收敛为按调用目录分组的数据空间，候选物在独立页面', () => {
   const assets = readSource('src/views/compounds/Assets.vue')
 
-  assert.ok(assets.includes('key="compounds"'), 'Assets.vue 缺少化合物 Tab')
-  assert.ok(assets.includes('key="proteins"'), 'Assets.vue 缺少蛋白 Tab')
-  assert.ok(assets.includes('key="datasets"'), 'Assets.vue 缺少数据集 Tab')
+  assert.ok(assets.includes('data-testid="assets-space-section"'), 'Assets.vue 缺少数据空间主视图')
+  assert.equal(assets.includes('key="compounds"'), false, 'Assets.vue 不应再含平铺单分子 Tab')
+  assert.equal(assets.includes('key="proteins"'), false, 'Assets.vue 不应再含重复的蛋白 Tab')
+  assert.equal(assets.includes('key="datasets"'), false, 'Assets.vue 不应再含重复的数据集 Tab')
   assert.equal(assets.includes('key="candidates"'), false, 'Assets.vue 不应再含候选物 Tab')
   assert.equal(
     assets.includes('key="candidateSets"'),
     false,
     'Assets.vue 不应再含候选集 Tab'
   )
-  // 蛋白 Tab 必须说明「只含 Artifact 结构产物，蛋白主数据在靶点与结构」。
-  assert.ok(assets.includes('compounds.notes.proteins'), '蛋白 Tab 缺少语义说明')
-  // 候选物必须有等价入口，不能成孤儿页面。
-  assert.ok(assets.includes('/candidates'), 'Assets.vue 缺少候选物入口链接')
-  assert.ok(assets.includes('listProjectAssets'), 'Assets.vue 必须调用统一资产接口')
-  // 数据集 Tab 里 artifact_type='dataset' 的上传产物要区别于登记数据集。
-  assert.ok(
-    assets.includes('compounds.datasetSource.upload'),
-    'Assets.vue 数据集 Tab 缺少「上传文件」来源标记'
-  )
+  assert.ok(assets.includes('artifactGroups'), 'Assets.vue 必须按工具调用分组展示数据空间')
 
   const candidates = readSource('src/views/compounds/Candidates.vue')
   assert.ok(candidates.includes('listCandidates'), 'Candidates.vue 必须列出候选物')

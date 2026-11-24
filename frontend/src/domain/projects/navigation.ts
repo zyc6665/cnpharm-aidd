@@ -101,31 +101,29 @@ export function buildProjectCandidateViewTabs(projectId: string) {
   ] as const
 }
 
-/** 「研发流程」下的三个视图切换项（流程总览 / 靶点与结构 / 画布编排）。 */
+/** 「单步工具」下的两个视图切换项（单步工具 / 靶点与结构）。 */
 export function buildProjectFlowViewTabs(projectId: string) {
   return [
-    { key: 'design', label: '流程总览', to: buildProjectDesignPath(projectId) },
+    { key: 'design', label: '单步工具', to: buildProjectDesignPath(projectId) },
     { key: 'targets', label: '靶点与结构', to: buildProjectTargetsPath(projectId) },
-    { key: 'workflow', label: '画布编排', to: buildProjectWorkflowPath(projectId) },
   ] as const
 }
 
 /**
- * 项目内横向导航收敛为 5 个主入口 + 1 个右侧设置：
- * - 总览：项目阶段与最近活动（并提供成果看板入口）
- * - 研发流程：覆盖靶点与结构、五步设计流程、7 个工具直达与画布编排
- * - 任务：当前项目的执行记录
- * - 数据与产物：合并原来的「数据资产」「结果中心」「Artifact 谱系」（页内视图切换）
- * - 候选与决策：合并原来的「候选物」「决策记录」（页内视图切换）
- * - 设置：在组件里置右显示为齿轮图标
- *
- * 原有 `/targets`、`/results`、`/lineage`、`/decisions` 路由全部保留，
- * 这里通过 active 匹配让子页也能点亮它归属的导航项。
+ * 项目内横向导航收敛为 6 个主入口 + 1 个右侧设置：
+ * - 项目总览：项目阶段、成果看板与最近活动
+ * - 单步工具：7 个独立工具与靶点结构（直接选项目数据或本地上传）
+ * - 工作流：多步串联画布编排（需要自动化接力时使用）
+ * - 任务中心：当前项目的执行记录
+ * - 数据与产物：数据空间（Artifact）与资产 / 结果中心 / Artifact 谱系
+ * - 候选与决策：候选物与决策记录
+ * - 项目设置：右侧齿轮图标
  */
 export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspaceNavItem[] {
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
-    { key: 'design', label: '研发流程', to: buildProjectDesignPath(projectId) },
+    { key: 'design', label: '单步工具', to: buildProjectDesignPath(projectId) },
+    { key: 'workflow', label: '工作流', to: buildProjectWorkflowPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'assets', label: '数据与产物', to: buildProjectAssetsPath(projectId) },
     { key: 'candidates', label: '候选与决策', to: buildProjectCandidatesPath(projectId) },
@@ -147,11 +145,14 @@ export function isProjectWorkspaceNavItemActive(
     return location.currentPath === '/tasks' && location.queryProjectId === pid
   }
 
+  if (item.key === 'workflow') {
+    const prefix = `/projects/${pid}/workflow`
+    return location.currentPath === prefix || location.currentPath.startsWith(`${prefix}/`)
+  }
+
   if (item.key === 'design') {
-    // 研发流程覆盖：引导式五步 `/design?project_id=`、画布编排 `/projects/:id/workflow`、
-    // 靶点与结构 `/projects/:id/targets`。
+    // 单步工具覆盖：`/design?project_id=` 与靶点与结构 `/projects/:id/targets`。
     if (
-      location.currentPath === `/projects/${pid}/workflow` ||
       location.currentPath === `/projects/${pid}/targets` ||
       location.currentPath.startsWith(`/projects/${pid}/targets/`)
     ) {
