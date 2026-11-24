@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyMetricTone,
   countLipinskiViolations,
   druglikenessStars,
   evaluateLipinski,
   hasLipinskiData,
+  metricKind,
   type LipinskiProperties,
 } from './druglikeness'
 
@@ -65,5 +67,68 @@ describe('类药性星级', () => {
   it('完全无数据时不伪造星级', () => {
     expect(druglikenessStars(props({ mw: null, logp: null, hbd: null, hba: null, tpsa: null }))).toBeNull()
     expect(druglikenessStars(null)).toBeNull()
+  })
+})
+
+describe('阈值语义着色 classifyMetricTone', () => {
+  it('识别常见列名（key、带单位标题与中文标题）', () => {
+    expect(metricKind('mw')).toBe('mw')
+    expect(metricKind('MW (Da)')).toBe('mw')
+    expect(metricKind('molecular_weight')).toBe('mw')
+    expect(metricKind('分子量')).toBe('mw')
+    expect(metricKind('XLogP')).toBe('logp')
+    expect(metricKind('hbd')).toBe('hbd')
+    expect(metricKind('num_h_acceptors')).toBe('hba')
+    expect(metricKind('TPSA')).toBe('tpsa')
+    expect(metricKind('qed')).toBe('qed')
+    expect(metricKind('lipinski_violations')).toBe('violations')
+    expect(metricKind('rotatable_bonds')).toBe('rotatable')
+    expect(metricKind('docking_score')).toBeNull()
+    expect(metricKind('')).toBeNull()
+  })
+
+  it('按上限 / 下限给绿、琥珀、红三档', () => {
+    expect(classifyMetricTone('mw', 420)).toBe('good')
+    expect(classifyMetricTone('mw', '550')).toBe('warn')
+    expect(classifyMetricTone('mw', 700)).toBe('bad')
+
+    expect(classifyMetricTone('logp', 4.2)).toBe('good')
+    expect(classifyMetricTone('logp', 5.5)).toBe('warn')
+    expect(classifyMetricTone('logp', 7)).toBe('bad')
+
+    expect(classifyMetricTone('hbd', 3)).toBe('good')
+    expect(classifyMetricTone('hbd', 6)).toBe('warn')
+    expect(classifyMetricTone('hbd', 9)).toBe('bad')
+
+    expect(classifyMetricTone('hba', 8)).toBe('good')
+    expect(classifyMetricTone('hba', 11)).toBe('warn')
+    expect(classifyMetricTone('hba', 13)).toBe('bad')
+
+    expect(classifyMetricTone('tpsa', 120)).toBe('good')
+    expect(classifyMetricTone('tpsa', 150)).toBe('warn')
+    expect(classifyMetricTone('tpsa', 180)).toBe('bad')
+  })
+
+  it('QED / 越界条数 / 可旋转键按方向判定', () => {
+    expect(classifyMetricTone('qed', 0.72)).toBe('good')
+    expect(classifyMetricTone('qed', 0.42)).toBe('warn')
+    expect(classifyMetricTone('qed', 0.1)).toBe('bad')
+
+    expect(classifyMetricTone('lipinski_violations', 0)).toBe('good')
+    expect(classifyMetricTone('lipinski_violations', 1)).toBe('warn')
+    expect(classifyMetricTone('lipinski_violations', 3)).toBe('bad')
+
+    expect(classifyMetricTone('rotatable_bonds', 6)).toBe('good')
+    expect(classifyMetricTone('rotatable_bonds', 11)).toBe('warn')
+    expect(classifyMetricTone('rotatable_bonds', 15)).toBe('bad')
+  })
+
+  it('缺失值与未知列保持中性（null），绝不把「未计算」染红', () => {
+    expect(classifyMetricTone('mw', null)).toBeNull()
+    expect(classifyMetricTone('mw', '')).toBeNull()
+    expect(classifyMetricTone('mw', '-')).toBeNull()
+    expect(classifyMetricTone('mw', 'N/A')).toBeNull()
+    expect(classifyMetricTone('score', 0.1)).toBeNull()
+    expect(classifyMetricTone('', 500)).toBeNull()
   })
 })

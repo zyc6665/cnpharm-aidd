@@ -102,3 +102,114 @@ export function druglikenessStars(
   }
   return Math.min(5, Math.max(1, 5 - countLipinskiViolations(properties)))
 }
+
+/* -------------------------------------------------------------------------- */
+/* 阈值语义着色（结果表格 / 详情 / 对比抽屉共用同一套口径）                    */
+/* -------------------------------------------------------------------------- */
+
+/** 单元格语义色：good=绿、warn=琥珀、bad=红；未知列或缺失值返回 null（中性展示）。 */
+export type MetricTone = 'good' | 'warn' | 'bad'
+
+/** 目前有公认阈值的理化/类药性指标。 */
+export type MetricKind =
+  | 'mw'
+  | 'logp'
+  | 'hbd'
+  | 'hba'
+  | 'tpsa'
+  | 'qed'
+  | 'violations'
+  | 'rotatable'
+
+interface MetricThresholdRule {
+  kind: MetricKind
+  /** 列 key 或标题是否命中该指标（大小写不敏感，允许中文列名）。 */
+  matches: (raw: string, normalized: string) => boolean
+  /** 给定数值返回语义色；「接近上限」给 warn，明显越界才给 bad。 */
+  tone: (value: number) => MetricTone
+}
+
+function upperBoundTone(value: number, good: number, warn: number): MetricTone {
+  if (value <= good) return 'good'
+  if (value <= warn) return 'warn'
+  return 'bad'
+}
+
+/**
+ * 规则顺序即匹配优先级：`violations` / `rotatable` 等复合名先匹配，
+ * 短名（`mw`）放最后，避免把 `molecular_weight` 之类误判。
+ */
+const METRIC_THRESHOLD_RULES: readonly MetricThresholdRule[] = [
+  {
+    kind: 'violations',
+    matches: (_raw, n) => n.includes('violation'),
+    tone: value => upperBoundTone(value, 0, 1),
+  },
+  {
+    kind: 'rotatable',
+    matches: (_raw, n) =>
+      n.includes('rotatable') || n.includes('rotbonds') || n.includes('rotors'),
+    tone: value => upperBoundTone(value, 10, 12),
+  },
+  {
+    kind: 'qed',
+    matches: (_raw, n) => n.includes('qed'),
+    tone: value => (value >= 0.5 ? 'good' : value >= 0.35 ? 'warn' : 'bad'),
+  },
+  {
+    kind: 'tpsa',
+    matches: (raw, n) => n.includes('tpsa') || raw.includes('极性表面积'),
+    tone: value => upperBoundTone(value, 140, 160),
+  },
+  {
+    kind: 'logp',
+    matches: (raw, n) => n.includes('logp') || raw.includes('脂水'),
+    tone: value => upperBoundTone(value, 5, 6),
+  },
+  {
+    kind: 'hbd',
+    matches: (raw, n) => n.startsWith('hbd') || n.includes('donor') || raw.includes('氢键供体'),
+    tone: value => upperBoundTone(value, 5, 7),
+  },
+  {
+    kind: 'hba',
+    matches: (raw, n) => n.startsWith('hba') || n.includes('acceptor') || raw.includes('氢键受体'),
+    tone: value => upperBoundTone(value, 10, 12),
+  },
+  {
+    kind: 'mw',
+    matches: (raw, n) =>
+      n.startsWith('mw') ||
+      n.includes('molecularweight') ||
+      n.includes('molweight') ||
+      raw.includes('分子量'),
+    tone: value => upperBoundTone(value, 500, 600),
+  },
+]
+
+/** 解析列 key/标题属于哪个指标；未知列返回 null（不强行着色）。 */
+export function metricKind(columnKey: string | null | undefined): MetricKind | null {
+  const raw = (columnKey ?? '').trim().toLowerCase()
+  if (!raw) return null
+  const normalized = raw.replace(/[^a-z0-9]+/g, '')
+  const rule = METRIC_THRESHOLD_RULES.find(item => item.matches(raw, normalized))
+  return rule?.kind ?? null
+}
+
+/**
+ * 按列名与取值判定语义色。
+ *
+ * - 缺失值（null / 空串 / `-` / 非数字）返回 null，绝不把「未计算」染成红色；
+ * - 未知列（如 docking score）返回 null，由页面决定是否自行着色。
+ */
+export function classifyMetricTone(
+  columnKey: string | null | undefined,
+  value: number | string | null | undefined
+): MetricTone | null {
+  const kind = metricKind(columnKey)
+  if (!kind) return null
+  const numeric = finiteOrNull(value)
+  if (numeric === null) return null
+  const rule = METRIC_THRESHOLD_RULES.find(item => item.kind === kind)
+  return rule ? rule.tone(numeric) : null
+}

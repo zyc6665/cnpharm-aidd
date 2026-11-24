@@ -2240,6 +2240,65 @@ export default {
           hba: 'HBA',
           tpsa: 'TPSA'
         }
+      },
+      handoff: {
+        hint: 'Carry results into the next stage: selected molecules (or all usable rows) are exported to CSV and uploaded automatically.',
+        sendAdmet: 'Send to ADMET',
+        sendScreening: 'Send to screening',
+        noProject: 'Project information is missing, cannot hand off downstream',
+        noSmiles: 'The selected rows contain no usable SMILES to export',
+        sentAdmet: 'Uploaded {count} molecules, opening ADMET prediction',
+        sentScreening: 'Uploaded {count} molecules, opening screening setup',
+        failed: 'Handoff failed, please check the file upload service and retry'
+      },
+      columns: {
+        toggle: 'Columns',
+        title: 'Choose the columns to display'
+      },
+      marks: {
+        column: 'Mark',
+        favorite: 'Mark as favorite',
+        unfavorite: 'Remove favorite',
+        exclude: 'Exclude this molecule',
+        unexclude: 'Remove exclusion',
+        all: 'All',
+        favorites: 'Favorites',
+        hideExcluded: 'Hide excluded'
+      },
+      scaffold: {
+        column: 'Scaffold',
+        filter: 'Scaffold',
+        all: 'All scaffolds',
+        count: '{count} scaffold(s)'
+      },
+      viewer: {
+        prev: 'Previous',
+        next: 'Next',
+        position: '{index} / {total}'
+      },
+      thresholds: {
+        mw: { hint: 'Molecular weight: keep ≤ 500; 500–600 is borderline, above 600 usually hurts oral absorption.' },
+        logp: { hint: 'Lipophilicity (LogP): keep ≤ 5; 5–6 is borderline, higher values suggest poor solubility.' },
+        hbd: { hint: 'Hydrogen-bond donors: keep ≤ 5; 5–7 is borderline.' },
+        hba: { hint: 'Hydrogen-bond acceptors: keep ≤ 10; 10–12 is borderline.' },
+        tpsa: { hint: 'Topological polar surface area: keep ≤ 140 Å²; 140–160 is borderline and reduces permeability.' },
+        qed: { hint: 'Quantitative estimate of druglikeness (0–1): aim for ≥ 0.5; 0.35–0.5 is borderline.' },
+        violations: { hint: 'Lipinski rule violations: 0 is ideal, 1 is borderline, ≥ 2 is high risk.' },
+        rotatable: { hint: 'Rotatable bonds: keep ≤ 10; 10–12 is borderline, more implies high conformational entropy.' },
+        scaffold: { hint: 'Murcko scaffold: the core ring system without side chains; molecules sharing it often show similar activity.' }
+      },
+      compare: {
+        button: 'Compare',
+        title: 'Compare molecules',
+        needTwo: 'Select at least 2 molecules to compare',
+        capped: 'At most {count} molecules can be compared; showing the first {count}',
+        empty: 'No molecules to compare',
+        property: 'Property',
+        smiles: 'SMILES',
+        rating: 'Druglikeness',
+        violations: 'Rule violations',
+        copy: 'Copy SMILES',
+        noValue: 'No data'
       }
     }
   },
