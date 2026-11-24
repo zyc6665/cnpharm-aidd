@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listDesignProjects,
@@ -157,6 +157,7 @@ import {
   listStructurePockets,
   loadTargetProteins,
 } from '@/api/design'
+import { getFileInfo } from '@/api/files'
 import StructurePredictForm from '@/components/design/StructurePredictForm.vue'
 import PocketPredictPanel from '@/components/design/PocketPredictPanel.vue'
 import { selectNewlyAdded } from '@/domain/design/pipeline'
@@ -212,6 +213,18 @@ function urnExtension(urn: string): string {
   return index > 0 ? base.slice(index).toLowerCase() : ''
 }
 
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: DesignPocketSelection | null): void
+}>()
+
+const { t } = useI18n()
+
+const projects = ref<ResearchProject[]>([])
+const targets = ref<TargetSummary[]>([])
+const proteins = ref<ProteinDetail[]>([])
+const structures = ref<ProteinStructureDetail[]>([])
+const pockets = ref<PocketSummary[]>([])
+
 /**
  * 预览用的结构 URN：优先用选择时携带的 `structureUrn`，否则回查当前结构。
  * 有准备产物时以准备结构的 URN 为准（与 `structureFileId` 的取值口径一致）。
@@ -227,12 +240,38 @@ function resolveStructureUrn(): string | null {
   return structure.structure_urn ?? structure.prepared_urn ?? null
 }
 
+const resolvedFilenames = ref<Record<string, string>>({})
+
+watch(
+  [() => props.showPreview, () => props.modelValue?.structureFileId, () => resolveStructureUrn()],
+  async ([enabled, fileId, urn]) => {
+    if (!enabled || !fileId) return
+    if (urn && urnExtension(urn)) return
+    if (resolvedFilenames.value[fileId] !== undefined) return
+    try {
+      const response = await getFileInfo(fileId)
+      resolvedFilenames.value = {
+        ...resolvedFilenames.value,
+        [fileId]: response.data?.filename ?? '',
+      }
+    } catch {
+      resolvedFilenames.value = {
+        ...resolvedFilenames.value,
+        [fileId]: '',
+      }
+    }
+  },
+  { immediate: true }
+)
+
 const previewScene = computed<VisualizationScene | null>(() => {
   const fileId = props.modelValue?.structureFileId
   if (!fileId) return null
   const urn = resolveStructureUrn()
-  if (!urn) return null
-  const detected = POCKET_PREVIEW_FORMAT_BY_EXTENSION[urnExtension(urn)]
+  const directExt = urn ? urnExtension(urn) : ''
+  // 真实库里的 URN 形如 `file:<uuid>`（无扩展名），此时回退查文件元数据里的原始文件名。
+  const effectiveExt = directExt || urnExtension(resolvedFilenames.value[fileId] ?? '')
+  const detected = effectiveExt ? POCKET_PREVIEW_FORMAT_BY_EXTENSION[effectiveExt] : undefined
   // 识别不了格式时不要按 PDB 硬渲染——Mol* 会把 CIF 当 PDB 解析出错误结构。
   if (!detected) return null
   const entry = {
@@ -259,24 +298,12 @@ const previewVoxelGrid = computed(() =>
   buildPocketBoxVoxelGrid(props.modelValue?.center, props.modelValue?.boxSize)
 )
 
-const emit = defineEmits<{
-  (event: 'update:modelValue', value: DesignPocketSelection | null): void
-}>()
-
-const { t } = useI18n()
-
 /** 预览不可用时区分「没有结构文件」与「格式无法识别」，避免笼统的失败文案。 */
 const previewFallbackMessage = computed(() =>
   props.modelValue?.structureFileId
     ? t('design.molecule.pocketPreviewUnsupportedFormat')
     : t('design.molecule.pocketPreviewMissing')
 )
-
-const projects = ref<ResearchProject[]>([])
-const targets = ref<TargetSummary[]>([])
-const proteins = ref<ProteinDetail[]>([])
-const structures = ref<ProteinStructureDetail[]>([])
-const pockets = ref<PocketSummary[]>([])
 
 const selectedProject = ref<string | undefined>(props.modelValue?.projectId)
 const selectedTarget = ref<string | undefined>(props.modelValue?.targetId)

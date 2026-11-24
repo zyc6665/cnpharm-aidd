@@ -9,12 +9,16 @@ vi.mock('@/api/design', () => ({
   listProteinStructures: vi.fn().mockResolvedValue([{ id: 's1', source_type: 'predicted' }]),
   listStructurePockets: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('@/api/files', () => ({
+  getFileInfo: vi.fn().mockRejectedValue(new Error('not mocked')),
+}))
 vi.mock('@/components/design/StructurePredictForm.vue', () => ({
   default: { template: '<div data-testid="structure-predict-form" />' },
 }))
 vi.mock('@/components/design/PocketPredictPanel.vue', () => ({
   default: { template: '<div data-testid="pocket-predict-panel" />' },
 }))
+import { getFileInfo } from '@/api/files'
 import PocketPicker from './PocketPicker.vue'
 import type { DesignPocketSelection } from '@/types/design'
 import type { VisualizationScene } from '@/domain/tasks'
@@ -114,6 +118,21 @@ describe('PocketPicker', () => {
     expect(w.find('[data-testid="molecule-viewer-stub"]').exists()).toBe(false)
     const empty = w.get('[data-testid="pocket-preview-empty"]')
     expect(empty.text()).toContain(i18n.global.t('design.molecule.pocketPreviewUnsupportedFormat'))
+  })
+
+  it('resolves format via file metadata when URN is file:<uuid> without extension', async () => {
+    vi.mocked(getFileInfo).mockResolvedValueOnce({
+      data: { id: 'file-uuid-1', filename: 'boltz2_model.cif' },
+    } as never)
+
+    const w = mountWithPreview(
+      selection({ structureFileId: 'file-uuid-1', structureUrn: 'file:file-uuid-1' })
+    )
+    await flushPromises()
+
+    const [entry] = viewerScene(w).entries
+    expect(entry?.format).toBe('mmcif')
+    expect(entry?.extension).toBe('.cif')
   })
 
   it('hides the viewer when the structure URN is missing', async () => {
