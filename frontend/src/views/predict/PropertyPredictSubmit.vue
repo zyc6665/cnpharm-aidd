@@ -783,7 +783,7 @@ onMounted(() => {
             data-testid="predict-submit-preview-item"
           >
             <Smiles2DCell :smiles="smiles" :width="120" :height="76" />
-            <code class="predict-submit__smiles-text">{{ smiles }}</code>
+            <code class="predict-submit__smiles-text" :title="smiles">{{ smiles }}</code>
             <div class="predict-submit__preview-actions">
               <a-button type="link" size="small" @click="copySmiles(smiles)">
                 {{ t('predict.submit.copySmiles') }}
@@ -988,10 +988,17 @@ onMounted(() => {
 }
 
 .predict-submit__smiles-text {
-  max-width: 100%;
-  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  width: 100%;
+  min-height: 34px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
   font-size: 12px;
   line-height: 1.4;
+  text-align: center;
 }
 
 .predict-submit__preview-actions {

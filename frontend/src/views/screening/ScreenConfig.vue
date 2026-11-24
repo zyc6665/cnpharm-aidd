@@ -742,7 +742,8 @@ const paramFields = computed(() => [
           <ol class="screen-config__rules">
             <li>
               <strong>{{ t('screening.config.ruleInput') }}</strong>
-              <span>{{ t('screening.config.ruleInputHint', { count: ligandCount }) }}</span>
+              <span v-if="preuploadedLigandFileId && ligandCount === 0">{{ t('screening.config.preuploadedLigands') }}</span>
+              <span v-else>{{ t('screening.config.ruleInputHint', { count: ligandCount }) }}</span>
             </li>
             <li>
               <strong>{{ t('screening.config.rulePharmacophore') }}</strong>
