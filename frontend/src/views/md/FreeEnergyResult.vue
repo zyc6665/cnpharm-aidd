@@ -241,7 +241,9 @@ import { formatFixed } from '@/domain/common/format'
   function exportCsv(): void {
     if (rows.value.length === 0) return
     const csv = rowsToCsv(rows.value as unknown as Array<Record<string, unknown>>, EXPORT_COLUMNS)
-    void saveBlobAsFile(csv, `free-energy-${taskId.value}.csv`, 'text/csv;charset=utf-8')
+    void saveBlobAsFile(csv, `free-energy-${taskId.value}.csv`, 'text/csv;charset=utf-8').catch(cause => {
+      loadError.value = cause instanceof Error ? cause.message : String(cause)
+    })
   }
 
   onMounted(() => {

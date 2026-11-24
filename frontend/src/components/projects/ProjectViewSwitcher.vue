@@ -1,18 +1,17 @@
 <template>
-  <div class="project-view-switcher" role="tablist" data-testid="project-view-switcher">
+  <nav class="project-view-switcher" data-testid="project-view-switcher">
     <router-link
       v-for="item in items"
       :key="item.key"
       :to="item.to"
-      role="tab"
       class="project-view-switcher__item"
       :class="{ 'is-active': item.key === active }"
-      :aria-selected="item.key === active"
+      :aria-current="item.key === active ? 'page' : undefined"
       :data-testid="`project-view-tab-${item.key}`"
     >
       {{ item.label }}
     </router-link>
-  </div>
+  </nav>
 </template>
 
 <script setup lang="ts">

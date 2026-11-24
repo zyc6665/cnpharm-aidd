@@ -23,30 +23,38 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+const MAX_SAVE_CANDIDATES = 200
+const SAVE_BATCH_SIZE = 20
+
 const taskId = computed(() => String(route.params.id ?? ''))
 const loading = ref(true)
 const errorMessage = ref('')
 const rows = ref<CsvPreviewRow[]>([])
-const selectedRowKeys = ref<number[]>([])
+const selectedRowKeys = ref<string[]>([])
 const saveModalOpen = ref(false)
 const saveSetName = ref('')
 const savingCandidates = ref(false)
 
+function rowStableKey(record: CsvPreviewRow): string {
+  return `${record.rank ?? ''}:${record.smiles ?? ''}`
+}
+
 const rowsToSave = computed(() => {
-  if (selectedRowKeys.value.length > 0) {
-    return selectedRowKeys.value
-      .map(index => rows.value[index])
-      .filter((row): row is CsvPreviewRow => Boolean(row && row.smiles))
-  }
-  const passed = rows.value.filter(row => isPass(row.passes) && row.smiles)
-  if (passed.length > 0) return passed
-  return rows.value.filter(row => Boolean(row.smiles)).slice(0, 20)
+  const pool =
+    selectedRowKeys.value.length > 0
+      ? rows.value.filter(row => row.smiles && selectedRowKeys.value.includes(rowStableKey(row)))
+      : (() => {
+          const passed = rows.value.filter(row => isPass(row.passes) && row.smiles)
+          return passed.length > 0 ? passed : rows.value.filter(row => Boolean(row.smiles)).slice(0, 20)
+        })()
+  return pool.slice(0, MAX_SAVE_CANDIDATES)
 })
 
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
+  preserveSelectedRowKeys: true,
   onChange: (keys: Array<string | number>) => {
-    selectedRowKeys.value = keys.map(Number).filter(Number.isFinite)
+    selectedRowKeys.value = keys.map(String)
   }
 }))
 
@@ -64,6 +72,9 @@ async function handleSaveCandidates(): Promise<void> {
     message.warning('没有可保存的含 SMILES 分子')
     return
   }
+  if (selectedRowKeys.value.length > MAX_SAVE_CANDIDATES) {
+    message.warning(`单次最多保存 ${MAX_SAVE_CANDIDATES} 个候选分子，将只保存前 ${MAX_SAVE_CANDIDATES} 个`)
+  }
   savingCandidates.value = true
   try {
     let projectId = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
@@ -75,20 +86,25 @@ async function handleSaveCandidates(): Promise<void> {
       message.error('缺少所属项目信息，无法保存为候选集')
       return
     }
-    const candidateIds = await Promise.all(
-      rowsToSave.value.map(async row => {
-        const score = Number(row.docking_score)
-        const created = await createCandidate(projectId, {
-          candidate_type: 'SMALL_MOLECULE',
-          source: 'SCREENING',
-          task_id: taskId.value,
-          smiles: row.smiles,
-          ...(Number.isFinite(score) ? { design_score: score } : {}),
-          attrs: { ...row }
+    const candidateIds: string[] = []
+    for (let offset = 0; offset < rowsToSave.value.length; offset += SAVE_BATCH_SIZE) {
+      const batch = rowsToSave.value.slice(offset, offset + SAVE_BATCH_SIZE)
+      const batchIds = await Promise.all(
+        batch.map(async row => {
+          const score = Number(row.docking_score)
+          const created = await createCandidate(projectId, {
+            candidate_type: 'SMALL_MOLECULE',
+            source: 'SCREENING',
+            task_id: taskId.value,
+            smiles: row.smiles,
+            ...(Number.isFinite(score) ? { design_score: score } : {}),
+            attrs: { ...row }
+          })
+          return created.data.id
         })
-        return created.data.id
-      })
-    )
+      )
+      candidateIds.push(...batchIds)
+    }
     const setRes = await createCandidateSet(projectId, {
       name: saveSetName.value.trim(),
       description: `来自虚拟筛选任务 ${taskId.value}`,
@@ -98,8 +114,8 @@ async function handleSaveCandidates(): Promise<void> {
     message.success(`已保存 ${candidateIds.length} 个候选分子到候选集`)
     saveModalOpen.value = false
     selectedRowKeys.value = []
-  } catch {
-    message.error('保存候选集失败，请重试')
+  } catch (cause) {
+    message.error(cause instanceof Error ? `保存候选集失败：${cause.message}` : '保存候选集失败，请重试')
   } finally {
     savingCandidates.value = false
   }
@@ -293,7 +309,7 @@ onMounted(() => {
           :row-selection="rowSelection"
           :pagination="{ pageSize: 20, showSizeChanger: true }"
           :scroll="{ x: 'max-content' }"
-          :row-key="(_record: Record<string, string>, index: number) => index"
+          :row-key="rowStableKey"
           :custom-row="customRow"
           size="small"
           data-testid="screen-result-table"

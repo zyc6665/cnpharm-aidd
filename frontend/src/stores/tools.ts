@@ -55,7 +55,7 @@ export const useToolsStore = defineStore('tools', () => {
         res = await getToolDetail(id)
       } catch (err) {
         if (UUID_PATTERN.test(id)) throw err
-        const listRes = await getToolList({ page_size: 100 })
+        const listRes = await getToolList({ search: id, page_size: 20 })
         const matched = listRes?.data?.items?.find(item => item.slug === id)
         if (!matched) throw err
         res = await getToolDetail(matched.id)

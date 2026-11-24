@@ -154,13 +154,12 @@ test('ResultDetail.vue 复用 getTraceability 并提供导出追溯包入口', (
   assert.ok(!source.includes('components/traceability'), '不得新建第二个追溯组件')
 })
 
-test('Assets.vue 提供批量导入入口并展示导入汇总', () => {
+test('Assets.vue 收敛为项目 Artifact 数据空间（按调用分组上传与下载）', () => {
   const source = readSource('src/views/compounds/Assets.vue')
 
-  assert.ok(source.includes('importCompounds'), 'Assets.vue 必须调用 importCompounds')
-  assert.ok(source.includes('uploadFile'), 'Assets.vue 必须先用 files/upload 拿 file_id')
-  assert.ok(source.includes('.smi') && source.includes('.csv') && source.includes('.sdf'))
-  assert.ok(source.includes('duplicate'), 'Assets.vue 需要展示 duplicate 统计')
+  assert.ok(source.includes('uploadProjectArtifact'), 'Assets.vue 必须调用 uploadProjectArtifact')
+  assert.ok(source.includes('getAllProjectArtifacts'), 'Assets.vue 必须加载项目 Artifact 数据空间')
+  assert.ok(source.includes('artifactGroups'), 'Assets.vue 必须按工具调用分组展示数据空间')
 })
 
 test('数据资产页收敛为按调用目录分组的数据空间，候选物在独立页面', () => {

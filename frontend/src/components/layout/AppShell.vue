@@ -619,13 +619,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .shell-topbar-actions {
-  position: fixed;
-  top: 12px;
-  right: 20px;
-  z-index: @z-index-sticky;
   display: flex;
-  align-items: center;
-  gap: @spacing-xs;
+  justify-content: flex-end;
+  padding: 10px 24px 0;
+}
+
+@media (max-width: @screen-md) {
+  .shell-topbar-actions {
+    display: none;
+  }
 }
 
 .topbar-download-btn {

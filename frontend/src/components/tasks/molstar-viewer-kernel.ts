@@ -1,6 +1,7 @@
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { Color } from 'molstar/lib/mol-util/color'
 import type { MolstarBackground, MolstarViewerMode } from '@/domain/tasks'
+import { trackDownload } from '@/utils/download-history'
 
 export type { MolstarBackground, MolstarViewerMode } from '@/domain/tasks'
 
@@ -95,7 +96,9 @@ export async function downloadMolstarScreenshot(
     if (!helper) {
       return false
     }
-    await helper.download(filename)
+    await trackDownload(filename, async () => {
+      await helper.download(filename)
+    })
     return true
   } catch {
     return false

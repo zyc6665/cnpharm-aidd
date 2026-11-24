@@ -25,39 +25,11 @@
           data-testid="molecule-source-mode"
         >
           <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
-          <a-radio-button value="artifact">从数据空间（Artifact）</a-radio-button>
           <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
         </a-radio-group>
 
         <div v-if="sourceMode === 'project'" class="source-body">
           <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
-        </div>
-
-        <div v-else-if="sourceMode === 'artifact'" class="source-body source-body--fields" data-testid="molecule-artifact-source">
-          <div class="source-field">
-            <span class="source-label">{{ t('design.molecule.project') }}</span>
-            <a-select
-              v-model:value="uploadProjectId"
-              class="source-control"
-              show-search
-              option-filter-prop="label"
-              :options="projectOptions"
-              :placeholder="t('design.molecule.projectPlaceholder')"
-              @change="loadProjectStructureArtifacts"
-            />
-          </div>
-          <div class="source-field">
-            <span class="source-label">蛋白结构 Artifact</span>
-            <a-select
-              v-model:value="selectedArtifactId"
-              class="source-control"
-              show-search
-              option-filter-prop="label"
-              :loading="artifactsLoading"
-              :options="structureArtifactOptions"
-              placeholder="从项目数据空间选择蛋白结构（PDB / CIF）"
-            />
-          </div>
         </div>
 
         <div v-else class="source-body source-body--fields" data-testid="molecule-upload-source">
@@ -178,10 +150,9 @@
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
-  import { getAllProjectArtifacts, uploadProjectArtifact } from '@/api/artifacts'
+  import { uploadProjectArtifact } from '@/api/artifacts'
   import { uploadFile } from '@/api/files'
   import { listProjects } from '@/api/projects'
-  import type { TypedArtifact } from '@/types/artifacts'
   import { parsePocketGeometry, radiusOf } from '@/domain/pockets/pocket-geometry'
   import {
     buildDefaultValues,
@@ -220,12 +191,9 @@
    * 准备产物，也可以是用户手上的一个 PDB；后者在项目模式下由口袋记录给出，
    * 上传模式下从口袋文件里算（`pocket0.pdb` 的 UNL 点最准）。
    */
-  const sourceMode = ref<'project' | 'artifact' | 'upload'>('project')
+  const sourceMode = ref<'project' | 'upload'>('project')
   const projects = ref<ResearchProject[]>([])
   const uploadProjectId = ref<string>(route.query.project_id as string || '')
-  const projectArtifacts = ref<TypedArtifact[]>([])
-  const artifactsLoading = ref(false)
-  const selectedArtifactId = ref<string>('')
   const structureFile = ref<File | null>(null)
   const pocketFile = ref<File | null>(null)
   const uploadCenter = ref<{ x: number; y: number; z: number } | null>(null)
@@ -235,54 +203,25 @@
     projects.value.map((project) => ({ label: project.name, value: project.id }))
   )
 
-  const structureArtifactOptions = computed(() =>
-    projectArtifacts.value
-      .filter(item => item.artifact_type === 'protein_structure' || item.semantic_type.includes('protein'))
-      .map(item => ({
-        value: item.id,
-        label: `${item.name}${item.latest_version?.filename ? ` (${item.latest_version.filename})` : ''}`
-      }))
-  )
-
-  const selectedArtifact = computed(() =>
-    projectArtifacts.value.find(item => item.id === selectedArtifactId.value) ?? null
-  )
-
-  async function loadProjectStructureArtifacts(): Promise<void> {
-    if (!uploadProjectId.value) {
-      projectArtifacts.value = []
-      selectedArtifactId.value = ''
-      return
-    }
-    artifactsLoading.value = true
-    try {
-      projectArtifacts.value = (await getAllProjectArtifacts(uploadProjectId.value)).data.items ?? []
-    } catch {
-      projectArtifacts.value = []
-    } finally {
-      artifactsLoading.value = false
-    }
-  }
-
   /** 上传模式下「用户已经选了东西」——用来决定要不要显示提示与摘要。 */
-  const hasSelection = computed(() => {
-    if (sourceMode.value === 'project') return Boolean(pocketSelection.value)
-    if (sourceMode.value === 'artifact') return Boolean(selectedArtifact.value)
-    return Boolean(structureFile.value || pocketFile.value)
-  })
+  const hasSelection = computed(() =>
+    sourceMode.value === 'project'
+      ? Boolean(pocketSelection.value)
+      : Boolean(structureFile.value || pocketFile.value)
+  )
 
-  /** 受体结构是否就位：项目模式看口袋附件，数据空间看选中的 Artifact，上传模式看用户是否选了文件。 */
-  const structureReady = computed(() => {
-    if (sourceMode.value === 'project') return Boolean(pocketSelection.value?.structureFileId)
-    if (sourceMode.value === 'artifact') return Boolean(selectedArtifact.value?.latest_version?.id)
-    return Boolean(structureFile.value)
-  })
+  /** 受体结构是否就位：项目模式看口袋附件，上传模式看用户是否选了文件。 */
+  const structureReady = computed(() =>
+    sourceMode.value === 'project'
+      ? Boolean(pocketSelection.value?.structureFileId)
+      : Boolean(structureFile.value)
+  )
 
-  const pocketLabelText = computed(() => {
-    if (sourceMode.value === 'project') return pocketSelection.value?.pocketLabel || '-'
-    if (sourceMode.value === 'artifact') return selectedArtifact.value?.name || '-'
-    return pocketFile.value?.name || '-'
-  })
+  const pocketLabelText = computed(() =>
+    sourceMode.value === 'project'
+      ? pocketSelection.value?.pocketLabel || '-'
+      : pocketFile.value?.name || '-'
+  )
 
   // 同类分子生成模型可自由选择；默认 pocket2mol；参数 schema 随模型切换。
   const {
@@ -392,10 +331,10 @@
     if (!structureReady.value) {
       return t('design.molecule.pocketMissingFile')
     }
-    if ((sourceMode.value === 'upload' || sourceMode.value === 'artifact') && !uploadProjectId.value) {
+    if (sourceMode.value === 'upload' && !uploadProjectId.value) {
       return t('design.molecule.needProject')
     }
-    if (sourceMode.value !== 'artifact' && !hasCenter.value) {
+    if (!hasCenter.value) {
       return t('design.molecule.pocketMissingCenter')
     }
     const errors = validateParameters(selectedOption.value?.parameterSchema ?? null, form.params)
@@ -442,11 +381,7 @@
     try {
       let projectId = pocketSelection.value?.projectId ?? ''
       let proteinPdbFileId = pocketSelection.value?.structureFileId ?? ''
-      let inputBindings: Record<string, string> | undefined
-      if (sourceMode.value === 'artifact' && selectedArtifact.value?.latest_version?.id) {
-        projectId = uploadProjectId.value
-        inputBindings = { protein_pdb: selectedArtifact.value.latest_version.id }
-      } else if (sourceMode.value === 'upload') {
+      if (sourceMode.value === 'upload') {
         projectId = uploadProjectId.value
         // 上传模式把结构传上去，并顺手沉淀进项目数据空间供后续工具复用。
         if (structureFile.value) {
@@ -458,7 +393,9 @@
               semantic_type: 'protein_structure',
               standard_type: 'protein_structure',
               standard_version: 1,
-            }).catch(() => undefined)
+            }).catch(() => {
+              message.warning('结构文件已用于本次任务，但自动归档到项目数据空间失败')
+            })
           }
         }
       }
@@ -468,7 +405,7 @@
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
         params,
-        ...(inputBindings ? { inputBindings } : { standardInputUploads: { protein_pdb: proteinPdbFileId } })
+        standardInputUploads: { protein_pdb: proteinPdbFileId }
       })
       message.success(t('design.molecule.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })

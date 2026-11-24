@@ -267,7 +267,9 @@
       return
     }
 
-    void saveBlobAsFile(csv, 'candidate-comparison.csv', 'text/csv;charset=utf-8')
+    void saveBlobAsFile(csv, 'candidate-comparison.csv', 'text/csv;charset=utf-8').catch(cause => {
+      message.error(cause instanceof Error ? cause.message : String(cause))
+    })
   }
 
   async function loadComparison(): Promise<void> {
