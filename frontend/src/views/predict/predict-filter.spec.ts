@@ -38,6 +38,16 @@ describe('filterPredictRows', () => {
     expect(result.map(row => row.molecule_id)).toEqual(['M3'])
   })
 
+  it('does not interpret blank numeric cells as zero while preserving explicit zero', () => {
+    const withMissing = [
+      ...rows,
+      { __rowKey: '4', molecule_id: 'M4', smiles: 'CO', hia: '' },
+      { __rowKey: '5', molecule_id: 'M5', smiles: 'CN', hia: '0' }
+    ]
+    expect(filterPredictRows(withMissing, { column: 'hia', min: 0 }).map(row => row.molecule_id))
+      .toEqual(['M1', 'M2', 'M3', 'M5'])
+  })
+
   it('only applies SMILES search when the table has a SMILES column', () => {
     expect(filterPredictRows(rows, { searchText: 'CCO', hasSmilesColumn: true })).toHaveLength(1)
     expect(filterPredictRows(rows, { searchText: 'CCO', hasSmilesColumn: false })).toHaveLength(3)

@@ -410,10 +410,10 @@ describe('GenerationResults', () => {
       await flushPromises()
 
       const stored = JSON.parse(
-        window.localStorage.getItem('design:results:marks:task-1') ?? '{}'
+        window.localStorage.getItem('design:results:marks:v2:task-1') ?? '{}'
       ) as { favorite?: string[]; excluded?: string[] }
-      expect(stored.favorite).toEqual(['0'])
-      expect(stored.excluded).toEqual(['1'])
+      expect(stored.favorite).toEqual(['smiles:CC(=O)Oc1ccccc1C(=O)O'])
+      expect(stored.excluded).toEqual(['smiles:CCN(CC)CC'])
 
       await wrapper.get('[data-testid="results-mark-filter"] [data-value="favorite"]').trigger('click')
       await flushPromises()

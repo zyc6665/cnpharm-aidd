@@ -578,15 +578,10 @@
                 </a-button>
               </div>
 
-              <div v-if="has3d && !simplifiedMode" class="results-viewer__stage" data-testid="results-3d-viewer">
-                <MoleculeViewer
-                  v-if="viewerScene"
-                  :scene="viewerScene"
-                  variant="compact"
-                  mode="docking"
-                  :allow-native-fullscreen="false"
-                />
-              </div>
+				  <div v-if="has3d && !simplifiedMode" class="results-viewer__stage" data-testid="results-3d-viewer">
+				    <MoleculeViewer v-if="matchedViewerScene" :scene="matchedViewerScene" variant="compact" mode="docking" :allow-native-fullscreen="false" />
+				    <p v-else class="results-viewer__note">{{ t('design.results.noMatching3d') }}</p>
+				  </div>
 
               <div v-else class="results-viewer__fallback" data-testid="results-viewer-fallback">
                 <p v-if="!has3d" class="results-viewer__note">
@@ -758,7 +753,8 @@
     type MetricKind,
     type MetricTone,
   } from '@/domain/molecules/druglikeness'
-  import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecule-export'
+import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecule-export'
+  import { findGenerationRowStructure } from './generation-viewer'
   import { uploadFile } from '@/api/files'
   import type { CandidateCreateInput } from '@/types/compounds'
   import type { DesignGenerationResult, DesignTableColumn, DesignTableRow } from '@/types/design'
@@ -881,6 +877,7 @@
   const tpsaColumn = computed(() => findColumn([/tpsa/i, /极性表面积/i]))
   const smilesColumn = computed(() => findColumn([/smiles/i]))
   const sequenceColumn = computed(() => findColumn([/sequence/i, /序列/i]))
+  const moleculeIdColumn = computed(() => findColumn([/^(molecule_id|ligand_id|compound_id|id)$/i]))
   const isPeptideResult = computed(() => Boolean(sequenceColumn.value) && !smilesColumn.value)
 
   /** 骨架列（scaffold / murcko_scaffold）；CSV 没有这一列时整块骨架 UI 都不渲染。 */
@@ -1076,6 +1073,27 @@
     taskDetail.value ? buildVisualizationScene(taskDetail.value) : null
   )
   const has3d = computed(() => Boolean(viewerScene.value?.entries.length))
+  const viewerMatch = ref<Awaited<ReturnType<typeof findGenerationRowStructure>>>(null)
+  let viewerRequest = 0
+  watch([activeRow, taskDetail, rows], async ([active, task]) => {
+    const request = ++viewerRequest
+    viewerMatch.value = null
+    if (!active || !task || !has3d.value) return
+    try {
+      const match = await findGenerationRowStructure(task, active, rows.value)
+      if (request === viewerRequest) viewerMatch.value = match
+    } catch {
+      if (request === viewerRequest) viewerMatch.value = null
+    }
+  }, { immediate: true })
+  const matchedViewerScene = computed<VisualizationScene | null>(() => {
+    const scene = viewerScene.value
+    const match = viewerMatch.value
+    if (!scene || !match) return null
+    const entries = scene.entries.filter(entry => entry.role !== 'ligand')
+    entries.push({ ...match.entry, sdfRecordIndex: match.sdfRecordIndex })
+    return { ...scene, entries, outputEntries: [...scene.outputEntries.filter(entry => entry.role !== 'ligand'), { ...match.entry, sdfRecordIndex: match.sdfRecordIndex }], selectedOutputKey: match.entry.key }
+  })
 
   const activeProperties = computed<LipinskiProperties | null>(() =>
     activeRow.value ? propertiesForRow(activeRow.value) : null
@@ -1174,9 +1192,27 @@
 
   async function copyText(text: string): Promise<void> {
     if (!text) return
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        message.success(t('common.copySuccess'))
+        return
+      } catch {
+        // HTTP 内网环境无 clipboard API 权限时回退到 execCommand('copy')。
+      }
+    }
     try {
-      await navigator.clipboard.writeText(text)
-      message.success(t('common.copySuccess'))
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (copied) message.success(t('common.copySuccess'))
+      else message.warning(t('design.results.copyFailed'))
     } catch {
       message.warning(t('design.results.copyFailed'))
     }
@@ -1253,20 +1289,31 @@
     return tone ? `metric-value--${tone}` : ''
   }
 
+  function markIdentityKey(row: DesignTableRow): string {
+    const smiles = rowSmiles(row)
+    if (smiles) return `smiles:${smiles}`
+    const idVal = moleculeIdColumn.value ? (row[moleculeIdColumn.value.key] ?? '').trim() : ''
+    if (idVal) return `molecule_id:${idVal}`
+    return ''
+  }
+
   function isFavorite(row: DesignTableRow): boolean {
-    return favoriteKeys.value.includes(row.__rowKey)
+    const key = markIdentityKey(row)
+    return Boolean(key && favoriteKeys.value.includes(key))
   }
 
   function isExcluded(row: DesignTableRow): boolean {
-    return excludedKeys.value.includes(row.__rowKey)
+    const key = markIdentityKey(row)
+    return Boolean(key && excludedKeys.value.includes(key))
   }
 
   function toggleFavorite(row: DesignTableRow): void {
-    const key = row.__rowKey
-    favoriteKeys.value = isFavorite(row)
+    const key = markIdentityKey(row)
+    if (!key) return
+    favoriteKeys.value = favoriteKeys.value.includes(key)
       ? favoriteKeys.value.filter(item => item !== key)
       : [...favoriteKeys.value, key]
-    if (isFavorite(row)) {
+    if (favoriteKeys.value.includes(key)) {
       // 喜欢与排除互斥：标了喜欢就撤销排除，避免同一行既收藏又隐藏。
       excludedKeys.value = excludedKeys.value.filter(item => item !== key)
     }
@@ -1274,18 +1321,19 @@
   }
 
   function toggleExclude(row: DesignTableRow): void {
-    const key = row.__rowKey
-    excludedKeys.value = isExcluded(row)
+    const key = markIdentityKey(row)
+    if (!key) return
+    excludedKeys.value = excludedKeys.value.includes(key)
       ? excludedKeys.value.filter(item => item !== key)
       : [...excludedKeys.value, key]
-    if (isExcluded(row)) {
+    if (excludedKeys.value.includes(key)) {
       favoriteKeys.value = favoriteKeys.value.filter(item => item !== key)
     }
     persistMarks()
   }
 
   function marksStorageKey(): string {
-    return `design:results:marks:${taskId.value}`
+    return `design:results:marks:v2:${taskId.value}`
   }
 
   function loadMarks(): void {
@@ -1638,8 +1686,18 @@
       sdfText ? splitSdfRecords(sdfText) : [],
       targetRows.map(row => ({ smiles: rowSmiles(row) }))
     )
+    const exported = text ? splitSdfRecords(text).length : 0
+    if (exported === 0) {
+      message.warning(t('design.results.exportEmpty'))
+      return
+    }
     await saveBlobAsFile(text, `molecules-${taskId.value.slice(0, 8)}.sdf`, 'chemical/x-mdl-sdfile')
-    message.success(t('design.results.exportSdfSuccess', { count: targetRows.length }))
+    const skipped = Math.max(0, targetRows.length - exported)
+    if (skipped > 0) {
+      message.warning(t('design.results.exportSdfSkipped', { exported, skipped }))
+    } else {
+      message.success(t('design.results.exportSdfSuccess', { count: exported }))
+    }
   }
 
   async function handleSave(): Promise<void> {
