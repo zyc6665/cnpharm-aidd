@@ -1,4 +1,5 @@
 import request, { type RequestOptions } from '@/api/request'
+import { trackDownload } from '@/utils/download-history'
 
 interface ObjectUrlApi {
   createObjectURL(blob: Blob): string
@@ -178,9 +179,21 @@ export async function fetchProtectedFileText(
   return await (dependencies.fetchText || fetchProtectedTextContent)(fileUrl, headers)
 }
 
+/**
+ * 所有受保护文件下载的唯一出口。每次调用都会登记进全局下载记录
+ * （`download-history.ts`），侧栏「下载」入口可以看到状态并重试失败项；
+ * 异常仍然抛给调用方，各页面原有的错误提示保持不变。
+ */
 export async function triggerProtectedFileDownload(
   file: ProtectedFileReference,
   dependencies: ProtectedFileAccessDependencies = {}
+): Promise<void> {
+  await trackDownload(resolveDownloadName(file), () => performProtectedFileDownload(file, dependencies))
+}
+
+async function performProtectedFileDownload(
+  file: ProtectedFileReference,
+  dependencies: ProtectedFileAccessDependencies
 ): Promise<void> {
   if (!file.url) {
     throw new Error('缺少文件下载地址')
@@ -204,6 +217,8 @@ export async function triggerProtectedFileDownload(
       }
       return
     } catch {
+      // 预签名地址拿不到（旧文件、权限边界等）时退回到带 Cookie 的 blob 下载；
+      // 兜底再失败会抛出，由下载记录和调用方共同呈现，不再静默。
     }
   }
 
@@ -219,4 +234,33 @@ export async function triggerProtectedFileDownload(
     anchor.remove()
     resource.revoke()
   }
+}
+
+/**
+ * 前端本地生成内容（CSV、报告 JSON 等）的下载出口，同样登记进下载记录。
+ * 页面不要再自己 `createObjectURL` + 建 `<a>`。
+ */
+export async function saveBlobAsFile(
+  content: Blob | string,
+  filename: string,
+  mimeType = 'text/plain;charset=utf-8',
+  dependencies: Pick<ProtectedFileAccessDependencies, 'dom' | 'objectUrl'> = {}
+): Promise<void> {
+  await trackDownload(filename, async () => {
+    const blob = typeof content === 'string' ? new Blob([content], { type: mimeType }) : content
+    const objectUrlApi = dependencies.objectUrl || defaultObjectUrlApi
+    const dom = dependencies.dom || defaultDownloadDomApi
+    const url = objectUrlApi.createObjectURL(blob)
+    const anchor = dom.createAnchor()
+    try {
+      anchor.href = url
+      anchor.download = filename
+      dom.appendAnchor(anchor)
+      anchor.click()
+    } finally {
+      anchor.remove()
+      // 部分浏览器在 click 之后才真正开始读取 blob，延后释放避免下载到空文件。
+      setTimeout(() => objectUrlApi.revokeObjectURL(url), 0)
+    }
+  })
 }

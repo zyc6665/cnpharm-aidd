@@ -6,6 +6,7 @@
  * 供「设计流程总览」与「设计任务」共用，避免各处各自解释 counts/gaps 而口径漂移。
  */
 import type { ProjectStage, StageCounters, StageGap } from '@/types/decisions'
+import { POCKET_PREDICT_TOOL_SLUG, STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
 
 export type DesignStageKey = 'structure' | 'pocket' | 'molecule' | 'evaluation' | 'validation'
 export type StageReadiness = 'ready' | 'missing' | 'empty'
@@ -28,7 +29,7 @@ export const DESIGN_STAGES: readonly DesignStageDef[] = [
     labelKey: 'design.pipeline.stage.structure',
     counterKey: 'structures',
     gapCode: 'NO_STRUCTURE',
-    defaultPath: projectId => `/design?focus=structure&project_id=${projectId}`,
+    defaultPath: projectId => `/tools/${STRUCTURE_PREDICT_TOOL_SLUG}?project_id=${projectId}`,
   },
   {
     key: 'pocket',
@@ -36,7 +37,7 @@ export const DESIGN_STAGES: readonly DesignStageDef[] = [
     labelKey: 'design.pipeline.stage.pocket',
     counterKey: 'selected_pockets',
     gapCode: 'NO_POCKET_SELECTED',
-    defaultPath: projectId => `/design?focus=pocket&project_id=${projectId}`,
+    defaultPath: projectId => `/tools/${POCKET_PREDICT_TOOL_SLUG}?project_id=${projectId}`,
   },
   {
     key: 'molecule',
@@ -83,9 +84,7 @@ export function buildDesignStages(
     const gap = stage?.gaps.find(item => item.code === def.gapCode) ?? null
     const readiness: StageReadiness =
       stage === null ? 'empty' : count > 0 ? 'ready' : 'missing'
-    // 结构/口袋「去完成」留在统一设计流程内（就地引导），不跳回旧详情页；
-    // 其余阶段优先用后端各口给的 link。
-    const inFlow = def.key === 'structure' || def.key === 'pocket'
+    // 默认跳到独立单工具页（允许直接上传或选项目数据），不再强制锁进向导流程。
     return {
       key: def.key,
       order: def.order,
@@ -93,7 +92,7 @@ export function buildDesignStages(
       readiness,
       count,
       gap,
-      primaryPath: inFlow ? def.defaultPath(projectId) : (gap?.link ?? def.defaultPath(projectId)),
+      primaryPath: def.defaultPath(projectId),
     }
   })
 }

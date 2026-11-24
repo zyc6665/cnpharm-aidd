@@ -1,3 +1,6 @@
+import { message } from 'ant-design-vue'
+import { saveBlobAsFile } from '@/utils/protected-file-access'
+
 /** 通用 CSV 导出：把 [{key,title}] 列与 Record 行拼成 CSV 并触发浏览器下载。 */
 export interface CsvExportColumn {
   key: string
@@ -28,13 +31,7 @@ export function downloadCsv(
   rows: Array<Record<string, string>>
 ): void {
   const csv = buildCsv(columns, rows)
-  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
+  void saveBlobAsFile(`\ufeff${csv}`, filename, 'text/csv;charset=utf-8').catch(cause => {
+    message.error(cause instanceof Error ? cause.message : String(cause))
+  })
 }

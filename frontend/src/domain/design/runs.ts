@@ -104,7 +104,14 @@ export function resolveDesignRunPath(toolSlug: string | undefined, taskId: strin
  * 由结果页按 tool slug 选择对应视图；未知类型走通用产物兜底，不再把结构/口袋
  * 任务直接丢回任务详情。
  */
-export function resolveTaskResultPath(_toolSlug: string | undefined, taskId: string): string {
+export function resolveTaskResultPath(
+  _toolSlug: string | undefined,
+  taskId: string,
+  projectId?: string | null
+): string {
+  if (projectId) {
+    return `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/result`
+  }
   return `/tasks/${taskId}/result`
 }
 

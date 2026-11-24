@@ -1,5 +1,6 @@
 <template>
   <main class="result-detail-page">
+    <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
     <AppBackLink
       v-if="projectId"
       :fallback="`/projects/${projectId}/results`"
@@ -9,9 +10,14 @@
 
     <AppPageHeader :title="resultTitle" :subtitle="t('results.detail.summary')">
       <template #actions>
-        <a-button :loading="loading" data-testid="result-refresh" @click="loadAll">
-          {{ t('common.refresh') }}
-        </a-button>
+        <a-space>
+          <router-link :to="interactiveResultPath" data-testid="result-open-interactive">
+            <a-button type="primary">打开交互结果 / 筛选候选 →</a-button>
+          </router-link>
+          <a-button :loading="loading" data-testid="result-refresh" @click="loadAll">
+            {{ t('common.refresh') }}
+          </a-button>
+        </a-space>
       </template>
     </AppPageHeader>
 
@@ -348,11 +354,12 @@
 
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
 import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { formatDateTimeOrDash } from '@/domain/common/format'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppRawJson from '@/components/common/AppRawJson.vue'
@@ -388,11 +395,20 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
 
   const resultTitle = computed(() => result.value?.name || t('results.detail.title'))
 
+  const router = useRouter()
   const projectId = computed(() => {
+    const fromParam = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
+    if (fromParam) return fromParam
     const fromResult = result.value?.project_id
     if (fromResult) return fromResult
     return String(route.query.project_id || '')
   })
+
+  const interactiveResultPath = computed(() =>
+    projectId.value
+      ? `/projects/${encodeURIComponent(projectId.value)}/tasks/${encodeURIComponent(taskId.value)}/result`
+      : `/tasks/${encodeURIComponent(taskId.value)}/result`
+  )
 
   const inputRows = computed<ResultInputSnapshot[]>(() => result.value?.inputs ?? [])
 
@@ -469,6 +485,15 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     try {
       const response = await getResult(taskId.value)
       result.value = response.data
+      if (
+        response.data?.project_id &&
+        !route.params?.projectId &&
+        typeof router.replace === 'function'
+      ) {
+        void router.replace(
+          `/projects/${encodeURIComponent(response.data.project_id)}/results/${encodeURIComponent(taskId.value)}`
+        )
+      }
     } catch {
       loadError.value = true
       result.value = null

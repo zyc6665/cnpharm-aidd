@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import FunnelChart from './FunnelChart.vue'
@@ -9,6 +10,8 @@ import { countPasses, funnelFromRankedRows } from './funnel'
 import type { FunnelStageKey } from './funnel'
 import { loadMoleculeTable } from '@/views/predict/molecule-table'
 import { downloadCsv } from '@/views/predict/csv-export'
+import { getTaskDetail } from '@/api/tasks'
+import { addCandidateSetItems, createCandidate, createCandidateSet } from '@/api/compounds'
 import {
   SCREENING_RANKED_COLUMNS,
   SCREENING_RANKED_COLUMN_I18N
@@ -20,10 +23,103 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+const MAX_SAVE_CANDIDATES = 200
+const SAVE_BATCH_SIZE = 20
+
 const taskId = computed(() => String(route.params.id ?? ''))
 const loading = ref(true)
 const errorMessage = ref('')
 const rows = ref<CsvPreviewRow[]>([])
+const selectedRowKeys = ref<string[]>([])
+const saveModalOpen = ref(false)
+const saveSetName = ref('')
+const savingCandidates = ref(false)
+
+function rowStableKey(record: CsvPreviewRow): string {
+  return `${record.rank ?? ''}:${record.smiles ?? ''}`
+}
+
+const rowsToSave = computed(() => {
+  const pool =
+    selectedRowKeys.value.length > 0
+      ? rows.value.filter(row => row.smiles && selectedRowKeys.value.includes(rowStableKey(row)))
+      : (() => {
+          const passed = rows.value.filter(row => isPass(row.passes) && row.smiles)
+          return passed.length > 0 ? passed : rows.value.filter(row => Boolean(row.smiles)).slice(0, 20)
+        })()
+  return pool.slice(0, MAX_SAVE_CANDIDATES)
+})
+
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  preserveSelectedRowKeys: true,
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map(String)
+  }
+}))
+
+function openSaveModal(): void {
+  saveSetName.value = `虚拟筛选候选集-${taskId.value.slice(0, 8)}`
+  saveModalOpen.value = true
+}
+
+async function handleSaveCandidates(): Promise<void> {
+  if (!saveSetName.value.trim()) {
+    message.warning('请输入候选集名称')
+    return
+  }
+  if (rowsToSave.value.length === 0) {
+    message.warning('没有可保存的含 SMILES 分子')
+    return
+  }
+  if (selectedRowKeys.value.length > MAX_SAVE_CANDIDATES) {
+    message.warning(`单次最多保存 ${MAX_SAVE_CANDIDATES} 个候选分子，将只保存前 ${MAX_SAVE_CANDIDATES} 个`)
+  }
+  savingCandidates.value = true
+  try {
+    let projectId = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
+    if (!projectId) {
+      const taskRes = await getTaskDetail(taskId.value, { silent: true })
+      projectId = taskRes.data.project_id ?? ''
+    }
+    if (!projectId) {
+      message.error('缺少所属项目信息，无法保存为候选集')
+      return
+    }
+    const candidateIds: string[] = []
+    for (let offset = 0; offset < rowsToSave.value.length; offset += SAVE_BATCH_SIZE) {
+      const batch = rowsToSave.value.slice(offset, offset + SAVE_BATCH_SIZE)
+      const batchIds = await Promise.all(
+        batch.map(async row => {
+          const score = Number(row.docking_score)
+          const created = await createCandidate(projectId, {
+            candidate_type: 'SMALL_MOLECULE',
+            source: 'SCREENING',
+            task_id: taskId.value,
+            smiles: row.smiles,
+            ...(Number.isFinite(score) ? { design_score: score } : {}),
+            attrs: { ...row }
+          })
+          return created.data.id
+        })
+      )
+      candidateIds.push(...batchIds)
+    }
+    const setRes = await createCandidateSet(projectId, {
+      name: saveSetName.value.trim(),
+      description: `来自虚拟筛选任务 ${taskId.value}`,
+      source_task_id: taskId.value
+    })
+    await addCandidateSetItems(setRes.data.id, { candidate_ids: candidateIds })
+    message.success(`已保存 ${candidateIds.length} 个候选分子到候选集`)
+    saveModalOpen.value = false
+    selectedRowKeys.value = []
+  } catch (cause) {
+    message.error(cause instanceof Error ? `保存候选集失败：${cause.message}` : '保存候选集失败，请重试')
+  } finally {
+    savingCandidates.value = false
+  }
+}
 
 const NUMERIC_KEYS = [
   'pharmacophore_features',
@@ -140,14 +236,23 @@ onMounted(() => {
   <main class="screen-result" data-testid="screen-result-page">
     <AppPageHeader :title="t('screening.result.title')" :subtitle="t('screening.result.subtitle')">
       <template #actions>
-        <a-button
-          type="primary"
-          :disabled="!rows.length"
-          data-testid="screen-result-export"
-          @click="handleExport"
-        >
-          {{ t('screening.result.exportCsv') }}
-        </a-button>
+        <a-space>
+          <a-button
+            :disabled="!rows.length"
+            data-testid="screen-save-candidates"
+            @click="openSaveModal"
+          >
+            {{ selectedRowKeys.length ? `保存已选 (${selectedRowKeys.length}) 为候选集` : '保存为候选集' }}
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!rows.length"
+            data-testid="screen-result-export"
+            @click="handleExport"
+          >
+            {{ t('screening.result.exportCsv') }}
+          </a-button>
+        </a-space>
       </template>
     </AppPageHeader>
 
@@ -201,9 +306,10 @@ onMounted(() => {
         <a-table
           :columns="tableColumns"
           :data-source="rows"
+          :row-selection="rowSelection"
           :pagination="{ pageSize: 20, showSizeChanger: true }"
           :scroll="{ x: 'max-content' }"
-          :row-key="(_record: Record<string, string>, index: number) => index"
+          :row-key="rowStableKey"
           :custom-row="customRow"
           size="small"
           data-testid="screen-result-table"
@@ -223,6 +329,28 @@ onMounted(() => {
         </a-table>
       </a-card>
     </template>
+
+    <a-modal
+      v-model:open="saveModalOpen"
+      title="保存为候选集"
+      :confirm-loading="savingCandidates"
+      ok-text="保存"
+      data-testid="screen-save-candidates-modal"
+      @ok="handleSaveCandidates"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="候选集名称" required>
+          <a-input v-model:value="saveSetName" placeholder="例如：STAT6 虚拟筛选 Top10" />
+        </a-form-item>
+        <p style="margin: 0; color: #64748b; font-size: 13px;">
+          {{
+            selectedRowKeys.length
+              ? `将保存当前勾选的 ${rowsToSave.length} 个分子。`
+              : `未手动勾选时，将自动保存通过筛选（或前 20 名）的 ${rowsToSave.length} 个分子。`
+          }}
+        </p>
+      </a-form>
+    </a-modal>
   </main>
   <ResultDisclaimer />
 </template>

@@ -50,20 +50,15 @@ test('router 注册 ProjectDecisions 并挂在 /projects/:projectId/decisions', 
   assert.ok(decisionsIndex > resultsIndex, 'ProjectDecisions 必须注册在 ProjectResults 之后')
 })
 
-test('项目导航新增 decisions 项，位置在 results 之后 lineage 之前', () => {
+test('项目导航收敛后 decisions 通过候选与决策二级视图可达并正确高亮', () => {
   const navSource = readSource('src/domain/projects/navigation.ts')
 
   assert.ok(navSource.includes("'decisions'"), "ProjectWorkspaceNavKey 必须含 'decisions'")
-
-  const resultsIndex = navSource.indexOf("key: 'results'")
-  const decisionsIndex = navSource.indexOf("key: 'decisions'")
-  const lineageIndex = navSource.indexOf("key: 'lineage'")
-
-  assert.ok(resultsIndex >= 0, '导航缺少 results 项')
-  assert.ok(decisionsIndex >= 0, '导航缺少 decisions 项')
-  assert.ok(lineageIndex >= 0, '导航缺少 lineage 项')
-  assert.ok(decisionsIndex > resultsIndex, 'decisions 必须排在 results 之后')
-  assert.ok(decisionsIndex < lineageIndex, 'decisions 必须排在 lineage 之前')
+  assert.ok(navSource.includes('buildProjectCandidateViewTabs'), '必须提供候选与决策二级视图切换')
+  assert.ok(
+    navSource.includes('/projects/${pid}/decisions'),
+    'decisions 子路由必须点亮候选与决策导航项'
+  )
 })
 
 test('i18n 两份语言包都含 decisions 命名空间且叶子数相等', async () => {

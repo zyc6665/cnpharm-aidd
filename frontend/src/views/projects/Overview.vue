@@ -45,6 +45,13 @@
           <p>{{ overview.project.goal || '尚未设置研究目标' }}</p>
         </div>
         <div class="header-actions">
+          <a-button
+            :type="overviewMode === 'achievements' ? 'primary' : 'default'"
+            data-testid="open-achievements"
+            @click="overviewMode = overviewMode === 'achievements' ? 'summary' : 'achievements'"
+          >
+            {{ overviewMode === 'achievements' ? '返回项目概览' : '成果看板' }}
+          </a-button>
           <router-link :to="`/projects/${projectId}/targets`" data-testid="open-targets">
             <a-button type="primary">进入靶点分析</a-button>
           </router-link>
@@ -54,6 +61,13 @@
         </div>
       </header>
 
+      <Achievements
+        v-if="overviewMode === 'achievements'"
+        :embedded-project-id="projectId"
+        data-testid="overview-embedded-achievements"
+      />
+
+      <template v-else>
       <section class="overview-stats">
         <article v-for="item in statCards" :key="item.label">
           <strong>{{ item.value }}</strong>
@@ -142,7 +156,7 @@
             <router-link
               v-for="task in overview.tasks"
               :key="task.id"
-              :to="`/tasks/${task.id}`"
+              :to="`/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(task.id)}`"
               class="resource-row"
             >
               <strong>{{ task.name || task.tool_name || task.id }}</strong>
@@ -190,6 +204,7 @@
         </section>
 
       </div>
+      </template>
     </template>
   </main>
 </template>
@@ -203,6 +218,7 @@
   import { mergeCursorPage } from '@/utils/pagination'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import Achievements from '@/views/demo/Achievements.vue'
   import {
     PROJECT_ARTIFACT_FILTER_PRESETS,
     buildProjectTaskPath,
@@ -225,6 +241,7 @@
   const projectWorkflowPath = computed(() => buildProjectWorkflowPath(projectId.value))
   const projectTargetsPath = computed(() => buildProjectTargetsPath(projectId.value))
   const overview = ref<ProjectOverview | null>(null)
+  const overviewMode = ref<'summary' | 'achievements'>('summary')
   const loading = ref(false)
   const loadError = ref(false)
   const unarchiving = ref(false)

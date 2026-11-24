@@ -1,6 +1,7 @@
 <template>
-  <div class="achievements-page">
+  <div class="achievements-page" :class="{ 'is-embedded': Boolean(embeddedProjectId) }">
     <AppPageHeader
+      v-if="!embeddedProjectId"
       title="项目成果总览"
       subtitle="按项目 / 靶点汇总研发进展、结构与口袋、候选物和计算结果，用于日常查看项目走到了哪一步。"
     >
@@ -327,6 +328,7 @@ import type { ProjectResultSummary } from '@/types/compounds'
 import type { DecisionRecord, ProjectStage } from '@/types/decisions'
 import type { WorkflowRun } from '@/types/models'
 
+const props = defineProps<{ embeddedProjectId?: string }>()
 const route = useRoute()
 const router = useRouter()
 
@@ -595,6 +597,10 @@ function pocketRowEvents(record: PocketSummary) {
 }
 
 async function loadProjects() {
+  if (props.embeddedProjectId) {
+    projectId.value = props.embeddedProjectId
+    return
+  }
   try {
     const response = await listProjects()
     projects.value = response.data.items ?? []

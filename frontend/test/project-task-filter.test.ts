@@ -28,5 +28,8 @@ test('task center supports project-scoped task filtering from project overview',
   assert.equal(taskPageSource.includes('AgentRunTaskCard'), false)
   assert.equal(taskPageSource.includes('agent-task-grouping'), false)
   assert.equal(projectOverviewSource.includes('buildProjectTaskPath(projectId.value)'), true)
-  assert.equal(projectNavigationSource.includes('/tasks?project_id='), true)
+  assert.equal(
+    projectNavigationSource.includes('/projects/${encodeURIComponent(projectId)}/tasks'),
+    true
+  )
 })

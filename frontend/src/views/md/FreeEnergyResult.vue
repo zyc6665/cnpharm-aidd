@@ -93,7 +93,7 @@ import { formatFixed } from '@/domain/common/format'
   import MdEchart from './MdEchart.vue'
   import { chartColors } from '@/utils/chartTheme'
   import { getArtifactDetail, getMdResult } from '@/api/md'
-  import { fetchProtectedFileText } from '@/utils/protected-file-access'
+  import { fetchProtectedFileText, saveBlobAsFile } from '@/utils/protected-file-access'
   import {
     buildFreeEnergyRows,
     cumulativeMean,
@@ -241,15 +241,9 @@ import { formatFixed } from '@/domain/common/format'
   function exportCsv(): void {
     if (rows.value.length === 0) return
     const csv = rowsToCsv(rows.value as unknown as Array<Record<string, unknown>>, EXPORT_COLUMNS)
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `free-energy-${taskId.value}.csv`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
+    void saveBlobAsFile(csv, `free-energy-${taskId.value}.csv`, 'text/csv;charset=utf-8').catch(cause => {
+      loadError.value = cause instanceof Error ? cause.message : String(cause)
+    })
   }
 
   onMounted(() => {

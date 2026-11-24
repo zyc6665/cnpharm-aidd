@@ -109,7 +109,7 @@
   import { message } from 'ant-design-vue'
   import { DownloadOutlined, FileOutlined } from '@ant-design/icons-vue'
   import type { Task } from '@/types/models'
-  import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
+  import { fetchProtectedFileText, saveBlobAsFile, triggerProtectedFileDownload } from '@/utils/protected-file-access'
   import { artifactTypeLabelKey } from '@/domain/artifacts/presentation'
   import { parameterLabel } from '@/domain/tasks/parameters'
   import JsonResultRenderer from './JsonResultRenderer.vue'
@@ -199,19 +199,7 @@
   }
 
   function triggerTextDownload(filename: string, content: string) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-
-    try {
-      anchor.href = url
-      anchor.download = filename
-      document.body.appendChild(anchor)
-      anchor.click()
-    } finally {
-      anchor.remove()
-      URL.revokeObjectURL(url)
-    }
+    void saveBlobAsFile(content, filename, 'text/csv;charset=utf-8')
   }
 
   async function exportMolpPcCsv() {

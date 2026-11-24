@@ -4,6 +4,7 @@
       {{ t('compounds.candidatesPage.backToAssets') }}
     </router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="candidateViewTabs" active="candidates" />
 
     <AppPageHeader
       :title="t('compounds.candidatesPage.title')"
@@ -183,16 +184,19 @@
   import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { createCandidateSet, listCandidateSets, listCandidates } from '@/api/compounds'
   import { candidateLocationLabel } from '@/domain/compounds'
+  import { buildProjectCandidateViewTabs } from '@/domain/projects'
   import type { Candidate, CandidateSet } from '@/types/compounds'
 
   const route = useRoute()
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId || ''))
+  const candidateViewTabs = computed(() => buildProjectCandidateViewTabs(projectId.value))
   const pageSize = 20
 
   const projectQuery = computed(() =>

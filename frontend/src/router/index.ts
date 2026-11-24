@@ -242,6 +242,30 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: '结果中心', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId/results/:taskId',
+    name: 'ProjectResultDetail',
+    component: () => import('@/views/results/ResultDetail.vue'),
+    meta: { titleLiteral: '结果详情', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/tasks',
+    name: 'ProjectTasks',
+    component: () => import('@/views/tasks/List.vue'),
+    meta: { title: 'tasks.title', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/tasks/:id',
+    name: 'ProjectTaskDetail',
+    component: () => import('@/views/tasks/Detail.vue'),
+    meta: { title: 'tasks.detail', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/tasks/:id/result',
+    name: 'ProjectTaskResult',
+    component: () => import('@/views/tasks/Result.vue'),
+    meta: { title: 'tasks.resultPage.title', requiresAuth: true }
+  },
+  {
     path: '/projects/:projectId/decisions',
     name: 'ProjectDecisions',
     component: () => import('@/views/projects/Decisions.vue'),
@@ -259,12 +283,21 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tools/Detail.vue'),
     meta: { title: 'tools.detail' }
   },
-  // 任务相关
+  // 任务相关（旧链接带 project_id 自动跳转到项目内路由）
   {
     path: '/tasks',
     name: 'Tasks',
     component: () => import('@/views/tasks/List.vue'),
-    meta: { title: 'tasks.title', requiresAuth: true }
+    meta: { title: 'tasks.title', requiresAuth: true },
+    beforeEnter: to => {
+      const pid = typeof to.query.project_id === 'string' ? to.query.project_id.trim() : ''
+      if (!pid) return true
+      const { project_id: _omitted, ...restQuery } = to.query
+      return {
+        path: `/projects/${encodeURIComponent(pid)}/tasks`,
+        query: restQuery,
+      }
+    },
   },
   {
     path: '/tasks/:id',

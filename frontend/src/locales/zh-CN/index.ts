@@ -126,7 +126,19 @@ export default {
     designGroupEvaluate: '评估验证',
     designGroupRecord: '记录',
     structurePredict: '结构预测',
-    pocketPredict: '口袋预测'
+    pocketPredict: '口袋预测',
+    downloads: '下载'
+  },
+  downloads: {
+    title: '下载记录',
+    hint: '记录本次登录期间触发的下载；失败项可在此重试。',
+    empty: '本次会话还没有触发过下载',
+    clearFinished: '清除已完成',
+    status: {
+      pending: '准备中',
+      done: '已开始',
+      error: '失败'
+    }
   },
   command: {
     placeholder: '搜索页面、命令…',
@@ -1374,6 +1386,28 @@ export default {
     subtitle: '管理项目内的化合物、蛋白结构产物与数据集',
     backToProject: '返回项目总览',
     backToAssets: '返回数据资产',
+    dataSpaceTitle: '项目数据空间',
+    dataSpaceSubtitle: '按每次工具调用分组成目录，统一管理上传文件与计算产物',
+    dataSpaceUpload: '上传到数据空间',
+    dataSpaceEmpty: '项目数据空间暂无文件',
+    dataSpaceEmptyHint: '可直接上传蛋白 PDB、配体 SDF、分子表，或发起任务自动沉淀产物。',
+    dataSpaceFilterPlaceholder: '按类型筛选',
+    dataSpaceHint: '按每次工具调用分组成目录，点击「查看结果」即可钻进该次生成的分子明细。',
+    dataSpaceArtifactUnit: '个产物',
+    dataSpaceViewResult: '查看结果 →',
+    dataSpaceManualGroup: '手动上传 / 基础文件',
+    dataSpaceColType: '类型',
+    dataSpaceColFilename: '文件名',
+    dataSpaceColVersion: '版本',
+    dataSpaceUploadTitle: '上传文件到项目数据空间',
+    dataSpaceUploadSubmit: '上传',
+    dataSpaceUploadFileLabel: '选择文件（PDB / CIF / FASTA / SDF / MOL2 / CSV / SMI）',
+    dataSpaceUploadTypeLabel: '数据类型',
+    dataSpaceUploadDescLabel: '说明（可选）',
+    dataSpaceUploadDescPlaceholder: '例如：EGFR 野生型受体结构',
+    dataSpaceUploadFileRequired: '请先选择要上传的文件',
+    dataSpaceUploadSuccess: '已上传到项目数据空间',
+    dataSpaceUploadFailed: '上传到项目数据空间失败，请重试',
     detail: {
       title: '化合物详情',
       subtitle: '查看化合物结构、分子性质与相似化合物',

@@ -150,6 +150,7 @@
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
+  import { uploadProjectArtifact } from '@/api/artifacts'
   import { uploadFile } from '@/api/files'
   import { listProjects } from '@/api/projects'
   import { parsePocketGeometry, radiusOf } from '@/domain/pockets/pocket-geometry'
@@ -382,9 +383,20 @@
       let proteinPdbFileId = pocketSelection.value?.structureFileId ?? ''
       if (sourceMode.value === 'upload') {
         projectId = uploadProjectId.value
-        // 上传模式自己把结构传上去；项目模式的文件早就在库里，直接用 id。
+        // 上传模式把结构传上去，并顺手沉淀进项目数据空间供后续工具复用。
         if (structureFile.value) {
           proteinPdbFileId = (await uploadFile(structureFile.value)).data.id
+          if (projectId) {
+            void uploadProjectArtifact(projectId, {
+              file: structureFile.value,
+              artifact_type: 'protein_structure',
+              semantic_type: 'protein_structure',
+              standard_type: 'protein_structure',
+              standard_version: 1,
+            }).catch(() => {
+              message.warning('结构文件已用于本次任务，但自动归档到项目数据空间失败')
+            })
+          }
         }
       }
       const response = await submitDesignTask({

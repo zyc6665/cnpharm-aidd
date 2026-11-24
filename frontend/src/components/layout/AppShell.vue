@@ -45,7 +45,7 @@
       <!-- 当前项目上下文：换项目 / 直达该项目的各个入口 -->
       <SidebarProjectContext :collapsed="collapsed" />
 
-      <!-- 主导航 -->
+      <!-- 主导航（全局层：工作台 / 工具广场 / 任务中心 / 下载，设计工具入口收进项目内研发流程） -->
       <nav class="sidebar-nav" aria-label="主导航">
         <router-link
           v-for="item in mainNav"
@@ -60,41 +60,30 @@
           <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
           <span v-if="item.badge && !collapsed" class="nav-badge">{{ item.badge }}</span>
         </router-link>
-      </nav>
-
-      <!-- 设计流程导航（按 AIDD 阶段分组；直达页入口） -->
-      <nav class="sidebar-nav sidebar-design-nav" :aria-label="t('nav.designSection')">
-        <div v-if="!collapsed" class="sidebar-section-label">{{ t('nav.designSection') }}</div>
-        <router-link
-          to="/design"
-          class="nav-item"
-          :class="{ active: route.path === '/design' && !route.query.focus }"
-          :aria-label="t('nav.designPipeline')"
-          :title="collapsed ? t('nav.designPipeline') : undefined"
+        <button
+          type="button"
+          class="nav-item nav-item-btn"
+          :class="{ active: downloadTrayOpen }"
+          data-testid="sidebar-downloads"
+          :aria-label="t('nav.downloads')"
+          :title="collapsed ? t('nav.downloads') : undefined"
+          @click="downloadTrayOpen = true"
         >
-          <ApartmentOutlined class="nav-icon" />
-          <span v-if="!collapsed" class="nav-label">{{ t('nav.designPipeline') }}</span>
-        </router-link>
-        <template v-for="group in designNavGroups" :key="group.groupKey">
-          <div v-if="!collapsed" class="sidebar-group-label">{{ t(group.labelKey) }}</div>
-          <router-link
-            v-for="item in group.items"
-            :key="item.key"
-            :to="item.to"
-            class="nav-item"
-            :class="{ active: isDesignItemActive(item) }"
-            :aria-label="t(item.labelKey)"
-            :title="collapsed ? t(item.labelKey) : undefined"
+          <DownloadOutlined class="nav-icon" />
+          <span v-if="!collapsed" class="nav-label">{{ t('nav.downloads') }}</span>
+          <span
+            v-if="downloadBadge > 0 && !collapsed"
+            class="nav-badge"
+            :class="{ 'is-error': downloadErrorCount > 0 }"
+            data-testid="sidebar-downloads-badge"
           >
-            <component :is="designIcon(item.key)" class="nav-icon" />
-            <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
-            <span v-if="item.isNew && !collapsed" class="nav-new-tag">NEW</span>
-          </router-link>
-        </template>
+            {{ downloadBadge }}
+          </span>
+        </button>
       </nav>
 
       <!-- 分隔 -->
-      <div class="sidebar-divider"></div>
+      <div v-if="isAdmin" class="sidebar-divider"></div>
 
       <!-- 管理导航（管理员可见） -->
       <nav v-if="isAdmin" class="sidebar-nav" aria-label="管理导航">
@@ -151,6 +140,20 @@
 
     <!-- 内容区 -->
     <main class="shell-content">
+      <div class="shell-topbar-actions">
+        <button
+          type="button"
+          class="topbar-download-btn"
+          :class="{ 'has-error': downloadErrorCount > 0 }"
+          data-testid="topbar-downloads"
+          :aria-label="t('downloads.title')"
+          @click="downloadTrayOpen = true"
+        >
+          <DownloadOutlined />
+          <span>{{ t('nav.downloads') }}</span>
+          <span v-if="downloadBadge > 0" class="topbar-download-badge">{{ downloadBadge }}</span>
+        </button>
+      </div>
       <router-view v-slot="{ Component, route }">
         <transition :name="transitionName" mode="out-in">
           <!--
@@ -167,6 +170,8 @@
 
     <!-- 命令面板 -->
     <CommandPalette ref="commandPaletteRef" />
+    <!-- 全局下载记录抽屉 -->
+    <DownloadTrayDrawer v-model:open="downloadTrayOpen" />
   </div>
 </template>
 
@@ -178,37 +183,32 @@ import {
   HomeOutlined,
   AppstoreOutlined,
   ExperimentOutlined,
-  ApartmentOutlined,
   DashboardOutlined,
   SettingOutlined,
   BulbOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  DeploymentUnitOutlined,
-  ClusterOutlined,
-  LineChartOutlined,
-  FilterOutlined,
-  HistoryOutlined,
-  ThunderboltOutlined,
-  NodeIndexOutlined,
-  AimOutlined,
-  TrophyOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
+import DownloadTrayDrawer from '@/components/layout/DownloadTrayDrawer.vue'
 import SidebarProjectContext from '@/components/layout/SidebarProjectContext.vue'
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
-import { buildDesignNavGroups, isDesignNavItemActive, type DesignNavItem } from '@/domain/design/navigation'
+import { useDownloadHistory } from '@/utils/download-history'
 
 const { t } = useI18n()
 const route = useRoute()
 const userStore = useUserStore()
 const appStore = useAppStore()
+const { records: downloadRecords, errorCount: downloadErrorCount } = useDownloadHistory()
 
 // ── 侧边栏状态 ──
 const collapsed = computed(() => appStore.isCollapsed)
 const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null)
+const downloadTrayOpen = ref(false)
+const downloadBadge = computed(() => downloadRecords.value.length)
 // 移动端抽屉：窄屏下侧栏改为抽屉，避免底部 Tab 挤掉设计/管理/设置入口
 const mobileNavOpen = ref(false)
 
@@ -249,35 +249,7 @@ const mainNav: NavItem[] = [
     labelKey: 'nav.tasks',
     active: ['/tasks'],
   },
-  {
-    key: 'achievements',
-    to: '/achievements',
-    icon: TrophyOutlined,
-    labelKey: 'nav.achievements',
-    active: ['/achievements'],
-  },
 ]
-
-// 设计流程导航：按 AIDD 阶段分组（见 domain/design/navigation）。
-const designNavGroups = buildDesignNavGroups()
-const DESIGN_NAV_ICONS: Record<string, Component> = {
-  structurePredict: NodeIndexOutlined,
-  pocketPredict: AimOutlined,
-  molecules: DeploymentUnitOutlined,
-  peptides: ClusterOutlined,
-  screen: FilterOutlined,
-  predict: LineChartOutlined,
-  md: ThunderboltOutlined,
-  designRuns: HistoryOutlined,
-}
-function designIcon(key: string): Component {
-  return DESIGN_NAV_ICONS[key] ?? AppstoreOutlined
-}
-
-function isDesignItemActive(item: DesignNavItem): boolean {
-  const focus = typeof route.query.focus === 'string' ? route.query.focus : ''
-  return isDesignNavItemActive(item, { path: route.path, focus })
-}
 
 const adminNav: NavItem[] = [
   {
@@ -578,6 +550,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: @accent-color-light;
   padding: 1px 6px;
   border-radius: 999px;
+
+  &.is-error {
+    color: @error-color;
+    background: fade(@error-color, 12%);
+  }
 }
 
 .nav-new-tag {
@@ -633,11 +610,60 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // ── 内容区 ──
 .shell-content {
+  position: relative;
   flex: 1;
   margin-left: @sidebar-width;
   min-width: 0;
   min-height: 100vh;
   transition: margin-left @transition-base;
+}
+
+.shell-topbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 24px 0;
+}
+
+@media (max-width: @screen-md) {
+  .shell-topbar-actions {
+    display: none;
+  }
+}
+
+.topbar-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid @border-color;
+  border-radius: 999px;
+  background: @bg-surface;
+  color: @text-secondary;
+  font-size: @font-size-xs;
+  font-weight: @font-weight-medium;
+  box-shadow: @shadow-sm;
+  cursor: pointer;
+  transition: all @transition-fast;
+
+  &:hover {
+    border-color: @accent-color;
+    color: @accent-color;
+  }
+
+  &.has-error {
+    border-color: fade(@error-color, 50%);
+    color: @error-color;
+  }
+}
+
+.topbar-download-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: @accent-color-light;
+  color: @accent-color;
+  font-size: 11px;
+  font-weight: @font-weight-semibold;
 }
 
 .sidebar-collapsed .shell-content {

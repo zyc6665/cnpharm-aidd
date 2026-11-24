@@ -39,7 +39,7 @@ describe('buildDesignStages', () => {
       key: 'pocket',
       readiness: 'missing',
       count: 0,
-      primaryPath: '/design?focus=pocket&project_id=p1',
+      primaryPath: '/tools/lvpocket-pocket-prediction?project_id=p1',
     })
     expect(states[2]!.primaryPath).toBe('/design/molecules?project_id=p1')
   })

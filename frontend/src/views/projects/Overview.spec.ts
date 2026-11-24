@@ -144,7 +144,7 @@ describe('ProjectOverview', () => {
     const taskListEntry = wrapper
       .findAll('a')
       .find(link => link.text().includes('全部任务'))
-    expect(taskListEntry?.attributes('href')).toBe('/tasks?project_id=project-1')
+    expect(taskListEntry?.attributes('href')).toBe('/projects/project-1/tasks')
     expect(workflowEntry?.attributes('href')).toBe('/projects/project-1/workflow')
     expect(wrapper.find('[data-testid="open-targets"]').attributes('href')).toBe(
       '/projects/project-1/targets'

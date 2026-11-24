@@ -375,7 +375,10 @@ import LoadingBar from '@/components/common/LoadingBar.vue'
   const autoRefresh = ref(true)
   const project = ref<ResearchProject | null>(null)
   const projectNames = ref<Record<string, string>>({})
-  const projectId = computed(() => stringQueryParam(route.query.project_id))
+  const projectId = computed(() => {
+    const fromParam = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
+    return fromParam || stringQueryParam(route.query.project_id)
+  })
   const workflowRunId = computed(() => stringQueryParam(route.query.workflow_run_id))
   const workflowDefinitionId = computed(() => stringQueryParam(route.query.workflow_definition_id))
   const workflowNodeId = computed(() => stringQueryParam(route.query.workflow_node_id))
@@ -644,11 +647,15 @@ import LoadingBar from '@/components/common/LoadingBar.vue'
   }
 
   const goToDetail = (id: string) => {
+    if (projectId.value) {
+      router.push(`/projects/${encodeURIComponent(projectId.value)}/tasks/${encodeURIComponent(id)}`)
+      return
+    }
     router.push(`/tasks/${id}`)
   }
 
   const taskResultPath = (task: Task): string | null =>
-    resolveTaskResultPath(task.tool_slug ?? task.tool?.slug, task.id)
+    resolveTaskResultPath(task.tool_slug ?? task.tool?.slug, task.id, projectId.value || task.project_id)
 
   const goToResult = (task: Task) => {
     const path = taskResultPath(task)

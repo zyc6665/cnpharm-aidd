@@ -4,6 +4,7 @@
       {{ t('decisions.backToProject') }}
     </router-link>
     <ProjectWorkspaceNav :project-id="projectId" />
+    <ProjectViewSwitcher :items="candidateViewTabs" active="decisions" />
 
     <AppPageHeader :title="t('decisions.title')" :subtitle="t('decisions.subtitle')">
       <template #actions>
@@ -440,9 +441,11 @@
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import ProjectViewSwitcher from '@/components/projects/ProjectViewSwitcher.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { createProjectDecision, getProjectStage, listProjectDecisions } from '@/api/decisions'
+  import { buildProjectCandidateViewTabs } from '@/domain/projects'
   import { listCandidateSetItems, listCandidateSets } from '@/api/compounds'
   import { getTaskList } from '@/api/tasks'
   import { getTaskStatusTextKey } from '@/domain/tasks/status'
@@ -480,6 +483,7 @@
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId ?? ''))
+  const candidateViewTabs = computed(() => buildProjectCandidateViewTabs(projectId.value))
   const placeHolder = PLACEHOLDER
 
   const loading = ref(false)

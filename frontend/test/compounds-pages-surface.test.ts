@@ -64,61 +64,63 @@ test('router 在 WorkflowRunDetail 之后注册 7 条新路由', () => {
   assert.ok(routerSource.includes('path: \'/results/:taskId\''))
 })
 
-test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既有 active 判定', async () => {
-  const { buildProjectWorkspaceNavItems, isProjectWorkspaceNavItemActive } = await import(
-    '../src/domain/projects/navigation'
-  )
+test('项目导航的 assets / candidates 项紧接在 tasks 之后且覆盖合并后的子视图', async () => {
+  const {
+    buildProjectCandidateViewTabs,
+    buildProjectDataViewTabs,
+    buildProjectWorkspaceNavItems,
+    isProjectWorkspaceNavItemActive
+  } = await import('../src/domain/projects/navigation')
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
-  // targets 由 PR3 加入（锚点：overview 之后），design 取代了原来的 workflow 顶级位，此处只断言新增项的相对位置。
-  // decisions 由 P-39 决策记录页加入（锚点：results 之后、lineage 之前），因此需补进本清单。
   assert.deepEqual(keys, [
     'overview',
-    'targets',
     'design',
+    'workflow',
     'tasks',
     'assets',
     'candidates',
-    'results',
-    'decisions',
-    'lineage',
     'settings'
   ])
   assert.equal(keys.indexOf('assets'), keys.indexOf('tasks') + 1)
+  assert.equal(keys.indexOf('candidates'), keys.indexOf('assets') + 1)
   assert.equal(keys.indexOf('overview'), 0)
 
   const assets = items.find(item => item.key === 'assets')
   assert.ok(assets, '缺少 assets 导航项')
-  assert.equal(assets?.label, '数据资产')
+  assert.equal(assets?.label, '数据与产物')
   assert.equal(assets?.to, '/projects/project-1/assets')
 
-  assert.equal(
-    isProjectWorkspaceNavItemActive(assets!, {
-      currentPath: '/projects/project-1/assets',
-      currentProjectId: 'project-1'
-    }),
-    true
+  // 数据资产、结果中心、Artifact 谱系三个视图合在「数据与产物」下，通过二级视图切换可达。
+  for (const path of [
+    '/projects/project-1/assets',
+    '/projects/project-1/results',
+    '/projects/project-1/lineage'
+  ]) {
+    assert.equal(
+      isProjectWorkspaceNavItemActive(assets!, {
+        currentPath: path,
+        currentProjectId: 'project-1'
+      }),
+      true
+    )
+  }
+  assert.deepEqual(
+    buildProjectDataViewTabs('project-1').map(tab => tab.to),
+    [
+      '/projects/project-1/assets',
+      '/projects/project-1/results',
+      '/projects/project-1/lineage'
+    ]
   )
-  assert.equal(
-    isProjectWorkspaceNavItemActive(assets!, {
-      currentPath: '/projects/project-1/lineage',
-      currentProjectId: 'project-1'
-    }),
-    false
+  assert.deepEqual(
+    buildProjectCandidateViewTabs('project-1').map(tab => tab.to),
+    [
+      '/projects/project-1/candidates',
+      '/projects/project-1/decisions'
+    ]
   )
-
-  // P-33 结果中心必须从项目导航可达（assets 之后、lineage 之前）
-  const results = items.find(item => item.key === 'results')
-  assert.ok(results, '缺少 results 导航项')
-  assert.equal(results?.label, '结果中心')
-  assert.equal(results?.to, '/projects/project-1/results')
-  // P-12 之后候选物从资产页签移出、在导航中以独立入口紧随 assets；结果中心仍在 lineage 之前。
-  assert.equal(keys.indexOf('candidates'), keys.indexOf('assets') + 1)
-  assert.equal(keys.indexOf('results'), keys.indexOf('candidates') + 1)
-  // P-39 在 results 与 lineage 之间插入了 decisions，results 的直接后继因此不再是 lineage。
-  assert.equal(keys.indexOf('decisions'), keys.indexOf('results') + 1)
-  assert.equal(keys.indexOf('decisions') + 1, keys.indexOf('lineage'))
 })
 
 test('i18n 中英双语均补齐 compounds / candidates / results 三个命名空间', () => {
@@ -152,37 +154,28 @@ test('ResultDetail.vue 复用 getTraceability 并提供导出追溯包入口', (
   assert.ok(!source.includes('components/traceability'), '不得新建第二个追溯组件')
 })
 
-test('Assets.vue 提供批量导入入口并展示导入汇总', () => {
+test('Assets.vue 收敛为项目 Artifact 数据空间（按调用分组上传与下载）', () => {
   const source = readSource('src/views/compounds/Assets.vue')
 
-  assert.ok(source.includes('importCompounds'), 'Assets.vue 必须调用 importCompounds')
-  assert.ok(source.includes('uploadFile'), 'Assets.vue 必须先用 files/upload 拿 file_id')
-  assert.ok(source.includes('.smi') && source.includes('.csv') && source.includes('.sdf'))
-  assert.ok(source.includes('duplicate'), 'Assets.vue 需要展示 duplicate 统计')
+  assert.ok(source.includes('uploadProjectArtifact'), 'Assets.vue 必须调用 uploadProjectArtifact')
+  assert.ok(source.includes('getAllProjectArtifacts'), 'Assets.vue 必须加载项目 Artifact 数据空间')
+  assert.ok(source.includes('artifactGroups'), 'Assets.vue 必须按工具调用分组展示数据空间')
 })
 
-test('数据资产页 Tab 为 化合物/蛋白/数据集，候选物移到独立页面', () => {
+test('数据资产页收敛为按调用目录分组的数据空间，候选物在独立页面', () => {
   const assets = readSource('src/views/compounds/Assets.vue')
 
-  assert.ok(assets.includes('key="compounds"'), 'Assets.vue 缺少化合物 Tab')
-  assert.ok(assets.includes('key="proteins"'), 'Assets.vue 缺少蛋白 Tab')
-  assert.ok(assets.includes('key="datasets"'), 'Assets.vue 缺少数据集 Tab')
+  assert.ok(assets.includes('data-testid="assets-space-section"'), 'Assets.vue 缺少数据空间主视图')
+  assert.equal(assets.includes('key="compounds"'), false, 'Assets.vue 不应再含平铺单分子 Tab')
+  assert.equal(assets.includes('key="proteins"'), false, 'Assets.vue 不应再含重复的蛋白 Tab')
+  assert.equal(assets.includes('key="datasets"'), false, 'Assets.vue 不应再含重复的数据集 Tab')
   assert.equal(assets.includes('key="candidates"'), false, 'Assets.vue 不应再含候选物 Tab')
   assert.equal(
     assets.includes('key="candidateSets"'),
     false,
     'Assets.vue 不应再含候选集 Tab'
   )
-  // 蛋白 Tab 必须说明「只含 Artifact 结构产物，蛋白主数据在靶点与结构」。
-  assert.ok(assets.includes('compounds.notes.proteins'), '蛋白 Tab 缺少语义说明')
-  // 候选物必须有等价入口，不能成孤儿页面。
-  assert.ok(assets.includes('/candidates'), 'Assets.vue 缺少候选物入口链接')
-  assert.ok(assets.includes('listProjectAssets'), 'Assets.vue 必须调用统一资产接口')
-  // 数据集 Tab 里 artifact_type='dataset' 的上传产物要区别于登记数据集。
-  assert.ok(
-    assets.includes('compounds.datasetSource.upload'),
-    'Assets.vue 数据集 Tab 缺少「上传文件」来源标记'
-  )
+  assert.ok(assets.includes('artifactGroups'), 'Assets.vue 必须按工具调用分组展示数据空间')
 
   const candidates = readSource('src/views/compounds/Candidates.vue')
   assert.ok(candidates.includes('listCandidates'), 'Candidates.vue 必须列出候选物')
