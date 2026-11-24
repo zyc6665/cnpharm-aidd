@@ -78,20 +78,12 @@ test('路由包含 6 条靶点路由且全部懒加载', () => {
   }
 })
 
-test('项目导航含 targets 项且位于 overview 之后', () => {
+test('项目导航收敛后靶点与结构通过单步工具二级视图可达并正确高亮', () => {
   const source = readSource('src/domain/projects/navigation.ts')
 
   assert.equal(source.includes("'targets'"), true, 'ProjectWorkspaceNavKey 必须含 targets')
-
-  const overviewIndex = source.indexOf("key: 'overview'")
-  const targetsIndex = source.indexOf("key: 'targets'")
-  assert.notEqual(overviewIndex, -1, 'overview 项必须存在')
-  assert.notEqual(targetsIndex, -1, 'targets 项必须存在')
-  assert.equal(overviewIndex < targetsIndex, true, 'targets 必须排在 overview 之后')
-
-  const designIndex = source.indexOf("key: 'design'")
-  assert.notEqual(designIndex, -1, 'design 项必须存在')
-  assert.equal(targetsIndex < designIndex, true, 'targets 必须紧跟在 overview 之后（第 2 项）')
+  assert.equal(source.includes('buildProjectFlowViewTabs'), true, '必须提供单步工具二级视图切换')
+  assert.equal(source.includes('/projects/${pid}/targets'), true, 'targets 子路由必须点亮单步工具导航项')
 })
 
 test('i18n 中英两份都补齐 targets 命名空间', () => {

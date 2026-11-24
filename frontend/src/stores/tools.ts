@@ -50,15 +50,16 @@ export const useToolsStore = defineStore('tools', () => {
     const requestId = ++currentToolRequestId
     loading.value = true
     try {
-      let resolvedId = id
-      if (!UUID_PATTERN.test(id)) {
+      let res: Awaited<ReturnType<typeof getToolDetail>>
+      try {
+        res = await getToolDetail(id)
+      } catch (err) {
+        if (UUID_PATTERN.test(id)) throw err
         const listRes = await getToolList({ page_size: 100 })
-        const matched = listRes.data.items.find(item => item.slug === id)
-        if (matched) {
-          resolvedId = matched.id
-        }
+        const matched = listRes?.data?.items?.find(item => item.slug === id)
+        if (!matched) throw err
+        res = await getToolDetail(matched.id)
       }
-      const res = await getToolDetail(resolvedId)
       if (requestId === currentToolRequestId) {
         currentTool.value = res.data
       }

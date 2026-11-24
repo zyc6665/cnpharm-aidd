@@ -8,7 +8,7 @@
       v-if="candidateSet?.project_id"
       :fallback="`/projects/${candidateSet.project_id}/candidates`"
       test-id="set-back-assets"
-      parent-label="返回候选与决策"
+      :parent-label="t('projectNav.candidates')"
     />
 
     <AppPageHeader :title="setTitle" :subtitle="t('candidates.set.subtitle')">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { getTaskDetail } from '@/api/tasks'
 import { resolveTaskResultPath } from '@/domain/design/runs'
 import { getTaskStatusColor, getTaskStatusTextKey, normalizeTaskStatus } from '@/domain/tasks'
@@ -32,13 +32,12 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
-const route = useRoute()
 const router = useRouter()
 const loadedTask = ref<Task | null>(null)
 
 const taskRecord = computed(() => props.task ?? loadedTask.value)
 const routeProjectId = computed(() => {
-  const raw = route?.params?.projectId
+  const raw = router?.currentRoute?.value?.params?.projectId
   return typeof raw === 'string' && raw ? raw : undefined
 })
 const resolvedProjectId = computed(() => taskRecord.value?.project_id ?? routeProjectId.value)
