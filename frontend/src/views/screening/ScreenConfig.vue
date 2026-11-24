@@ -67,6 +67,9 @@ const selectedProteinId = ref('')
 const selectedStructureId = ref('')
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref('')
+/** 上游（分子生成 / 设计结果页）直接把配体文件落盘时，用 file_id 当输入，不再重复上传。 */
+const preuploadedLigandFileId = ref('')
+const preuploadedLigandFilename = ref('')
 
 const targetOptions = computed(() =>
   targets.value.map(item => ({ label: item.name, value: item.id }))
@@ -200,7 +203,44 @@ watch(ligandSource, source => {
   ligandCount.value = 0
 })
 
+/**
+ * 上游页面的上下文交接：
+ * - `candidate_set_id`：候选集已在库里，直接切到候选集模式；
+ * - `file_id`（+ 可选 `filename`）：文件已落盘，上传模式按「已选配体」展示，提交时复用。
+ */
+let appliedHandoffKey = ''
+function applyQueryHandoff(): void {
+  const candidateQuery = route.query.candidate_set_id
+  const fileQuery = route.query.file_id
+  const filenameQuery = route.query.filename
+  const key = `${String(candidateQuery ?? '')}|${String(fileQuery ?? '')}|${String(
+    filenameQuery ?? ''
+  )}|${projectId.value}`
+  if (key === appliedHandoffKey) return
+  appliedHandoffKey = key
+
+  if (typeof candidateQuery === 'string' && candidateQuery) {
+    ligandSource.value = 'candidate'
+    candidateSetId.value = candidateQuery
+    preuploadedLigandFileId.value = ''
+    preuploadedLigandFilename.value = ''
+    return
+  }
+  if (typeof fileQuery === 'string' && fileQuery) {
+    ligandSource.value = 'upload'
+    preuploadedLigandFileId.value = fileQuery
+    preuploadedLigandFilename.value = typeof filenameQuery === 'string' ? filenameQuery : ''
+    ligandError.value = ''
+  }
+}
+
+watch(
+  () => route.query,
+  () => applyQueryHandoff()
+)
+
 onMounted(() => {
+  applyQueryHandoff()
   void loadProjects()
 })
 
@@ -228,6 +268,7 @@ const canSubmit = computed(() => {
       : Boolean(receptorFile.value)
   if (!receptorReady) return false
   if (ligandSource.value === 'candidate') return Boolean(candidateSetId.value)
+  if (preuploadedLigandFileId.value) return !ligandError.value
   return ligandFiles.value.length > 0 && !ligandError.value && ligandCount.value > 0
 })
 
@@ -268,6 +309,9 @@ async function handleLigandUpload(file: File): Promise<boolean> {
   }
   ligandFormat.value = format
   ligandFiles.value = [...ligandFiles.value, file]
+  // 本地重新选了配体文件，就不再复用上游落盘的 file_id
+  preuploadedLigandFileId.value = ''
+  preuploadedLigandFilename.value = ''
   ligandError.value = ''
   const seq = ++ligandCountSeq
   try {
@@ -288,6 +332,8 @@ function clearLigands(): void {
   ligandFormat.value = ''
   ligandCount.value = 0
   ligandError.value = ''
+  preuploadedLigandFileId.value = ''
+  preuploadedLigandFilename.value = ''
 }
 
 async function countLigands(files: File[], format: 'sdf' | 'csv'): Promise<number> {
@@ -413,11 +459,11 @@ async function handleSubmit(): Promise<void> {
       return
     }
   } else {
-    if (!ligandFiles.value.length) {
+    if (!ligandFiles.value.length && !preuploadedLigandFileId.value) {
       formError.value = t('screening.config.needLigands')
       return
     }
-    if (ligandError.value || ligandCount.value <= 0) {
+    if (ligandError.value || (!preuploadedLigandFileId.value && ligandCount.value <= 0)) {
       formError.value = ligandError.value || t('screening.config.needLigands')
       return
     }
@@ -440,6 +486,9 @@ async function handleSubmit(): Promise<void> {
         throw new Error(t('screening.config.candidateSetExportFailed'))
       }
       standardInputUploads.ligand_smiles = exportedFileId
+    } else if (preuploadedLigandFileId.value) {
+      // 上游已经落盘的配体文件：直接引用 file_id，跳过重复上传
+      standardInputUploads.ligand_smiles = preuploadedLigandFileId.value
     } else if (ligandFormat.value === 'csv') {
       const payload = await buildCsvPayload()
       const uploaded = await uploadFile(payload)
@@ -629,10 +678,25 @@ const paramFields = computed(() => [
           >
             <a-button>{{ t('screening.config.chooseFiles') }}</a-button>
           </a-upload>
-          <a-button v-if="ligandFiles.length" type="link" size="small" @click="clearLigands">
+          <a-button
+            v-if="ligandFiles.length || preuploadedLigandFileId"
+            type="link"
+            size="small"
+            @click="clearLigands"
+          >
             {{ t('screening.config.clearLigands') }}
           </a-button>
           <p class="screen-config__hint">{{ t('screening.config.ligandLibraryHint') }}</p>
+          <div
+            v-if="preuploadedLigandFileId"
+            class="screen-config__files"
+            data-testid="screen-config-preuploaded-ligands"
+          >
+            <a-tag color="blue">
+              {{ preuploadedLigandFilename || preuploadedLigandFileId }}
+            </a-tag>
+            <span class="screen-config__hint">{{ t('screening.config.preuploadedLigands') }}</span>
+          </div>
           <div v-if="ligandFiles.length" class="screen-config__files" data-testid="screen-config-ligand-files">
             <a-tag v-for="file in ligandFiles" :key="file.name">{{ file.name }}</a-tag>
             <span class="screen-config__hint">{{ t('screening.config.ligandCountValue', { count: ligandCount }) }}</span>

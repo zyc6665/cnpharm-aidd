@@ -11,6 +11,7 @@ import { listProjects } from '@/api/projects'
 import { getTarget, listStructures, listTargets } from '@/api/targets'
 import ModelSelect from '@/components/design/ModelSelect.vue'
 import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
+import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
 import {
   buildDefaultValues,
@@ -63,12 +64,30 @@ const projectName = computed(
   () => projects.value.find(item => item.id === projectId.value)?.name ?? ''
 )
 
-const source = ref<'upload' | 'candidate'>('upload')
+const source = ref<'upload' | 'candidate' | 'smiles'>('upload')
 const smilesFile = ref<File | null>(null)
 const smilesFileName = ref('')
+/** 上游（分子生成 / 虚拟筛选等）已经把文件落盘时，直接用 file_id 当输入，不再重复上传。 */
+const preuploadedFileId = ref('')
+const preuploadedFilename = ref('')
+/** 手动粘贴 SMILES：DrugFlow 式「即时预览后再提交」。 */
+const inlineSmiles = ref('')
+const filePreview = ref<string[]>([])
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
 const admetParams = ref<ParameterValues>({})
+
+/** 预览面板最多铺 12 个骨架，避免几十个分子把页面撑爆。 */
+const PREVIEW_LIMIT = 12
+
+const EXAMPLE_SMILES = [
+  'CC(=O)Oc1ccccc1C(=O)O', // Aspirin
+  'CC(C)Cc1ccc(cc1)C(C)C(=O)O', // Ibuprofen
+  'Cn1cnc2c1c(=O)n(C)c(=O)n2C', // Caffeine
+  'CN(C)C(=N)NC(=N)N', // Metformin
+  'CC(=O)Nc1ccc(O)cc1', // Acetaminophen
+  'CC(C)c1c(C(=O)Nc2ccccc2)c(-c2ccccc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O' // Atorvastatin
+]
 
 // 同类 ADMET/性质预测模型可自由选择；默认 molp-pc。
 const {
@@ -226,6 +245,143 @@ const candidateSetOptions = computed(() =>
   candidateSets.value.map(item => ({ label: item.name, value: item.id }))
 )
 
+/**
+ * 从纯文本里抽取 SMILES：兼容
+ * - 每行一个 SMILES；
+ * - 逗号 / Tab 分隔的 CSV，自动识别 `smiles` 列表头（无表头时取第一列）；
+ * - 忽略空行与表头行。
+ */
+function isLikelySmiles(value: string): boolean {
+  const text = value.trim()
+  if (!text || /\s/.test(text)) return false
+  if (!/^[A-Za-z0-9@+\-[\]()\\/=#$.%:;>*^~]+$/.test(text)) return false
+  // 至少要有一个 SMILES 里常见的原子记号，避免把 "id" / "name" 之类的表头值当分子
+  return /[BCNOPSFIcnops]/.test(text)
+}
+
+function extractSmiles(raw: string): string[] {
+  const lines = raw.replace(/^﻿/, '').split(/\r?\n/)
+  const result: string[] = []
+  let smilesIndex = -1
+  let headerChecked = false
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const delimiter = line.includes('\t') ? '\t' : line.includes(',') ? ',' : ''
+    const cells = delimiter
+      ? line.split(delimiter).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'))
+      : [line]
+    if (!headerChecked) {
+      headerChecked = true
+      const index = cells.findIndex(cell => /^(canonical_)?smiles$/i.test(cell))
+      if (index >= 0) {
+        smilesIndex = index
+        continue
+      }
+    }
+    const value = (smilesIndex >= 0 ? cells[smilesIndex] : cells[0]) ?? ''
+    if (isLikelySmiles(value)) {
+      result.push(value.trim())
+    }
+  }
+  return result
+}
+
+const previewMolecules = computed(() => {
+  if (source.value === 'smiles') {
+    return extractSmiles(inlineSmiles.value)
+  }
+  if (source.value === 'upload') {
+    return filePreview.value
+  }
+  return []
+})
+const previewSlice = computed(() => previewMolecules.value.slice(0, PREVIEW_LIMIT))
+const showLivePreview = computed(() => {
+  if (predictType.value !== 'admet') return false
+  if (source.value === 'smiles') return true
+  // 上游交接的 file_id 没有本地内容可读，避免显示「0 个有效分子」的空预览
+  return source.value === 'upload' && !preuploadedFileId.value
+})
+
+watch(smilesFile, async file => {
+  filePreview.value = []
+  if (!file) return
+  try {
+    filePreview.value = extractSmiles(await file.text())
+  } catch {
+    filePreview.value = []
+  }
+})
+
+/** 加载示例：一键填入 6 个经典药物分子，方便先看到预览效果。 */
+function loadExampleSmiles(): void {
+  inlineSmiles.value = EXAMPLE_SMILES.join('\n')
+  message.success(t('predict.submit.exampleLoaded'))
+}
+
+function copySmiles(value: string): void {
+  const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined
+  if (clipboard && typeof clipboard.writeText === 'function') {
+    void clipboard.writeText(value).then(
+      () => message.success(t('predict.submit.copied')),
+      () => undefined
+    )
+  }
+}
+
+function removeInlineSmilesAt(index: number): void {
+  const values = extractSmiles(inlineSmiles.value)
+  values.splice(index, 1)
+  inlineSmiles.value = values.join('\n')
+}
+
+function buildInlineSmilesFile(): File {
+  const csv = ['smiles', ...extractSmiles(inlineSmiles.value)].join('\n')
+  return new File([csv], `inline_smiles_${Date.now()}.csv`, { type: 'text/csv' })
+}
+
+/**
+ * 上游跳转带过来的上下文：
+ * - `candidate_set_id`：直接切到候选集模式并选中；
+ * - `file_id`（+ 可选 `filename`）：文件已落盘，上传模式展示为已选文件，提交时直接复用。
+ */
+let appliedHandoffKey = ''
+function applyQueryHandoff(): void {
+  const candidateQuery = route.query.candidate_set_id
+  const fileQuery = route.query.file_id
+  const filenameQuery = route.query.filename
+  const key = `${String(candidateQuery ?? '')}|${String(fileQuery ?? '')}|${String(
+    filenameQuery ?? ''
+  )}|${projectId.value}`
+  if (key === appliedHandoffKey) return
+  appliedHandoffKey = key
+
+  if (typeof candidateQuery === 'string' && candidateQuery) {
+    source.value = 'candidate'
+    candidateSetId.value = candidateQuery
+    smilesFile.value = null
+    smilesFileName.value = ''
+    preuploadedFileId.value = ''
+    preuploadedFilename.value = ''
+    return
+  }
+  if (typeof fileQuery === 'string' && fileQuery) {
+    source.value = 'upload'
+    preuploadedFileId.value = fileQuery
+    preuploadedFilename.value = typeof filenameQuery === 'string' ? filenameQuery : ''
+    smilesFile.value = null
+    smilesFileName.value = ''
+    candidateSetId.value = ''
+    filePreview.value = []
+  }
+}
+
+watch(
+  () => route.query,
+  () => applyQueryHandoff()
+)
+
 const canSubmit = computed(() => {
   if (predictType.value === 'affinity') {
     return affinityCanSubmit.value
@@ -236,7 +392,13 @@ const canSubmit = computed(() => {
   if (validateParameters(admetSchema.value, admetParams.value).length > 0) {
     return false
   }
-  return source.value === 'upload' ? Boolean(smilesFile.value) : Boolean(candidateSetId.value)
+  if (source.value === 'upload') {
+    return Boolean(smilesFile.value || preuploadedFileId.value)
+  }
+  if (source.value === 'smiles') {
+    return previewMolecules.value.length > 0
+  }
+  return Boolean(candidateSetId.value)
 })
 
 function buildStructureLabel(structure: ProteinStructureDetail): string {
@@ -265,6 +427,9 @@ function handleProjectChange(value: unknown): void {
 function handleBeforeUpload(file: File): boolean {
   smilesFile.value = file
   smilesFileName.value = file.name
+  // 本地重新选了文件，就不再复用上游落盘的 file_id
+  preuploadedFileId.value = ''
+  preuploadedFilename.value = ''
   return false
 }
 
@@ -391,10 +556,20 @@ async function loadCandidateSets(): Promise<void> {
 
 async function resolveMoleculesFileId(): Promise<string> {
   if (source.value === 'upload') {
+    if (preuploadedFileId.value) {
+      return preuploadedFileId.value
+    }
     if (!smilesFile.value) {
       throw new Error(t('predict.submit.needFile'))
     }
     const uploaded = await uploadFile(smilesFile.value)
+    return uploaded.data.id
+  }
+  if (source.value === 'smiles') {
+    if (!extractSmiles(inlineSmiles.value).length) {
+      throw new Error(t('predict.submit.needSmiles'))
+    }
+    const uploaded = await uploadFile(buildInlineSmilesFile())
     return uploaded.data.id
   }
   if (!candidateSetId.value) {
@@ -418,8 +593,12 @@ async function handleSubmit(): Promise<void> {
     formError.value = t('predict.submit.needProjectSubmit')
     return
   }
-  if (source.value === 'upload' && !smilesFile.value) {
+  if (source.value === 'upload' && !smilesFile.value && !preuploadedFileId.value) {
     formError.value = t('predict.submit.needFile')
+    return
+  }
+  if (source.value === 'smiles' && !previewMolecules.value.length) {
+    formError.value = t('predict.submit.needSmiles')
     return
   }
   if (source.value === 'candidate' && !candidateSetId.value) {
@@ -451,6 +630,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 onMounted(() => {
+  applyQueryHandoff()
   void loadProjects()
   void loadModels()
   void loadAffinityModels()
@@ -528,6 +708,9 @@ onMounted(() => {
         <a-radio-button value="candidate" data-testid="predict-submit-source-candidate">
           {{ t('predict.submit.sourceCandidateSet') }}
         </a-radio-button>
+        <a-radio-button value="smiles" data-testid="predict-submit-source-smiles">
+          {{ t('predict.submit.sourceSmiles') }}
+        </a-radio-button>
       </a-radio-group>
 
       <div v-if="source === 'upload'" class="predict-submit__block">
@@ -543,9 +726,16 @@ onMounted(() => {
         <p v-if="smilesFileName" class="predict-submit__selected">
           {{ t('predict.submit.selectedFile') }}: {{ smilesFileName }}
         </p>
+        <template v-if="preuploadedFileId">
+          <p class="predict-submit__selected" data-testid="predict-submit-preuploaded">
+            {{ t('predict.submit.preuploadedFile') }}:
+            {{ preuploadedFilename || preuploadedFileId }}
+          </p>
+          <p class="predict-submit__hint">{{ t('predict.submit.preuploadedHint') }}</p>
+        </template>
       </div>
 
-      <div v-else class="predict-submit__block">
+      <div v-else-if="source === 'candidate'" class="predict-submit__block">
         <a-select
           v-model:value="candidateSetId"
           style="width: 320px"
@@ -554,6 +744,65 @@ onMounted(() => {
           :not-found-content="t('predict.submit.noCandidateSets')"
         />
         <p v-if="!projectId" class="predict-submit__hint">{{ t('predict.submit.needProject') }}</p>
+      </div>
+
+      <div v-else class="predict-submit__block">
+        <a-textarea
+          v-model:value="inlineSmiles"
+          class="predict-submit__smiles-input"
+          :rows="6"
+          :placeholder="t('predict.submit.smilesPlaceholder')"
+          data-testid="predict-submit-smiles-input"
+        />
+        <div class="predict-submit__actions">
+          <a-button data-testid="predict-submit-load-example" @click="loadExampleSmiles">
+            {{ t('predict.submit.loadExample') }}
+          </a-button>
+          <a-button v-if="inlineSmiles" @click="inlineSmiles = ''">
+            {{ t('predict.submit.clearSmiles') }}
+          </a-button>
+        </div>
+        <p class="predict-submit__hint">{{ t('predict.submit.smilesHint') }}</p>
+      </div>
+
+      <div v-if="showLivePreview" class="predict-submit__preview" data-testid="predict-submit-preview">
+        <div class="predict-submit__preview-head">
+          <strong>{{ t('predict.submit.previewTitle') }}</strong>
+          <span data-testid="predict-submit-preview-count">
+            {{ t('predict.submit.previewCount', { count: previewMolecules.length }) }}
+          </span>
+        </div>
+        <p v-if="!previewMolecules.length" class="predict-submit__hint">
+          {{ t('predict.submit.previewEmpty') }}
+        </p>
+        <div v-else class="predict-submit__preview-grid">
+          <div
+            v-for="(smiles, index) in previewSlice"
+            :key="`${smiles}-${index}`"
+            class="predict-submit__preview-item"
+            data-testid="predict-submit-preview-item"
+          >
+            <Smiles2DCell :smiles="smiles" :width="120" :height="76" />
+            <code class="predict-submit__smiles-text">{{ smiles }}</code>
+            <div class="predict-submit__preview-actions">
+              <a-button type="link" size="small" @click="copySmiles(smiles)">
+                {{ t('predict.submit.copySmiles') }}
+              </a-button>
+              <a-button
+                v-if="source === 'smiles'"
+                type="link"
+                size="small"
+                data-testid="predict-submit-preview-remove"
+                @click="removeInlineSmilesAt(index)"
+              >
+                {{ t('predict.submit.removeSmiles') }}
+              </a-button>
+            </div>
+          </div>
+        </div>
+        <p v-if="previewMolecules.length > PREVIEW_LIMIT" class="predict-submit__hint">
+          {{ t('predict.submit.previewMore', { shown: PREVIEW_LIMIT }) }}
+        </p>
       </div>
     </a-card>
 
@@ -697,6 +946,57 @@ onMounted(() => {
 .predict-submit__selected {
   margin: 8px 0 0;
   font-weight: 600;
+}
+
+.predict-submit__smiles-input {
+  font-family: var(--ant-font-family-code, monospace);
+}
+
+.predict-submit__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.predict-submit__preview {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--ant-color-border, var(--theme-border));
+}
+
+.predict-submit__preview-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.predict-submit__preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+}
+
+.predict-submit__preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--ant-color-border, var(--theme-border));
+  border-radius: 8px;
+}
+
+.predict-submit__smiles-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.predict-submit__preview-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .predict-submit__footer {

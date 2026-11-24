@@ -124,6 +124,7 @@ describe('ScreenConfig input sources', () => {
     pushMock.mockReset()
     uploadFileMock.mockReset()
     uploadFileMock.mockResolvedValue({ data: { id: 'file-uploaded' } })
+    submitToolTaskMock.mockReset()
     listProjectsMock.mockResolvedValue({ data: { items: [{ id: 'p1', name: '演示项目' }] } })
     listCandidateSetsMock.mockResolvedValue({
       data: { items: [{ id: 'set-1', name: '候选集 A', item_count: 21 }] }
@@ -229,5 +230,56 @@ describe('ScreenConfig input sources', () => {
     expect(
       wrapper.find('[data-testid="screen-config-submit"]').attributes('disabled')
     ).toBeDefined()
+  })
+
+  it('上游 candidate_set_id 交接：直接切到候选集模式并选中', async () => {
+    route.query = { project_id: 'p1', candidate_set_id: 'set-1' }
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const candidateSelect = wrapper.find('[data-testid="screen-config-candidate-set"]')
+    expect(candidateSelect.exists()).toBe(true)
+    expect((candidateSelect.element as HTMLSelectElement).value).toBe('set-1')
+
+    await wrapper.find('[data-testid="screen-config-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(exportCandidateSetMock).toHaveBeenCalledWith('set-1')
+    expect(uploadFileMock).not.toHaveBeenCalled()
+  })
+
+  it('上游 file_id 交接：upload 模式下展示已落盘配体并直接复用', async () => {
+    route.query = {
+      project_id: 'p1',
+      file_id: 'file-generated-ligands',
+      filename: 'generated_molecules.csv'
+    }
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const badge = wrapper.find('[data-testid="screen-config-preuploaded-ligands"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('generated_molecules.csv')
+
+    const groups = wrapper.findAllComponents(ARadioGroupStub)
+    groups[0]!.vm.$emit('update:value', 'project')
+    await flushPromises()
+    await wrapper.find('[data-testid="screen-config-target"]').setValue('t1')
+    await flushPromises()
+    await wrapper.find('[data-testid="screen-config-protein"]').setValue('pr1')
+    await flushPromises()
+    await wrapper.find('[data-testid="screen-config-structure"]').setValue('s1')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="screen-config-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(uploadFileMock).not.toHaveBeenCalled()
+    const payload = submitToolTaskMock.mock.calls[0]![0] as {
+      standardInputUploads: Record<string, string>
+    }
+    expect(payload.standardInputUploads.protein_pdb).toBe('file-receptor')
+    expect(payload.standardInputUploads.ligand_smiles).toBe('file-generated-ligands')
+    expect(pushMock).toHaveBeenCalledWith('/tasks/task-1/screening')
   })
 })
