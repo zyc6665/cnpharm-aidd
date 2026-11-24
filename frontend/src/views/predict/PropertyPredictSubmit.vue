@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -13,6 +13,7 @@ import ModelSelect from '@/components/design/ModelSelect.vue'
 import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
+import { buildInlineSmilesFile as makeInlineSmilesFile, createRequestTracker, parseInlineSmiles } from '@/domain/molecules/submission-smiles'
 import {
   buildDefaultValues,
   normalizeParameters,
@@ -77,8 +78,9 @@ const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
 const admetParams = ref<ParameterValues>({})
 
-/** 预览面板最多铺 12 个骨架，避免几十个分子把页面撑爆。 */
-const PREVIEW_LIMIT = 12
+const requestTrackers = { targets: createRequestTracker(), proteins: createRequestTracker(), structures: createRequestTracker(), candidateSets: createRequestTracker(), preview: createRequestTracker() }
+onScopeDispose(() => Object.values(requestTrackers).forEach(tracker => tracker.invalidate()))
+
 
 const EXAMPLE_SMILES = [
   'CC(=O)Oc1ccccc1C(=O)O', // Aspirin
@@ -254,72 +256,46 @@ const candidateSetOptions = computed(() =>
   candidateSets.value.map(item => ({ label: item.name, value: item.id }))
 )
 
-/**
- * 从纯文本里抽取 SMILES：兼容
- * - 每行一个 SMILES；
- * - 逗号 / Tab 分隔的 CSV，自动识别 `smiles` 列表头（无表头时取第一列）；
- * - 忽略空行与表头行。
- */
-function isLikelySmiles(value: string): boolean {
-  const text = value.trim()
-  if (!text || /\s/.test(text)) return false
-  if (!/^[A-Za-z0-9@+\-[\]()\\/=#$.%:;>*^~]+$/.test(text)) return false
-  // 至少要有一个 SMILES 里常见的原子记号，避免把 "id" / "name" 之类的表头值当分子
-  return /[BCNOPSFIcnops]/.test(text)
+function extractSmiles(raw: string): string[] {
+  return parseInlineSmiles(raw).validRows.map(row => row.smiles)
 }
 
-function extractSmiles(raw: string): string[] {
-  const lines = raw.replace(/^﻿/, '').split(/\r?\n/)
-  const result: string[] = []
-  let smilesIndex = -1
-  let headerChecked = false
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) continue
-    const delimiter = line.includes('\t') ? '\t' : line.includes(',') ? ',' : ''
-    const cells = delimiter
-      ? line.split(delimiter).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'))
-      : [line]
-    if (!headerChecked) {
-      headerChecked = true
-      const index = cells.findIndex(cell => /^(canonical_)?smiles$/i.test(cell))
-      if (index >= 0) {
-        smilesIndex = index
-        continue
-      }
-    }
-    const value = (smilesIndex >= 0 ? cells[smilesIndex] : cells[0]) ?? ''
-    if (isLikelySmiles(value)) {
-      result.push(value.trim())
-    }
+watch(source, nextSource => {
+  if (applyingHandoff) return
+  if (nextSource !== 'upload') {
+    preuploadedFileId.value = ''
+    preuploadedFilename.value = ''
   }
-  return result
-}
+  if (nextSource !== 'candidate') candidateSetId.value = ''
+  const query = { ...route.query }
+  delete query.file_id
+  delete query.filename
+  delete query.candidate_set_id
+  appliedHandoffKey = `${String(query.candidate_set_id ?? '')}|${String(query.file_id ?? '')}|${String(query.filename ?? '')}|${projectId.value}`
+  void router.replace({ query })
+}, { flush: 'sync' })
 
 const previewMolecules = computed(() => {
-  if (source.value === 'smiles') {
-    return extractSmiles(inlineSmiles.value)
-  }
-  if (source.value === 'upload') {
-    return filePreview.value
-  }
+  if (source.value === 'smiles') return extractSmiles(inlineSmiles.value)
+  if (source.value === 'upload') return filePreview.value
   return []
 })
-const previewSlice = computed(() => previewMolecules.value.slice(0, PREVIEW_LIMIT))
+const previewSlice = computed(() => previewMolecules.value.slice(0, 12))
 const showLivePreview = computed(() => {
   if (predictType.value !== 'admet') return false
   if (source.value === 'smiles') return true
-  // 上游交接的 file_id 没有本地内容可读，避免显示「0 个有效分子」的空预览
   return source.value === 'upload' && !preuploadedFileId.value
 })
 
 watch(smilesFile, async file => {
+  const seq = requestTrackers.preview.next()
   filePreview.value = []
   if (!file) return
   try {
-    filePreview.value = extractSmiles(await file.text())
+    const text = await file.text()
+    if (requestTrackers.preview.isCurrent(seq) && smilesFile.value === file) filePreview.value = extractSmiles(text)
   } catch {
-    filePreview.value = []
+    if (requestTrackers.preview.isCurrent(seq)) filePreview.value = []
   }
 })
 
@@ -346,8 +322,7 @@ function removeInlineSmilesAt(index: number): void {
 }
 
 function buildInlineSmilesFile(): File {
-  const csv = ['smiles', ...extractSmiles(inlineSmiles.value)].join('\n')
-  return new File([csv], `inline_smiles_${Date.now()}.csv`, { type: 'text/csv' })
+  return makeInlineSmilesFile(parseInlineSmiles(inlineSmiles.value).validRows)
 }
 
 /**
@@ -356,6 +331,7 @@ function buildInlineSmilesFile(): File {
  * - `file_id`（+ 可选 `filename`）：文件已落盘，上传模式展示为已选文件，提交时直接复用。
  */
 let appliedHandoffKey = ''
+let applyingHandoff = false
 function getHandoffKey(): string {
   return `${String(route.query.candidate_set_id ?? '')}|${String(route.query.file_id ?? '')}|${String(
     route.query.filename ?? ''
@@ -370,6 +346,7 @@ function applyQueryHandoff(): void {
   if (key === appliedHandoffKey) return
   appliedHandoffKey = key
 
+  applyingHandoff = true
   if (typeof candidateQuery === 'string' && candidateQuery) {
     source.value = 'candidate'
     candidateSetId.value = candidateQuery
@@ -377,6 +354,7 @@ function applyQueryHandoff(): void {
     smilesFileName.value = ''
     preuploadedFileId.value = ''
     preuploadedFilename.value = ''
+    queueMicrotask(() => { applyingHandoff = false })
     return
   }
   if (typeof fileQuery === 'string' && fileQuery) {
@@ -387,13 +365,15 @@ function applyQueryHandoff(): void {
     smilesFileName.value = ''
     candidateSetId.value = ''
     filePreview.value = []
+    queueMicrotask(() => { applyingHandoff = false })
+    return
   }
+  preuploadedFileId.value = ''
+  preuploadedFilename.value = ''
+  candidateSetId.value = ''
+  if (source.value === 'candidate') source.value = 'upload'
+  queueMicrotask(() => { applyingHandoff = false })
 }
-
-watch(
-  () => route.query,
-  () => applyQueryHandoff()
-)
 
 const canSubmit = computed(() => {
   if (predictType.value === 'affinity') {
@@ -411,7 +391,7 @@ const canSubmit = computed(() => {
   if (source.value === 'smiles') {
     return previewMolecules.value.length > 0
   }
-  return Boolean(candidateSetId.value)
+  return Boolean(candidateSetId.value && candidateSets.value.some(item => item.id === candidateSetId.value))
 })
 
 function buildStructureLabel(structure: ProteinStructureDetail): string {
@@ -480,46 +460,54 @@ function handleLigandSmilesUpload(file: File): boolean {
 
 async function handleAffinitySubmit(): Promise<void> {
   formError.value = ''
-  if (!affinityCanSubmit.value) {
-    return
+  const snapshot = {
+    projectId: projectId.value,
+    source: affinitySource.value,
+    fields: [...affinityInputFields.value],
+    structureFileId: selectedStructureFileId.value,
+    candidateSetId: affinityCandidateSetId.value,
+    proteinPdbFile: proteinPdbFile.value,
+    ligandSdfFile: ligandSdfFile.value,
+    ligandSmilesFile: ligandSmilesFile.value,
+    toolSlug: affinitySlug.value,
+    schema: affinitySchema.value,
+    params: { ...affinityParams.value }
   }
+  const fields = new Set(snapshot.fields)
+  if (!snapshot.projectId || validateParameters(snapshot.schema, snapshot.params).length > 0) return
+  if (snapshot.source === 'project') {
+    if ((fields.has('protein_pdb') && !snapshot.structureFileId) || (ligandFieldsNeeded.value && !snapshot.candidateSetId)) return
+  } else if (
+    (fields.has('protein_pdb') && !snapshot.proteinPdbFile) ||
+    (fields.has('ligand_sdf') && !snapshot.ligandSdfFile && !snapshot.ligandSmilesFile) ||
+    (fields.has('ligand_smiles') && !snapshot.ligandSmilesFile && !snapshot.ligandSdfFile)
+  ) return
   submitting.value = true
   try {
-    const fields = new Set(affinityInputFields.value)
     const standardInputUploads: Record<string, string> = {}
-    if (affinitySource.value === 'project') {
-      if (fields.has('protein_pdb')) {
-        if (!selectedStructureFileId.value) {
-          throw new Error(t('predict.submit.needStructure'))
-        }
-        standardInputUploads.protein_pdb = selectedStructureFileId.value
-      }
+    if (snapshot.source === 'project') {
+      if (fields.has('protein_pdb')) standardInputUploads.protein_pdb = snapshot.structureFileId
       if (fields.has('ligand_smiles')) {
-        if (!affinityCandidateSetId.value) {
-          throw new Error(t('predict.submit.needCandidateSet'))
-        }
-        const exported = await exportCandidateSet(affinityCandidateSetId.value)
-        if (!exported.data.file_id) {
-          throw new Error(t('predict.submit.uploadFailed'))
-        }
+        const exported = await exportCandidateSet(snapshot.candidateSetId)
+        if (!exported.data.file_id) throw new Error(t('predict.submit.uploadFailed'))
         standardInputUploads.ligand_smiles = exported.data.file_id
       }
     } else {
-      if (fields.has('protein_pdb') && proteinPdbFile.value) {
-        standardInputUploads.protein_pdb = (await uploadFile(proteinPdbFile.value)).data.id
+      if (fields.has('protein_pdb') && snapshot.proteinPdbFile) {
+        standardInputUploads.protein_pdb = (await uploadFile(snapshot.proteinPdbFile)).data.id
       }
-      if (fields.has('ligand_sdf') && ligandSdfFile.value) {
-        standardInputUploads.ligand_sdf = (await uploadFile(ligandSdfFile.value)).data.id
+      if (fields.has('ligand_sdf') && snapshot.ligandSdfFile) {
+        standardInputUploads.ligand_sdf = (await uploadFile(snapshot.ligandSdfFile)).data.id
       }
-      if (fields.has('ligand_smiles') && ligandSmilesFile.value) {
-        standardInputUploads.ligand_smiles = (await uploadFile(ligandSmilesFile.value)).data.id
+      if (fields.has('ligand_smiles') && snapshot.ligandSmilesFile) {
+        standardInputUploads.ligand_smiles = (await uploadFile(snapshot.ligandSmilesFile)).data.id
       }
     }
     const task = await submitToolTask({
-      toolSlug: affinitySlug.value,
-      projectId: projectId.value || undefined,
+      toolSlug: snapshot.toolSlug,
+      projectId: snapshot.projectId,
       name: `亲和力预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: normalizeParameters(affinitySchema.value, affinityParams.value),
+      params: normalizeParameters(snapshot.schema, snapshot.params),
       standardInputUploads
     })
     message.success(t('predict.submit.success'))
@@ -540,73 +528,71 @@ async function loadProjects(): Promise<void> {
 }
 
 async function loadTargets(): Promise<void> {
-  if (!projectId.value) {
-    return
-  }
+  const parent = projectId.value
+  const seq = requestTrackers.targets.next()
+  if (!parent) { targets.value = []; return }
   try {
-    const response = await listTargets(projectId.value, { page: 1, page_size: 100 })
-    targets.value = response.data.items
+    const response = await listTargets(parent, { page: 1, page_size: 100 })
+    if (requestTrackers.targets.isCurrent(seq) && projectId.value === parent) targets.value = response.data.items ?? []
   } catch {
-    targets.value = []
+    if (requestTrackers.targets.isCurrent(seq) && projectId.value === parent) targets.value = []
   }
 }
 
 async function loadProteins(targetId: string): Promise<void> {
+  const seq = requestTrackers.proteins.next()
+  if (!targetId) { proteins.value = []; return }
   try {
     const response = await getTarget(targetId)
-    proteins.value = response.data.proteins ?? []
+    if (requestTrackers.proteins.isCurrent(seq) && selectedTargetId.value === targetId) proteins.value = response.data.proteins ?? []
   } catch {
-    proteins.value = []
+    if (requestTrackers.proteins.isCurrent(seq) && selectedTargetId.value === targetId) proteins.value = []
   }
 }
 
 async function loadStructures(proteinId: string): Promise<void> {
+  const seq = requestTrackers.structures.next()
+  if (!proteinId) { structures.value = []; return }
   try {
     const response = await listStructures(proteinId)
-    structures.value = response.data.items
+    if (requestTrackers.structures.isCurrent(seq) && selectedProteinId.value === proteinId) structures.value = response.data.items ?? []
   } catch {
-    structures.value = []
+    if (requestTrackers.structures.isCurrent(seq) && selectedProteinId.value === proteinId) structures.value = []
   }
 }
 
 async function loadCandidateSets(): Promise<void> {
-  if (!projectId.value) {
-    return
-  }
+  const parent = projectId.value
+  const seq = requestTrackers.candidateSets.next()
+  if (!parent) { candidateSets.value = []; return }
   try {
-    const response = await listCandidateSets(projectId.value, { page: 1, page_size: 100 })
-    candidateSets.value = response.data.items
+    const response = await listCandidateSets(parent, { page: 1, page_size: 100 })
+    if (requestTrackers.candidateSets.isCurrent(seq) && projectId.value === parent) candidateSets.value = response.data.items ?? []
   } catch {
-    candidateSets.value = []
+    if (requestTrackers.candidateSets.isCurrent(seq) && projectId.value === parent) candidateSets.value = []
   }
 }
 
-async function resolveMoleculesFileId(): Promise<string> {
-  if (source.value === 'upload') {
-    if (preuploadedFileId.value) {
-      return preuploadedFileId.value
-    }
-    if (!smilesFile.value) {
-      throw new Error(t('predict.submit.needFile'))
-    }
-    const uploaded = await uploadFile(smilesFile.value)
-    return uploaded.data.id
+async function resolveMoleculesFileId(snapshot: {
+  source: 'upload' | 'candidate' | 'smiles'
+  preuploadedFileId: string
+  smilesFile: File | null
+  inlineRows: ReturnType<typeof parseInlineSmiles>['validRows']
+  candidateSetId: string
+}): Promise<string> {
+  if (snapshot.source === 'upload') {
+    if (snapshot.preuploadedFileId) return snapshot.preuploadedFileId
+    if (!snapshot.smilesFile) throw new Error(t('predict.submit.needFile'))
+    return (await uploadFile(snapshot.smilesFile)).data.id
   }
-  if (source.value === 'smiles') {
-    if (!extractSmiles(inlineSmiles.value).length) {
-      throw new Error(t('predict.submit.needSmiles'))
-    }
-    const uploaded = await uploadFile(buildInlineSmilesFile())
-    return uploaded.data.id
+  if (snapshot.source === 'smiles') {
+    if (!snapshot.inlineRows.length) throw new Error(t('predict.submit.needSmiles'))
+    return (await uploadFile(makeInlineSmilesFile(snapshot.inlineRows))).data.id
   }
-  if (!candidateSetId.value) {
-    throw new Error(t('predict.submit.needFile'))
-  }
-  const exported = await exportCandidateSet(candidateSetId.value)
+  if (!snapshot.candidateSetId) throw new Error(t('predict.submit.needFile'))
+  const exported = await exportCandidateSet(snapshot.candidateSetId)
   const fileId = exported.data.file_id
-  if (!fileId) {
-    throw new Error(t('predict.submit.uploadFailed'))
-  }
+  if (!fileId) throw new Error(t('predict.submit.uploadFailed'))
   return fileId
 }
 
@@ -616,35 +602,48 @@ async function handleSubmit(): Promise<void> {
     return
   }
   formError.value = ''
-  if (!projectId.value) {
+  const snapshot = {
+    projectId: projectId.value,
+    source: source.value,
+    preuploadedFileId: preuploadedFileId.value,
+    smilesFile: smilesFile.value,
+    inlineRows: parseInlineSmiles(inlineSmiles.value).validRows,
+    candidateSetId: candidateSetId.value,
+    groups: [...selectedGroups.value],
+    toolSlug: selectedSlug.value,
+    schema: admetSchema.value,
+    params: { ...admetParams.value }
+  }
+  if (!snapshot.projectId) {
     formError.value = t('predict.submit.needProjectSubmit')
     return
   }
-  if (source.value === 'upload' && !smilesFile.value && !preuploadedFileId.value) {
+  if (snapshot.source === 'upload' && !snapshot.smilesFile && !snapshot.preuploadedFileId) {
     formError.value = t('predict.submit.needFile')
     return
   }
-  if (source.value === 'smiles' && !previewMolecules.value.length) {
+  if (snapshot.source === 'smiles' && !snapshot.inlineRows.length) {
     formError.value = t('predict.submit.needSmiles')
     return
   }
-  if (source.value === 'candidate' && !candidateSetId.value) {
+  if (snapshot.source === 'candidate' && !snapshot.candidateSetId) {
     formError.value = t('predict.submit.needFile')
     return
   }
-  if (!selectedGroups.value.length) {
+  if (!snapshot.groups.length) {
     formError.value = t('predict.submit.needGroups')
     return
   }
+  if (validateParameters(snapshot.schema, snapshot.params).length > 0) return
 
   submitting.value = true
   try {
-    const fileId = await resolveMoleculesFileId()
+    const fileId = await resolveMoleculesFileId(snapshot)
     const task = await submitToolTask({
-      toolSlug: selectedSlug.value,
-      projectId: projectId.value || undefined,
+      toolSlug: snapshot.toolSlug,
+      projectId: snapshot.projectId,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: normalizeParameters(admetSchema.value, admetParams.value),
+      params: normalizeParameters(snapshot.schema, snapshot.params),
       standardInputUploads: { smiles_csv: fileId }
     })
     message.success(t('predict.submit.success'))
@@ -827,8 +826,8 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <p v-if="previewMolecules.length > PREVIEW_LIMIT" class="predict-submit__hint">
-          {{ t('predict.submit.previewMore', { shown: PREVIEW_LIMIT }) }}
+        <p v-if="previewMolecules.length > 12" class="predict-submit__hint">
+          {{ t('predict.submit.previewMore', { shown: 12 }) }}
         </p>
       </div>
     </a-card>
