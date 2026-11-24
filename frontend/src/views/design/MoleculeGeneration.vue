@@ -179,6 +179,7 @@
   import ParameterPresets from '@/components/design/ParameterPresets.vue'
   import TaskProgressCard from '@/components/tasks/TaskProgressCard.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
+  import { useRequestSequence } from '@/composables/useRequestSequence'
   import { resolveToolBySlug, submitDesignTask } from '@/api/design'
   import { uploadProjectArtifact } from '@/api/artifacts'
   import { uploadFile } from '@/api/files'
@@ -224,11 +225,14 @@
    */
   const sourceMode = ref<'project' | 'upload'>('project')
   const projects = ref<ResearchProject[]>([])
-  const uploadProjectId = ref<string>(route.query.project_id as string || '')
+  const uploadProjectId = ref<string>('')
   const structureFile = ref<File | null>(null)
   const pocketFile = ref<File | null>(null)
   const uploadCenter = ref<{ x: number; y: number; z: number } | null>(null)
   const uploadBoxSize = ref<{ x: number; y: number; z: number } | null>(null)
+  const pocketParsing = ref(false)
+  const pocketSequence = useRequestSequence()
+  let parsedPocketFile: File | null = null
 
   const projectOptions = computed(() =>
     projects.value.map((project) => ({ label: project.name, value: project.id }))
@@ -352,22 +356,14 @@
     const defaults = buildDefaultValues(option?.parameterSchema ?? null)
     const stored = readStoredParams()
     const restored = stored ? schemaOnly(stored.params) : {}
+    const explicit = defaultProjectId.value
     if (stored) {
-      if (stored.uploadProjectId) {
-        uploadProjectId.value = stored.uploadProjectId
-      }
-      sourceMode.value = stored.sourceMode
-      // 恢复成上传模式却没有目标项目时，校验必然报 needProject：
-      // 有 URL/最近项目就补上，没有就退回项目模式。
-      if (sourceMode.value === 'upload' && !uploadProjectId.value) {
-        if (defaultProjectId.value) {
-          uploadProjectId.value = defaultProjectId.value
-        } else {
-          sourceMode.value = 'project'
-        }
-      }
+      if (!explicit && stored.uploadProjectId) uploadProjectId.value = stored.uploadProjectId
+      if (!explicit) sourceMode.value = stored.sourceMode
     }
+    if (explicit) uploadProjectId.value = explicit
     form.params = { ...defaults, ...restored, ...queryParamHints() }
+
   }
 
   function resetParams(): void {
@@ -418,6 +414,8 @@
     () =>
       Boolean(
         resolvedTool.value &&
+          (sourceMode.value !== 'upload' || uploadProjectId.value) &&
+          !pocketParsing.value &&
           structureReady.value &&
           hasCenter.value &&
           validateParameters(selectedOption.value?.parameterSchema ?? null, form.params).length === 0
@@ -457,24 +455,25 @@
   }
 
   async function handlePocketFile(file: File): Promise<boolean> {
+    const seq = pocketSequence.next()
     pocketFile.value = file
-    let geometry = null
+    parsedPocketFile = file
+    pocketParsing.value = true
+    uploadCenter.value = null
+    uploadBoxSize.value = null
+    form.params = { ...form.params, pocket_radius: undefined }
     try {
-      geometry = parsePocketGeometry(await file.text())
+      const geometry = parsePocketGeometry(await file.text())
+      if (!pocketSequence.isCurrent(seq) || parsedPocketFile !== file || pocketFile.value !== file) return false
+      if (!geometry) throw new Error('invalid geometry')
+      uploadCenter.value = geometry.center
+      uploadBoxSize.value = geometry.boxSize
+      const radius = radiusOf(geometry)
+      form.params = { ...form.params, pocket_radius: radius > 0 ? radius : undefined }
     } catch {
-      geometry = null
-    }
-    if (!geometry) {
-      uploadCenter.value = null
-      uploadBoxSize.value = null
-      message.warning(t('design.molecule.pocketFileUnreadable'))
-      return false
-    }
-    uploadCenter.value = geometry.center
-    uploadBoxSize.value = geometry.boxSize
-    const radius = radiusOf(geometry)
-    if (radius > 0) {
-      form.params = { ...form.params, pocket_radius: radius }
+      if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) message.warning(t('design.molecule.pocketFileUnreadable'))
+    } finally {
+      if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) pocketParsing.value = false
     }
     return false
   }
@@ -494,22 +493,31 @@
     return null
   }
 
+  const loadSequence = useRequestSequence()
+
   async function loadTool(): Promise<void> {
+    const seq = loadSequence.next()
+    const slug = selectedSlug.value
     resolving.value = true
     toolError.value = false
     try {
-      resolvedTool.value = await resolveToolBySlug(selectedSlug.value)
-      if (!resolvedTool.value) {
-        toolError.value = true
+      const tool = await resolveToolBySlug(slug)
+      if (loadSequence.isCurrent(seq) && selectedSlug.value === slug) {
+        resolvedTool.value = tool
+        toolError.value = !tool
       }
     } catch {
-      toolError.value = true
+      if (loadSequence.isCurrent(seq) && selectedSlug.value === slug) {
+        resolvedTool.value = null
+        toolError.value = true
+      }
     } finally {
-      resolving.value = false
+      if (loadSequence.isCurrent(seq) && selectedSlug.value === slug) resolving.value = false
     }
   }
 
   async function handleSubmit(): Promise<void> {
+    if (submitting.value || pocketParsing.value) return
     if (!resolvedTool.value) {
       message.warning(t('design.molecule.selectPocketFirst'))
       return
@@ -522,41 +530,43 @@
 
     const center = activeCenter.value
     const schema = selectedOption.value?.parameterSchema ?? null
-    const params = {
-      ...normalizeParameters(schema, form.params),
-      center_x: toNumber(center?.x, 0),
-      center_y: toNumber(center?.y, 0),
-      center_z: toNumber(center?.z, 0)
+    const projectId = sourceMode.value === 'upload' ? uploadProjectId.value : pocketSelection.value?.projectId ?? ''
+    const structureSnapshot = structureFile.value
+    const snapshot = {
+      projectId,
+      toolId: resolvedTool.value.tool.id,
+      toolVersionId: resolvedTool.value.version.id,
+      params: {
+        ...normalizeParameters(schema, form.params),
+        center_x: toNumber(center?.x, 0),
+        center_y: toNumber(center?.y, 0),
+        center_z: toNumber(center?.z, 0)
+      },
+      structureFile: structureSnapshot,
+      name: t('design.molecule.taskName')
     }
 
     submitting.value = true
     try {
-      let projectId = pocketSelection.value?.projectId ?? ''
       let proteinPdbFileId = pocketSelection.value?.structureFileId ?? ''
-      if (sourceMode.value === 'upload') {
-        projectId = uploadProjectId.value
-        // 上传模式把结构传上去，并顺手沉淀进项目数据空间供后续工具复用。
-        if (structureFile.value) {
-          proteinPdbFileId = (await uploadFile(structureFile.value)).data.id
-          if (projectId) {
-            void uploadProjectArtifact(projectId, {
-              file: structureFile.value,
-              artifact_type: 'protein_structure',
-              semantic_type: 'protein_structure',
-              standard_type: 'protein_structure',
-              standard_version: 1,
-            }).catch(() => {
-              message.warning('结构文件已用于本次任务，但自动归档到项目数据空间失败')
-            })
-          }
+      if (sourceMode.value === 'upload' && snapshot.structureFile) {
+        proteinPdbFileId = (await uploadFile(snapshot.structureFile)).data.id
+        if (snapshot.projectId) {
+          void uploadProjectArtifact(snapshot.projectId, {
+            file: snapshot.structureFile,
+            artifact_type: 'protein_structure',
+            semantic_type: 'protein_structure',
+            standard_type: 'protein_structure',
+            standard_version: 1,
+          }).catch(() => undefined)
         }
       }
       const response = await submitDesignTask({
-        name: t('design.molecule.taskName'),
-        projectId,
-        toolId: resolvedTool.value.tool.id,
-        toolVersionId: resolvedTool.value.version.id,
-        params,
+        name: snapshot.name,
+        projectId: snapshot.projectId,
+        toolId: snapshot.toolId,
+        toolVersionId: snapshot.toolVersionId,
+        params: snapshot.params,
         standardInputUploads: { protein_pdb: proteinPdbFileId }
       })
       persistParams()
