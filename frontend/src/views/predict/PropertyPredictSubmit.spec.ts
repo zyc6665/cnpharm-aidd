@@ -145,7 +145,7 @@ describe('PropertyPredictSubmit', () => {
     replaceMock.mockReset()
     pushMock.mockReset()
     listProjectsMock.mockResolvedValue({
-      data: { items: [{ id: 'p1', name: '演示项目' }] }
+      data: { items: [{ id: 'p1', name: '演示项目' }, { id: 'proj-a', name: '项目 A' }, { id: 'proj-b', name: '项目 B' }] }
     })
     listCandidateSetsMock.mockResolvedValue({
       data: { items: [{ id: 'set-1', name: '候选集 A' }] }
@@ -252,6 +252,27 @@ describe('PropertyPredictSubmit', () => {
         standardInputUploads: { smiles_csv: 'file-generated' }
       })
     )
+  })
+
+  it('project switch clears upstream handoff and candidate mode', async () => {
+    route.query = { project_id: 'proj-a', file_id: 'file-a', filename: 'a.csv' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').exists()).toBe(true)
+
+    const sources = wrapper.findAllComponents(ARadioGroupStub)
+    sources[1]!.vm.$emit('update:value', 'candidate')
+    await flushPromises()
+    exportCandidateSetMock.mockClear()
+    submitToolTaskMock.mockClear()
+    await wrapper.find('[data-testid="predict-submit-project"]').setValue('proj-b')
+    await flushPromises()
+
+    expect(replaceMock).toHaveBeenCalledWith({ query: { project_id: 'proj-b' } })
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="predict-submit-button"]').attributes('disabled')).toBeDefined()
+    expect(exportCandidateSetMock).not.toHaveBeenCalled()
+    expect(submitToolTaskMock).not.toHaveBeenCalled()
   })
 
   it('上游 candidate_set_id 交接：直接切到候选集模式并选中该集合', async () => {

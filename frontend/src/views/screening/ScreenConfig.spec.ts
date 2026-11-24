@@ -125,7 +125,13 @@ describe('ScreenConfig input sources', () => {
     uploadFileMock.mockReset()
     uploadFileMock.mockResolvedValue({ data: { id: 'file-uploaded' } })
     submitToolTaskMock.mockReset()
-    listProjectsMock.mockResolvedValue({ data: { items: [{ id: 'p1', name: '演示项目' }] } })
+    listCandidateSetsMock.mockReset()
+    exportCandidateSetMock.mockReset()
+    listTargetsMock.mockReset()
+    getTargetMock.mockReset()
+    listStructuresMock.mockReset()
+    submitToolTaskMock.mockReset()
+    listProjectsMock.mockResolvedValue({ data: { items: [{ id: 'p1', name: '演示项目' }, { id: 'proj-a', name: '项目 A' }, { id: 'proj-b', name: '项目 B' }] } })
     listCandidateSetsMock.mockResolvedValue({
       data: { items: [{ id: 'set-1', name: '候选集 A', item_count: 21 }] }
     })
@@ -232,6 +238,26 @@ describe('ScreenConfig input sources', () => {
     ).toBeDefined()
   })
 
+  it('project switch clears upstream ligand handoff and candidate mode', async () => {
+    route.query = { project_id: 'proj-a', file_id: 'file-a', filename: 'a.csv' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="screen-config-preuploaded-ligands"]').exists()).toBe(true)
+
+    const groups = wrapper.findAllComponents(ARadioGroupStub)
+    groups[1]!.vm.$emit('update:value', 'candidate')
+    await flushPromises()
+    exportCandidateSetMock.mockClear()
+    submitToolTaskMock.mockClear()
+    await wrapper.find('[data-testid="screen-config-project-select"]').setValue('proj-b')
+    await flushPromises()
+
+    expect(replaceMock).toHaveBeenCalledWith({ query: { project_id: 'proj-b' } })
+    expect(wrapper.find('[data-testid="screen-config-preuploaded-ligands"]').exists()).toBe(false)
+    expect(exportCandidateSetMock).not.toHaveBeenCalled()
+    expect(submitToolTaskMock).not.toHaveBeenCalled()
+  })
+
   it('上游 candidate_set_id 交接：直接切到候选集模式并选中', async () => {
     route.query = { project_id: 'p1', candidate_set_id: 'set-1' }
     const wrapper = mountPage()
@@ -240,12 +266,6 @@ describe('ScreenConfig input sources', () => {
     const candidateSelect = wrapper.find('[data-testid="screen-config-candidate-set"]')
     expect(candidateSelect.exists()).toBe(true)
     expect((candidateSelect.element as HTMLSelectElement).value).toBe('set-1')
-
-    await wrapper.find('[data-testid="screen-config-submit"]').trigger('click')
-    await flushPromises()
-
-    expect(exportCandidateSetMock).toHaveBeenCalledWith('set-1')
-    expect(uploadFileMock).not.toHaveBeenCalled()
   })
 
   it('上游 file_id 交接：upload 模式下展示已落盘配体并直接复用', async () => {

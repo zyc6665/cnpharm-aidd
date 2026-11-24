@@ -196,7 +196,16 @@ watch(
 
 watch(
   projectId,
-  id => {
+  (id, oldId) => {
+    if (oldId && id !== oldId) {
+      preuploadedFileId.value = ''
+      preuploadedFilename.value = ''
+      candidateSetId.value = ''
+      affinityCandidateSetId.value = ''
+      source.value = 'upload'
+      // The URL replacement may not have completed yet; mark this project's stale query as handled.
+      appliedHandoffKey = getHandoffKey()
+    }
     candidateSetId.value = ''
     affinityCandidateSetId.value = ''
     selectedTargetId.value = ''
@@ -347,13 +356,17 @@ function buildInlineSmilesFile(): File {
  * - `file_id`（+ 可选 `filename`）：文件已落盘，上传模式展示为已选文件，提交时直接复用。
  */
 let appliedHandoffKey = ''
+function getHandoffKey(): string {
+  return `${String(route.query.candidate_set_id ?? '')}|${String(route.query.file_id ?? '')}|${String(
+    route.query.filename ?? ''
+  )}|${projectId.value}`
+}
+
 function applyQueryHandoff(): void {
   const candidateQuery = route.query.candidate_set_id
   const fileQuery = route.query.file_id
   const filenameQuery = route.query.filename
-  const key = `${String(candidateQuery ?? '')}|${String(fileQuery ?? '')}|${String(
-    filenameQuery ?? ''
-  )}|${projectId.value}`
+  const key = getHandoffKey()
   if (key === appliedHandoffKey) return
   appliedHandoffKey = key
 
@@ -416,10 +429,24 @@ function buildStructureLabel(structure: ProteinStructureDetail): string {
 function handleProjectChange(value: unknown): void {
   const id = typeof value === 'string' ? value : ''
   const query = { ...route.query }
+  delete query.file_id
+  delete query.filename
+  delete query.candidate_set_id
   if (id) {
     query.project_id = id
   } else {
     delete query.project_id
+  }
+  if (id !== projectId.value) {
+    preuploadedFileId.value = ''
+    preuploadedFilename.value = ''
+    candidateSetId.value = ''
+    affinityCandidateSetId.value = ''
+    source.value = 'upload'
+    // Avoid re-applying old route data while router.replace is pending.
+    appliedHandoffKey = `${String(query.candidate_set_id ?? '')}|${String(query.file_id ?? '')}|${String(
+      query.filename ?? ''
+    )}|${id}`
   }
   void router.replace({ query })
 }
