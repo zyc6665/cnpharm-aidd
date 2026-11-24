@@ -2093,7 +2093,15 @@ export default {
       taskFailed: 'Task execution failed',
       moleculeCount: '{count} molecules',
       peptideCount: '{count} peptides',
-      tableMissing: 'molecule_table artifact not found; cannot render structure cards',
+      tableMissing: 'molecule_table artifact not found; cannot render the results list',
+      searchPlaceholder: 'Search SMILES or sequence',
+      viewTable: 'Table',
+      viewCard: 'Cards',
+      structureColumn: 'Structure',
+      smilesColumn: 'SMILES',
+      druglikenessColumn: 'Druglikeness',
+      copy: 'Copy',
+      copyFailed: 'Copy failed; please select the text manually',
       sortBy: 'Sort by',
       desc: 'Desc',
       asc: 'Asc',
@@ -2109,7 +2117,63 @@ export default {
       setNameRequired: 'Please enter a candidate set name',
       nothingToSave: 'No molecules to save',
       saved: 'Saved {count} molecules to the candidate set',
-      saveFailed: 'Failed to save. Please try again later.'
+      saveFailed: 'Failed to save. Please try again later.',
+      moleculeIndex: 'Molecule #{index}',
+      selectAll: 'Select current page',
+      clearSelection: 'Clear selection',
+      selectedCount: '{count} molecules selected',
+      batchActions: 'Batch actions',
+      exportCsv: 'Export CSV',
+      exportSdf: 'Export SDF',
+      saveSelected: 'Save selected',
+      viewerTitle: 'Molecule detail',
+      viewerEmpty: 'Select a molecule to view details',
+      simplifiedMode: 'Simplified mode',
+      simplifiedHint: 'Turn off 3D preview on low-end devices and keep 2D structure and properties only',
+      no3dStructure: 'No structure file is available for 3D display; the 2D structure and druglikeness breakdown are shown below',
+      metricsTitle: 'Physicochemical properties',
+      lipinskiTitle: "Lipinski's Rule of Five",
+      lipinskiPass: 'Pass',
+      lipinskiFail: 'Violation',
+      lipinskiUnknown: 'N/A',
+      noPropertyData: {
+        title: 'Physicochemical properties have not been calculated',
+        description:
+          'Molecule generation outputs structures (SMILES) only. MW, LogP, HBD, HBA, TPSA and QED are computed by Property Prediction / RDKit properties. Save the results as a candidate set first, then calculate properties there.',
+        cta: 'Calculate properties'
+      },
+      exportCsvSuccess: 'Exported {count} molecules to CSV',
+      exportSdfSuccess: 'Exported {count} molecules to SDF',
+      exportEmpty: 'No molecules to export',
+      saveSelectedHint: 'Save the {count} selected molecules into a candidate set',
+      filters: {
+        mw: 'MW',
+        logp: 'LogP',
+        hbd: 'HBD',
+        hba: 'HBA',
+        qedMin: 'QED min',
+        range: '{min} ~ {max}'
+      },
+      druglikeness: {
+        title: 'Druglikeness',
+        stars: '{stars} stars',
+        noData: 'No druglikeness data',
+        violations: '{count} violation(s)',
+        axis: {
+          mw: 'MW',
+          logp: 'LogP',
+          hbd: 'HBD',
+          hba: 'HBA',
+          tpsa: 'TPSA'
+        },
+        rules: {
+          mw: 'MW',
+          logp: 'LogP',
+          hbd: 'HBD',
+          hba: 'HBA',
+          tpsa: 'TPSA'
+        }
+      }
     }
   },
   // Property prediction (P-21 / P-22)
