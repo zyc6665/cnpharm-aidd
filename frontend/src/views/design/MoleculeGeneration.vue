@@ -277,6 +277,8 @@
 
   interface StoredMoleculeParams {
     sourceMode: 'project' | 'upload'
+    /** 上传模式下选过的目标项目；恢复时一并带回，避免用户重新选一次。 */
+    uploadProjectId: string
     params: ParameterValues
   }
 
@@ -289,6 +291,8 @@
       if (!parsed || typeof parsed !== 'object' || !parsed.params) return null
       return {
         sourceMode: parsed.sourceMode === 'upload' ? 'upload' : 'project',
+        uploadProjectId:
+          typeof parsed.uploadProjectId === 'string' ? parsed.uploadProjectId : '',
         params: { ...parsed.params }
       }
     } catch {
@@ -307,7 +311,11 @@
     try {
       localStorage.setItem(
         paramStorageKey.value,
-        JSON.stringify({ sourceMode: sourceMode.value, params: storedParams })
+        JSON.stringify({
+          sourceMode: sourceMode.value,
+          uploadProjectId: uploadProjectId.value,
+          params: storedParams
+        })
       )
     } catch {
       // 存储不可用时不阻断提交。
@@ -345,7 +353,19 @@
     const stored = readStoredParams()
     const restored = stored ? schemaOnly(stored.params) : {}
     if (stored) {
+      if (stored.uploadProjectId) {
+        uploadProjectId.value = stored.uploadProjectId
+      }
       sourceMode.value = stored.sourceMode
+      // 恢复成上传模式却没有目标项目时，校验必然报 needProject：
+      // 有 URL/最近项目就补上，没有就退回项目模式。
+      if (sourceMode.value === 'upload' && !uploadProjectId.value) {
+        if (defaultProjectId.value) {
+          uploadProjectId.value = defaultProjectId.value
+        } else {
+          sourceMode.value = 'project'
+        }
+      }
     }
     form.params = { ...defaults, ...restored, ...queryParamHints() }
   }

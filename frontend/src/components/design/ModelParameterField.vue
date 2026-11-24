@@ -20,7 +20,7 @@
       @update:value="(next: string) => emit('update', next)"
     />
     <a-input-number
-      v-else-if="fieldType() === 'number'"
+      v-else-if="fieldType() === 'number' || fieldType() === 'integer'"
       :value="numberValue()"
       :min="property.minimum"
       :max="property.maximum"

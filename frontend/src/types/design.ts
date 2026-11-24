@@ -70,6 +70,8 @@ export interface DesignPocketSelection {
   score: number | null
   /** 结构主文件；分子生成以此作为 `protein_pdb` 输入。 */
   structureFileId: string | null
+  /** 结构文件 URN（`file:<id>` 或带扩展名的路径），用于判定三维预览格式。 */
+  structureUrn?: string | null
   /** 口袋中心（Å），来自口袋预测结果的 center。 */
   center: AxisVector | null
   /** 口袋包围盒（Å），用于推导默认对接盒半径。 */

@@ -17,6 +17,13 @@ vi.mock('@/components/design/PocketPredictPanel.vue', () => ({
 }))
 import PocketPicker from './PocketPicker.vue'
 import type { DesignPocketSelection } from '@/types/design'
+import type { VisualizationScene } from '@/domain/tasks'
+
+const ViewerStub = {
+  name: 'PocketPreviewViewer',
+  props: { scene: { type: Object, required: true } },
+  template: '<div data-testid="molecule-viewer-stub" />',
+}
 
 function selection(overrides: Partial<DesignPocketSelection> = {}): DesignPocketSelection {
   return {
@@ -28,10 +35,25 @@ function selection(overrides: Partial<DesignPocketSelection> = {}): DesignPocket
     pocketLabel: '#1',
     score: 0.8,
     structureFileId: 'file-1',
+    structureUrn: 'file:receptor.pdb',
     center: { x: 1, y: 2, z: 3 },
     boxSize: { x: 20, y: 20, z: 20 },
     ...overrides,
   }
+}
+
+function mountWithPreview(value: DesignPocketSelection) {
+  return mount(PocketPicker, {
+    props: { modelValue: value, showPreview: true },
+    global: {
+      plugins: [i18n],
+      stubs: { PocketPreviewViewer: ViewerStub },
+    },
+  })
+}
+
+function viewerScene(wrapper: Awaited<ReturnType<typeof mountWithPreview>>): VisualizationScene {
+  return wrapper.findComponent(ViewerStub).props('scene') as VisualizationScene
 }
 
 describe('PocketPicker', () => {
@@ -52,27 +74,66 @@ describe('PocketPicker', () => {
   })
 
   it('renders a compact 3D preview when enabled and a structure file exists', async () => {
-    const w = mount(PocketPicker, {
-      props: { modelValue: selection(), showPreview: true },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          PocketPreviewViewer: { template: '<div data-testid="molecule-viewer-stub" />' },
-        },
-      },
-    })
+    const w = mountWithPreview(selection())
     await flushPromises()
     expect(w.find('[data-testid="pocket-preview"]').exists()).toBe(true)
     expect(w.find('[data-testid="molecule-viewer-stub"]').exists()).toBe(true)
   })
 
-  it('shows a clean fallback when the pocket has no structure file', async () => {
-    const w = mount(PocketPicker, {
-      props: { modelValue: selection({ structureFileId: null }), showPreview: true },
-      global: { plugins: [i18n] },
-    })
+  it('passes pdb format for .pdb structures', async () => {
+    const w = mountWithPreview(selection({ structureUrn: 'file:receptor.pdb' }))
     await flushPromises()
+
+    const [entry] = viewerScene(w).entries
+    expect(entry?.format).toBe('pdb')
+    expect(entry?.extension).toBe('.pdb')
+  })
+
+  it('parses .cif structures as mmcif instead of pdb', async () => {
+    const w = mountWithPreview(selection({ structureUrn: 'file:receptor.cif' }))
+    await flushPromises()
+
+    const [entry] = viewerScene(w).entries
+    expect(entry?.format).toBe('mmcif')
+    expect(entry?.extension).toBe('.cif')
+  })
+
+  it('keeps .mmcif extension when the URN ends with .mmcif', async () => {
+    const w = mountWithPreview(selection({ structureUrn: 's3://bucket/complex.mmcif' }))
+    await flushPromises()
+
+    const [entry] = viewerScene(w).entries
+    expect(entry?.format).toBe('mmcif')
+    expect(entry?.extension).toBe('.mmcif')
+  })
+
+  it('hides the viewer and explains unsupported formats', async () => {
+    const w = mountWithPreview(selection({ structureUrn: 'file:receptor.xyz' }))
+    await flushPromises()
+
+    expect(w.find('[data-testid="molecule-viewer-stub"]').exists()).toBe(false)
+    const empty = w.get('[data-testid="pocket-preview-empty"]')
+    expect(empty.text()).toContain(i18n.global.t('design.molecule.pocketPreviewUnsupportedFormat'))
+  })
+
+  it('hides the viewer when the structure URN is missing', async () => {
+    const w = mountWithPreview(selection({ structureUrn: null }))
+    await flushPromises()
+
+    expect(w.find('[data-testid="molecule-viewer-stub"]').exists()).toBe(false)
+    expect(w.get('[data-testid="pocket-preview-empty"]').text()).toContain(
+      i18n.global.t('design.molecule.pocketPreviewUnsupportedFormat')
+    )
+  })
+
+  it('shows a clean fallback when the pocket has no structure file', async () => {
+    const w = mountWithPreview(selection({ structureFileId: null }))
+    await flushPromises()
+
     expect(w.find('[data-testid="pocket-preview-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="molecule-viewer-stub"]').exists()).toBe(false)
+    expect(w.get('[data-testid="pocket-preview-empty"]').text()).toContain(
+      i18n.global.t('design.molecule.pocketPreviewMissing')
+    )
   })
 })

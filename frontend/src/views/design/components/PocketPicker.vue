@@ -138,7 +138,7 @@
           />
         </div>
         <div v-else class="pocket-preview__empty" data-testid="pocket-preview-empty">
-          {{ t('design.molecule.pocketPreviewMissing') }}
+          {{ previewFallbackMessage }}
         </div>
       </section>
 
@@ -189,17 +189,60 @@ const props = withDefaults(
   { defaultProjectId: '', showPreview: false }
 )
 
+/**
+ * Mol* 的 `BuiltInTrajectoryFormat` 用 `mmcif` 表示 CIF / MMCIF，
+ * 不能写成 `'cif'`（会破坏 `VisualizationSceneEntry.format` 的类型）。
+ */
+interface PocketPreviewFormat {
+  format: 'pdb' | 'mmcif'
+  extension: string
+}
+
+const POCKET_PREVIEW_FORMAT_BY_EXTENSION: Record<string, PocketPreviewFormat> = {
+  '.pdb': { format: 'pdb', extension: '.pdb' },
+  '.ent': { format: 'pdb', extension: '.pdb' },
+  '.cif': { format: 'mmcif', extension: '.cif' },
+  '.mmcif': { format: 'mmcif', extension: '.mmcif' },
+}
+
+/** 从 URN（`file:<id>.pdb` / `s3://bucket/x.cif`）里取小写扩展名；取不到返回空串。 */
+function urnExtension(urn: string): string {
+  const base = (urn.split('?')[0] || '').split('#')[0] || ''
+  const index = base.lastIndexOf('.')
+  return index > 0 ? base.slice(index).toLowerCase() : ''
+}
+
+/**
+ * 预览用的结构 URN：优先用选择时携带的 `structureUrn`，否则回查当前结构。
+ * 有准备产物时以准备结构的 URN 为准（与 `structureFileId` 的取值口径一致）。
+ */
+function resolveStructureUrn(): string | null {
+  const direct = props.modelValue?.structureUrn
+  if (direct) return direct
+  const structure = structures.value.find(item => item.id === props.modelValue?.structureId)
+  if (!structure) return null
+  if (structure.prepared_file_id) {
+    return structure.prepared_urn ?? structure.structure_urn ?? null
+  }
+  return structure.structure_urn ?? structure.prepared_urn ?? null
+}
+
 const previewScene = computed<VisualizationScene | null>(() => {
   const fileId = props.modelValue?.structureFileId
   if (!fileId) return null
+  const urn = resolveStructureUrn()
+  if (!urn) return null
+  const detected = POCKET_PREVIEW_FORMAT_BY_EXTENSION[urnExtension(urn)]
+  // 识别不了格式时不要按 PDB 硬渲染——Mol* 会把 CIF 当 PDB 解析出错误结构。
+  if (!detected) return null
   const entry = {
     key: `pocket-preview-${fileId}`,
     url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
     label: props.modelValue?.pocketLabel || 'pocket structure',
     source: 'input' as const,
     role: 'receptor' as const,
-    format: 'pdb' as const,
-    extension: '.pdb',
+    format: detected.format,
+    extension: detected.extension,
   }
   return {
     entries: [entry],
@@ -221,6 +264,13 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+/** 预览不可用时区分「没有结构文件」与「格式无法识别」，避免笼统的失败文案。 */
+const previewFallbackMessage = computed(() =>
+  props.modelValue?.structureFileId
+    ? t('design.molecule.pocketPreviewUnsupportedFormat')
+    : t('design.molecule.pocketPreviewMissing')
+)
 
 const projects = ref<ResearchProject[]>([])
 const targets = ref<TargetSummary[]>([])
@@ -299,6 +349,11 @@ function emitPocketSelection(pocket: PocketSummary): void {
     pocketLabel: pocketLabel(pocket),
     score: pocket.score,
     structureFileId: structure?.prepared_file_id ?? structure?.structure_file_id ?? null,
+    structureUrn: structure
+      ? structure.prepared_file_id
+        ? structure.prepared_urn ?? structure.structure_urn ?? null
+        : structure.structure_urn ?? structure.prepared_urn ?? null
+      : null,
     center: pocket.center ?? null,
     boxSize: pocket.box_size ?? null,
   })

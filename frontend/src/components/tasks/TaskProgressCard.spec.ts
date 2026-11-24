@@ -72,6 +72,24 @@ describe('TaskProgressCard', () => {
     wrapper.unmount()
   })
 
+  it('项目任务详情入口指向项目内任务页', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      data: task({ project_id: 'proj 1' }),
+    } as never)
+
+    const wrapper = mount(TaskProgressCard, {
+      props: { taskId: 'task/1' },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="task-progress-detail"]').attributes('href')).toBe(
+      '/projects/proj%201/tasks/task%2F1'
+    )
+
+    wrapper.unmount()
+  })
+
   it('排队中显示队列位置与预计等待时间', async () => {
     vi.mocked(getTaskDetail).mockResolvedValue({
       data: task({

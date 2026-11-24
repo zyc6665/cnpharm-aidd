@@ -2050,7 +2050,8 @@ export default {
       submittedStay: '任务已提交，可在下方查看实时进度',
       viewResultsNow: '立即查看结果',
       pocketPreview: '口袋三维预览',
-      pocketPreviewMissing: '该口袋缺少可用的结构文件，暂时无法预览三维结构'
+      pocketPreviewMissing: '该口袋缺少可用的结构文件，暂时无法预览三维结构',
+      pocketPreviewUnsupportedFormat: '暂不支持预览该格式的结构文件（仅支持 PDB / CIF）'
     },
     presets: {
       title: '参数预设',

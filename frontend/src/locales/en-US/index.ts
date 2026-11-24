@@ -2061,7 +2061,9 @@ export default {
       submittedStay: 'Task submitted — live progress is shown below',
       viewResultsNow: 'View results now',
       pocketPreview: 'Pocket 3D preview',
-      pocketPreviewMissing: 'This pocket has no usable structure file, so 3D preview is unavailable'
+      pocketPreviewMissing: 'This pocket has no usable structure file, so 3D preview is unavailable',
+      pocketPreviewUnsupportedFormat:
+        'This structure format cannot be previewed here (PDB and CIF are supported)'
     },
     presets: {
       title: 'Parameter presets',

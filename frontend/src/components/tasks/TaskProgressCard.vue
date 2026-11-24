@@ -114,7 +114,14 @@ const isTerminal = computed(
 const isWaiting = computed(() => status.value === 'pending' || status.value === 'queued')
 const canCancel = computed(() => isWaiting.value || status.value === 'running')
 const queueInfo = computed(() => readTaskQueueInfo(detail.value))
-const detailPath = computed(() => `/tasks/${encodeURIComponent(props.taskId)}`)
+// 项目内任务有自己的详情页；拿不到 project_id 时退回全局任务详情。
+const detailPath = computed(() => {
+  const projectId = detail.value?.project_id
+  if (projectId) {
+    return `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(props.taskId)}`
+  }
+  return `/tasks/${encodeURIComponent(props.taskId)}`
+})
 const resultsPath = computed(() =>
   resolveDesignRunPath(detail.value?.tool_slug ?? detail.value?.tool?.slug, props.taskId)
 )
