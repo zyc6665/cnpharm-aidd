@@ -358,17 +358,21 @@ function clearBelow(level: 'target' | 'protein' | 'structure' | 'pocket'): void 
   if (level === 'target') {
     targets.value = []
     selectedTarget.value = undefined
+    loadingTargets.value = false
   }
   if (level === 'target' || level === 'protein') {
     proteins.value = []
     selectedProtein.value = undefined
+    loadingProteins.value = false
   }
   if (level !== 'pocket') {
     structures.value = []
     selectedStructure.value = undefined
+    loadingStructures.value = false
   }
   pockets.value = []
   selectedPocket.value = undefined
+  loadingPockets.value = false
   emit('update:modelValue', null)
 }
 

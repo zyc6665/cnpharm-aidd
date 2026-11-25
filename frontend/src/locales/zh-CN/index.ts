@@ -2054,7 +2054,8 @@ export default {
       viewResultsNow: '立即查看结果',
       pocketPreview: '口袋三维预览',
       pocketPreviewMissing: '该口袋缺少可用的结构文件，暂时无法预览三维结构',
-      pocketPreviewUnsupportedFormat: '暂不支持预览该格式的结构文件（仅支持 PDB / CIF）'
+      pocketPreviewUnsupportedFormat: '暂不支持预览该格式的结构文件（仅支持 PDB / CIF）',
+      archiveStructureFailed: '结构文件已用于本次任务，但自动归档到项目数据空间失败'
     },
     presets: {
       title: '参数预设',
@@ -2204,6 +2205,7 @@ export default {
       exportCsvSuccess: '已导出 {count} 个分子的 CSV',
       exportSdfSuccess: '已导出 {count} 个分子的 SDF',
       exportSdfSkipped: '已导出 {exported} 个分子的 SDF；另有 {skipped} 个分子缺少唯一匹配的三维记录，未包含',
+      exportSdfUnconfirmed: '{count} 个分子无可确认的三维结构，未导出',
       exportEmpty: '没有可导出的分子',
       saveSelectedHint: '将把选中的 {count} 个分子保存为候选集合',
       filters: {

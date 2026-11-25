@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -13,7 +13,8 @@ import ModelSelect from '@/components/design/ModelSelect.vue'
 import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
-import { buildInlineSmilesFile as makeInlineSmilesFile, createRequestTracker, parseInlineSmiles } from '@/domain/molecules/submission-smiles'
+import { useRequestSequence } from '@/composables/useRequestSequence'
+import { buildInlineSmilesFile as makeInlineSmilesFile, parseInlineSmiles } from '@/domain/molecules/submission-smiles'
 import {
   buildDefaultValues,
   normalizeParameters,
@@ -78,8 +79,7 @@ const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
 const admetParams = ref<ParameterValues>({})
 
-const requestTrackers = { targets: createRequestTracker(), proteins: createRequestTracker(), structures: createRequestTracker(), candidateSets: createRequestTracker(), preview: createRequestTracker() }
-onScopeDispose(() => Object.values(requestTrackers).forEach(tracker => tracker.invalidate()))
+const requestTrackers = { targets: useRequestSequence(), proteins: useRequestSequence(), structures: useRequestSequence(), candidateSets: useRequestSequence(), preview: useRequestSequence() }
 
 
 const EXAMPLE_SMILES = [
@@ -655,6 +655,7 @@ async function handleSubmit(): Promise<void> {
   }
 }
 
+watch(() => route.query, applyQueryHandoff)
 onMounted(() => {
   applyQueryHandoff()
   void loadProjects()

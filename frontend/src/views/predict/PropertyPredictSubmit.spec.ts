@@ -1,7 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const route = { params: {} as Record<string, string>, query: {} as Record<string, string> }
+const route = reactive({ params: {} as Record<string, string>, query: {} as Record<string, string> })
 const replaceMock = vi.fn()
 const pushMock = vi.fn()
 
@@ -114,8 +115,10 @@ const ARadioGroupStub = {
   template: '<div class="radio-group"><slot /></div>'
 }
 
+const mountedWrappers: Array<ReturnType<typeof mount>> = []
+
 function mountPage(props: Record<string, unknown> = {}) {
-  return mount(PropertyPredictSubmit, {
+  const wrapper = mount(PropertyPredictSubmit, {
     props,
     global: {
       stubs: {
@@ -136,9 +139,15 @@ function mountPage(props: Record<string, unknown> = {}) {
       }
     }
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 describe('PropertyPredictSubmit', () => {
+  afterEach(() => {
+    mountedWrappers.splice(0).forEach(wrapper => wrapper.unmount())
+  })
+
   beforeEach(() => {
     route.params = {}
     route.query = {}
@@ -324,5 +333,16 @@ describe('PropertyPredictSubmit', () => {
         standardInputUploads: { smiles_csv: 'file-uploaded' }
       })
     )
+  })
+
+  it('reapplies upstream handoff when route.query changes on the mounted component', async () => {
+    route.query = { project_id: 'p1', file_id: 'file-1', filename: 'first.csv' }
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').text()).toContain('first.csv')
+
+    route.query = { project_id: 'p1', file_id: 'file-2', filename: 'second.csv' }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="predict-submit-preuploaded"]').text()).toContain('second.csv')
   })
 })

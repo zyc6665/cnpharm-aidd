@@ -10,19 +10,10 @@ export interface InlineSmilesParseResult {
   previewRows: InlineSmilesRow[]
 }
 
-export function createRequestTracker(): {
-  next(): number
-  isCurrent(seq: number): boolean
-  invalidate(): void
-} {
-  let sequence = 0
-  return { next: () => ++sequence, isCurrent: seq => seq === sequence, invalidate: () => { sequence += 1 } }
-}
-
 function parseCsvRows(text: string): string[][] {
   const rows: string[][] = []
   let row: string[] = []; let field = ''; let quoted = false
-  const source = text.replace(/^﻿/, '')
+  const source = text.replace(/^\uFEFF/, '')
   for (let i = 0; i < source.length; i += 1) {
     const char = source[i]
     if (quoted) {
@@ -70,7 +61,7 @@ function likelySmiles(value: string): boolean {
 }
 
 export function parseInlineSmiles(text: string): InlineSmilesParseResult {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/)
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
   const nonEmpty = lines.filter(line => line.trim()).length
   const csvRows = parseCsvRows(text)
   const headers = (csvRows[0] ?? []).map(value => value.trim().toLowerCase())

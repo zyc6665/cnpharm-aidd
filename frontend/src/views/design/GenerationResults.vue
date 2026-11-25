@@ -1289,10 +1289,14 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
     return tone ? `metric-value--${tone}` : ''
   }
 
+  function rowMoleculeId(row: DesignTableRow): string {
+    return moleculeIdColumn.value ? (row[moleculeIdColumn.value.key] ?? '').trim() : ''
+  }
+
   function markIdentityKey(row: DesignTableRow): string {
     const smiles = rowSmiles(row)
     if (smiles) return `smiles:${smiles}`
-    const idVal = moleculeIdColumn.value ? (row[moleculeIdColumn.value.key] ?? '').trim() : ''
+    const idVal = rowMoleculeId(row)
     if (idVal) return `molecule_id:${idVal}`
     return ''
   }
@@ -1684,11 +1688,11 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
     const sdfText = await findSdfText()
     const text = buildSdfExportText(
       sdfText ? splitSdfRecords(sdfText) : [],
-      targetRows.map(row => ({ smiles: rowSmiles(row) }))
+      targetRows.map(row => ({ smiles: rowSmiles(row), moleculeId: rowMoleculeId(row) || undefined }))
     )
     const exported = text ? splitSdfRecords(text).length : 0
     if (exported === 0) {
-      message.warning(t('design.results.exportEmpty'))
+      message.warning(t('design.results.exportSdfUnconfirmed', { count: targetRows.length }))
       return
     }
     await saveBlobAsFile(text, `molecules-${taskId.value.slice(0, 8)}.sdf`, 'chemical/x-mdl-sdfile')

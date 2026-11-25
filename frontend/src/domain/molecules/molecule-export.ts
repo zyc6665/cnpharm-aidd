@@ -46,29 +46,51 @@ function ensureSdfDelimiter(record: string): string {
 
 export interface SdfExportRow {
   smiles: string
+  moleculeId?: string
+}
+
+function readSdfRecordIdentity(record: string): string {
+  const tagMatch = record.match(/^>\s*<(?:molecule_id|pose_id|ligand_id|id)>\s*\r?\n([^\r\n]+)/im)
+  const tagValue = (tagMatch?.[1] ?? '').trim()
+  if (tagValue) return tagValue
+  return (record.split(/\r?\n/, 1)[0] ?? '').trim()
 }
 
 /**
- * 按选中行生成 SDF 文本。只按唯一 SMILES 属性匹配；不使用数组位置推断，
- * 因为结果行可能已排序，而 SDF 记录仍保持生产顺序。
+ * 按选中行生成 SDF 文本。默认按唯一 SMILES 属性匹配；若同 SMILES 存在多条记录（如多构象）
+ * 且行具备显式 `moleculeId`，则按唯一记录标识进一步消歧；无法确认时不伪造结构。
  */
 export function buildSdfExportText(
   records: readonly string[],
   rows: readonly SdfExportRow[]
 ): string {
-  const indexed = new Map<string, number[]>()
+  const bySmiles = new Map<string, number[]>()
+  const byIdentity = new Map<string, number[]>()
   records.forEach((record, index) => {
     const smiles = readSdfRecordSmiles(record)
-    if (smiles) indexed.set(smiles, [...(indexed.get(smiles) ?? []), index])
+    if (smiles) bySmiles.set(smiles, [...(bySmiles.get(smiles) ?? []), index])
+    const identity = readSdfRecordIdentity(record)
+    if (identity) byIdentity.set(identity, [...(byIdentity.get(identity) ?? []), index])
   })
   const used = new Set<number>()
   const output: string[] = []
   for (const row of rows) {
     const target = normalizeSmiles(row.smiles)
-    const matches = indexed.get(target) ?? []
-    if (target && matches.length === 1 && !used.has(matches[0]!)) {
-      used.add(matches[0]!)
-      output.push(ensureSdfDelimiter(records[matches[0]!]!))
+    const smilesMatches = target ? (bySmiles.get(target) ?? []) : []
+    let picked: number | undefined
+    if (smilesMatches.length === 1) {
+      picked = smilesMatches[0]
+    } else if (row.moleculeId?.trim()) {
+      const idMatches = (byIdentity.get(row.moleculeId.trim()) ?? []).filter(index => {
+        if (!target) return true
+        const recSmiles = readSdfRecordSmiles(records[index]!)
+        return !recSmiles || recSmiles === target
+      })
+      if (idMatches.length === 1) picked = idMatches[0]
+    }
+    if (picked !== undefined && !used.has(picked)) {
+      used.add(picked)
+      output.push(ensureSdfDelimiter(records[picked]!))
     }
   }
   return output.join('')

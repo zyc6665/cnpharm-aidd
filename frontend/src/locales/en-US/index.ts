@@ -2066,7 +2066,9 @@ export default {
       pocketPreview: 'Pocket 3D preview',
       pocketPreviewMissing: 'This pocket has no usable structure file, so 3D preview is unavailable',
       pocketPreviewUnsupportedFormat:
-        'This structure format cannot be previewed here (PDB and CIF are supported)'
+        'This structure format cannot be previewed here (PDB and CIF are supported)',
+      archiveStructureFailed:
+        'Structure uploaded for this task, but archiving it to the project workspace failed'
     },
     presets: {
       title: 'Parameter presets',
@@ -2216,6 +2218,7 @@ export default {
       exportCsvSuccess: 'Exported {count} molecules to CSV',
       exportSdfSuccess: 'Exported {count} molecules to SDF',
       exportSdfSkipped: 'Exported {exported} molecules to SDF; {skipped} had no matching 3D record and were omitted.',
+      exportSdfUnconfirmed: '{count} molecules have no confirmed 3D structure and were not exported.',
       exportEmpty: 'No molecules to export',
       saveSelectedHint: 'Save the {count} selected molecules into a candidate set',
       filters: {
