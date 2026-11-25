@@ -370,8 +370,8 @@ const ADVICE_BY_CAUSE: Record<TaskFailureCauseId, Omit<TaskFailureAdvice, 'cause
     messageKey: 'tasks.failureAdvice.causes.pocketTooSmall',
     suggestionKey: 'tasks.failureAdvice.suggestions.pocketTooSmall',
     retryKey: 'tasks.failureAdvice.retry.pocketTooSmall',
-    suggestedParams: { pocket_radius: 12 },
-    canAdjustParams: true,
+    suggestedParams: null,
+    canAdjustParams: false,
   },
   invalid_protein: {
     messageKey: 'tasks.failureAdvice.causes.invalidProtein',

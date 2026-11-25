@@ -3001,7 +3001,7 @@ export default {
         unknown: 'The task failed and no clear cause could be identified from the logs.'
       },
       suggestions: {
-        pocketTooSmall: 'Re-predict and select a larger pocket, or increase the pocket radius before retrying.',
+        pocketTooSmall: 'Re-predict and select a larger binding pocket with coordinates centered inside the cavity before retrying.',
         invalidProtein: 'Prepare the receptor structure again on the target page and confirm it opens correctly before resubmitting.',
         gpuOom: 'Reduce the sample count (e.g. 20) or wait for idle GPU capacity before resubmitting.',
         timeout: 'Reduce samples / pocket size and retry; split the task if necessary.',
@@ -3010,7 +3010,7 @@ export default {
         unknown: 'Inspect the full logs (stderr / stdout) to locate the error before deciding whether to retry.'
       },
       retry: {
-        pocketTooSmall: 'Resubmit with the suggested pocket radius hint.',
+        pocketTooSmall: 'Select a valid pocket or verify center coordinates before retrying.',
         invalidProtein: 'Fix the input first — retrying as-is will not help.',
         gpuOom: 'Retry with a lower sample count.',
         timeout: 'Retry with a smaller workload.',
@@ -3729,7 +3729,6 @@ export default {
       seed: 'Random seed',
       device: 'Compute device',
       num_samples: 'Number of molecules',
-      pocket_radius: 'Pocket radius',
       prediction_mode: 'Prediction mode',
       deduplicate: 'Deduplicate',
       batch_size: 'Batch size',
@@ -3753,7 +3752,6 @@ export default {
       seed: 'Use a fixed seed to reproduce results.',
       device: 'Auto lets the platform choose based on available resources.',
       num_samples: 'Number of molecules to generate.',
-      pocket_radius: 'Sampling radius around the pocket center.',
       prediction_mode: 'Choose joint, activity, or toxicity prediction.',
       deduplicate: 'Remove duplicate sequences automatically.',
       batch_size: 'Number of sequences per inference batch.',

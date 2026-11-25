@@ -48,7 +48,7 @@ const schema: ToolSchema = {
   type: 'object',
   properties: {
     num_samples: { type: 'integer', default: 100 },
-    pocket_radius: { type: 'number', default: 10 },
+    batch_size: { type: 'integer', default: 2 },
     seed: { type: 'integer' },
   },
 }
@@ -68,11 +68,11 @@ describe('ParameterPresets', () => {
     await wrapper.get('select').setValue('quick')
 
     const [payload] = wrapper.emitted('load')?.[0] as [Record<string, number>]
-    expect(payload).toEqual({ num_samples: 20, pocket_radius: 8 })
+    expect(payload).toEqual({ num_samples: 20 })
   })
 
   it('保存当前参数到 localStorage 并渲染为可删除标签', async () => {
-    const wrapper = mountPresets({ num_samples: 160, pocket_radius: 11, unknown: 1 })
+    const wrapper = mountPresets({ num_samples: 160, batch_size: 2, unknown: 1 })
     await wrapper.get('[data-testid="parameter-preset-save"]').trigger('click')
     await wrapper.get('input').setValue('我的预设')
     await wrapper.get('.modal-ok').trigger('click')
@@ -80,7 +80,7 @@ describe('ParameterPresets', () => {
     const stored = JSON.parse(localStorage.getItem('design:parameter-presets:molecule') ?? '[]')
     expect(stored).toHaveLength(1)
     expect(stored[0].name).toBe('我的预设')
-    expect(stored[0].params).toEqual({ num_samples: 160, pocket_radius: 11 })
+    expect(stored[0].params).toEqual({ num_samples: 160, batch_size: 2 })
     expect(wrapper.text()).toContain('我的预设')
   })
 

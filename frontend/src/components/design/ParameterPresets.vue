@@ -94,9 +94,9 @@ const { t } = useI18n()
 
 /** 内置预设的取值直接对齐 pocket2mol 契约里的参数名。 */
 const BUILT_IN_PRESETS: BuiltInPreset[] = [
-  { id: 'quick', nameKey: 'design.presets.builtInPresets.quick', params: { num_samples: 20, pocket_radius: 8 } },
-  { id: 'standard', nameKey: 'design.presets.builtInPresets.standard', params: { num_samples: 100, pocket_radius: 10 } },
-  { id: 'fine', nameKey: 'design.presets.builtInPresets.fine', params: { num_samples: 300, pocket_radius: 12 } },
+  { id: 'quick', nameKey: 'design.presets.builtInPresets.quick', params: { num_samples: 20 } },
+  { id: 'standard', nameKey: 'design.presets.builtInPresets.standard', params: { num_samples: 100 } },
+  { id: 'fine', nameKey: 'design.presets.builtInPresets.fine', params: { num_samples: 300 } },
 ]
 
 const selectedPresetId = ref<string | undefined>(undefined)
