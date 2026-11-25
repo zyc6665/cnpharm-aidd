@@ -317,6 +317,14 @@ def _load_head_models() -> dict[str, dict]:
     pocket2mol["version"] = pocket2mol_mod.NEW_VERSION
     pocket2mol["changelog"] = pocket2mol_mod.NEW_CHANGELOG
 
+    # Pocket2Mol 适配层增量镜像 adaptor-bd0f0fc0：后处理补 RDKit 理化描述符与 Murcko 骨架。
+    pocket2mol_adaptor_mod = _load_migration_module("20261125_01_pocket2mol_adaptor_digest.py")
+    pocket2mol["config"] = _apply_manifest_overrides(
+        pocket2mol["config"],
+        image_digest=pocket2mol_adaptor_mod.NEW_DIGEST,
+    )
+    pocket2mol["changelog"] = pocket2mol_adaptor_mod.NEW_CHANGELOG
+
     # 单工具 / 多工具迁移：直接调用各自的 model 工厂，不复制任何 manifest。
     for filename, factory_name in (
         ("20261031_12_vina_tool.py", "_model"),
