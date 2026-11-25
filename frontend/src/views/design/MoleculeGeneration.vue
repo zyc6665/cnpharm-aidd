@@ -184,7 +184,7 @@
   import { uploadProjectArtifact } from '@/api/artifacts'
   import { uploadFile } from '@/api/files'
   import { listProjects } from '@/api/projects'
-  import { parsePocketGeometry, radiusOf } from '@/domain/pockets/pocket-geometry'
+  import { parsePocketGeometry } from '@/domain/pockets/pocket-geometry'
   import {
     buildDefaultValues,
     normalizeParameters,
@@ -273,7 +273,7 @@
   const submittedTaskId = ref<string | null>(null)
 
   /** 常用参数展开、其余收进「高级参数」；键名不存在时分组自然为空。 */
-  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'pocket_radius']
+  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples']
 
   const PARAM_STORAGE_PREFIX = 'design:molecule-params:'
   const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
@@ -385,8 +385,7 @@
   const hiddenParams: Record<string, ParameterFieldOverride> = {
     center_x: { hidden: true },
     center_y: { hidden: true },
-    center_z: { hidden: true },
-    pocket_radius: { hidden: false }
+    center_z: { hidden: true }
   }
 
   const activeCenter = computed(() =>
@@ -461,15 +460,12 @@
     pocketParsing.value = true
     uploadCenter.value = null
     uploadBoxSize.value = null
-    form.params = { ...form.params, pocket_radius: undefined }
     try {
       const geometry = parsePocketGeometry(await file.text())
       if (!pocketSequence.isCurrent(seq) || parsedPocketFile !== file || pocketFile.value !== file) return false
       if (!geometry) throw new Error('invalid geometry')
       uploadCenter.value = geometry.center
       uploadBoxSize.value = geometry.boxSize
-      const radius = radiusOf(geometry)
-      form.params = { ...form.params, pocket_radius: radius > 0 ? radius : undefined }
     } catch {
       if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) message.warning(t('design.molecule.pocketFileUnreadable'))
     } finally {
@@ -592,24 +588,6 @@
       applyDefaults(option)
     },
     { immediate: true }
-  )
-
-  watch(
-    pocketSelection,
-    selection => {
-      const box = selection?.boxSize
-      if (!box) return
-      const dims = [box.x, box.y, box.z].filter(
-        (value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
-      )
-      if (dims.length > 0) {
-        form.params = {
-          ...form.params,
-          pocket_radius: Number((Math.max(...dims) / 2).toFixed(1))
-        }
-      }
-    },
-    { deep: true }
   )
 
   onMounted(() => {

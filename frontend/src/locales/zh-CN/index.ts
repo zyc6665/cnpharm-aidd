@@ -2985,7 +2985,7 @@ export default {
         unknown: '任务执行失败，暂未从日志中识别出明确原因。'
       },
       suggestions: {
-        pocketTooSmall: '重新预测并选定一个更大的口袋，或适当增大口袋半径后重试。',
+        pocketTooSmall: '重新预测并选定一个更大的结合口袋，确认中心坐标落在空腔内后重试。',
         invalidProtein: '回到靶点页重新准备受体结构，确认能正常打开后再提交。',
         gpuOom: '减少采样数量（例如 20），或等 GPU 资源空闲后再提交。',
         timeout: '减少采样数量 / 口袋范围后重试；必要时拆分任务。',
@@ -2994,7 +2994,7 @@ export default {
         unknown: '查看完整日志（stderr / stdout）定位具体报错，再决定是否重试。'
       },
       retry: {
-        pocketTooSmall: '建议带入口袋半径提示重新提交。',
+        pocketTooSmall: '请重新选定口袋或核对中心坐标后再重试。',
         invalidProtein: '先修复输入，原样重试不会解决问题。',
         gpuOom: '建议降低采样数量后重试。',
         timeout: '建议降低工作量后重试。',
@@ -3705,7 +3705,6 @@ export default {
       seed: '随机种子',
       device: '计算设备',
       num_samples: '生成数量',
-      pocket_radius: '口袋半径',
       prediction_mode: '预测模式',
       deduplicate: '结果去重',
       batch_size: '批大小',
@@ -3729,7 +3728,6 @@ export default {
       seed: '固定随机种子可复现结果。',
       device: '自动选择由平台按资源情况决定。',
       num_samples: '本次希望生成的分子数量。',
-      pocket_radius: '以口袋中心为球心的采样半径。',
       prediction_mode: '选择联合预测、活性预测或毒性预测。',
       deduplicate: '开启后自动去除重复序列。',
       batch_size: '单批推理的序列数量。',

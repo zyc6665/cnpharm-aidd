@@ -179,7 +179,8 @@ test('失败诊断按错误码/文本归类并给出可执行建议', () => {
     output_data: null,
   })
   assert.equal(pocket.cause, 'pocket_too_small')
-  assert.deepEqual(pocket.suggestedParams, { pocket_radius: 12 })
+  assert.equal(pocket.suggestedParams, null)
+  assert.equal(pocket.canAdjustParams, false)
 
   const invalidProtein = buildTaskFailureAdvice({
     status: 'failure',

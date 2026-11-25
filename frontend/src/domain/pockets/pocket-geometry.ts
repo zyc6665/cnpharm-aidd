@@ -7,7 +7,7 @@
  * 前者优先，后者兜底——两者都有时不要混算，混算会把中心拉向残基多的一侧。
  *
  * 这里是纯展示/参数推导用：真正的打分与口袋定义在后端，
- * 前端只负责把「用户上传的口袋文件」变成 `center_x/y/z` 与 `pocket_radius`。
+ * 前端只负责把「用户上传的口袋文件」变成 `center_x/y/z` 与包围盒展示。
  */
 export interface Point3 {
   x: number
@@ -87,11 +87,4 @@ export function parsePocketGeometry(pdbText: string): PocketGeometry | null {
   if (ca.length) return geometryOf(ca, 'ca')
 
   return geometryOf(atoms, 'atoms')
-}
-
-/** 口袋半径取包围盒最长边的一半，和「以口袋中心为球心」的语义对齐。 */
-export function radiusOf(geometry: PocketGeometry): number {
-  const longest = Math.max(geometry.boxSize.x, geometry.boxSize.y, geometry.boxSize.z)
-  if (!Number.isFinite(longest) || longest <= 0) return 0
-  return Number((longest / 2).toFixed(1))
 }

@@ -49,7 +49,7 @@ describe('ModelParameterField', () => {
   })
 
   it('keeps decimal parameters on the numeric input with fractional precision', () => {
-    const wrapper = mountField({ type: 'number' }, 1.5, 'pocket_radius')
+    const wrapper = mountField({ type: 'number' }, 1.5, 'temperature')
 
     const input = wrapper.findComponent(NumberInputStub)
     expect(input.exists()).toBe(true)

@@ -37,7 +37,6 @@ export interface MoleculeGenerationParams {
   center_x: number
   center_y: number
   center_z: number
-  pocket_radius: number
 }
 
 /** P-16 参数（TheraPainter 真实工具契约：多肽活性/毒性预测）。 */
