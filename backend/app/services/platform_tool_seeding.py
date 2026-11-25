@@ -325,6 +325,13 @@ def _load_head_models() -> dict[str, dict]:
     )
     pocket2mol["changelog"] = pocket2mol_adaptor_mod.NEW_CHANGELOG
 
+    # 移除 Pocket2Mol 未被容器消费的 pocket_radius 参数（#172）。
+    pocket2mol_drop_radius_mod = _load_migration_module("20261125_02_pocket2mol_drop_pocket_radius.py")
+    pocket2mol["config"] = _apply_manifest_overrides(
+        pocket2mol["config"],
+        parameters_schema=pocket2mol_drop_radius_mod.NEW_SCHEMA,
+    )
+
     # 单工具 / 多工具迁移：直接调用各自的 model 工厂，不复制任何 manifest。
     for filename, factory_name in (
         ("20261031_12_vina_tool.py", "_model"),
