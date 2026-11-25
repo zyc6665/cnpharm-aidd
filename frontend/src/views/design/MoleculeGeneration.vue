@@ -558,7 +558,9 @@
             semantic_type: 'protein_structure',
             standard_type: 'protein_structure',
             standard_version: 1,
-          }).catch(() => undefined)
+          }).catch(() => {
+            message.warning(t('design.molecule.archiveStructureFailed'))
+          })
         }
       }
       const response = await submitDesignTask({

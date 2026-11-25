@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -18,7 +18,8 @@ import type { CandidateSet } from '@/types/compounds'
 import type { ResearchProject } from '@/types/projects'
 import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
-import { buildInlineSmilesFile, createRequestTracker, escapeCsvCell, parseInlineSmiles, rewriteSdfRecordsWithTitle } from '@/domain/molecules/submission-smiles'
+import { useRequestSequence } from '@/composables/useRequestSequence'
+import { buildInlineSmilesFile, escapeCsvCell, parseInlineSmiles, rewriteSdfRecordsWithTitle } from '@/domain/molecules/submission-smiles'
 
 const props = withDefaults(defineProps<{ projectIdOverride?: string }>(), { projectIdOverride: '' })
 const route = useRoute()
@@ -38,8 +39,7 @@ const projects = ref<ResearchProject[]>([])
 const projectOptions = computed(() => projects.value.map(item => ({ label: item.name, value: item.id })))
 const receptorSource = ref<'upload' | 'project'>('upload')
 const ligandSource = ref<'upload' | 'candidate' | 'inline'>('upload')
-const requestTrackers = { targets: createRequestTracker(), proteins: createRequestTracker(), structures: createRequestTracker(), candidateSets: createRequestTracker(), ligandCount: createRequestTracker(), handoff: createRequestTracker() }
-onScopeDispose(() => Object.values(requestTrackers).forEach(tracker => tracker.invalidate()))
+const requestTrackers = { targets: useRequestSequence(), proteins: useRequestSequence(), structures: useRequestSequence(), candidateSets: useRequestSequence(), ligandCount: useRequestSequence(), handoff: useRequestSequence() }
 const targets = ref<TargetSummary[]>([])
 const proteins = ref<ProteinDetail[]>([])
 const structures = ref<ProteinStructureDetail[]>([])

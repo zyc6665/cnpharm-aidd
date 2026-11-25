@@ -515,6 +515,21 @@ describe('GenerationResults', () => {
       expect(push).not.toHaveBeenCalled()
       expect(message.error).toHaveBeenCalledWith(t('design.results.handoff.failed'))
     })
+
+    it('warns explicitly when SDF export finds no confirmed 3D matches for active rows', async () => {
+      const { saveBlobAsFile } = await import('@/utils/protected-file-access')
+      const wrapper = await mountResults()
+
+      await wrapper.findAll('[data-testid="molecule-row"]')[0]!.find('input[type="checkbox"]').setValue(true)
+      await flushPromises()
+      await wrapper.get('[data-testid="results-export-sdf"]').trigger('click')
+      await flushPromises()
+
+      expect(saveBlobAsFile).not.toHaveBeenCalled()
+      expect(message.warning).toHaveBeenCalledWith(
+        t('design.results.exportSdfUnconfirmed', { count: 1 })
+      )
+    })
   })
 
   describe('multi-molecule comparison', () => {

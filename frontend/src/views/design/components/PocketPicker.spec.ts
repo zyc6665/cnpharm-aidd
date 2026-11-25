@@ -155,4 +155,40 @@ describe('PocketPicker', () => {
       i18n.global.t('design.molecule.pocketPreviewMissing')
     )
   })
+
+  it('resets descendant loading flags when clearing project selection during an in-flight request', async () => {
+    const { listProjectTargets } = await import('@/api/design')
+    let resolveTargets!: (rows: Array<{ id: string; name: string }>) => void
+    vi.mocked(listProjectTargets).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveTargets = resolve
+      }) as never
+    )
+    const SelectStub = {
+      name: 'ASelectStub',
+      props: ['value', 'loading', 'options', 'placeholder', 'disabled', 'allowClear'],
+      emits: ['update:value', 'change'],
+      template: '<div class="select-stub" :data-loading="String(Boolean(loading))" />',
+    }
+    const w = mount(PocketPicker, {
+      props: { modelValue: null },
+      global: { plugins: [i18n], stubs: { 'a-select': SelectStub } },
+    })
+    await flushPromises()
+
+    const selects = w.findAllComponents(SelectStub)
+    selects[0]!.vm.$emit('update:value', 'p1')
+    selects[0]!.vm.$emit('change', 'p1')
+    await flushPromises()
+    expect(w.findAllComponents(SelectStub)[1]!.props('loading')).toBe(true)
+
+    selects[0]!.vm.$emit('update:value', undefined)
+    selects[0]!.vm.$emit('change', undefined)
+    await flushPromises()
+    expect(w.findAllComponents(SelectStub)[1]!.props('loading')).toBe(false)
+
+    resolveTargets([{ id: 't-stale', name: 'Stale' }])
+    await flushPromises()
+    expect(w.findAllComponents(SelectStub)[1]!.props('loading')).toBe(false)
+  })
 })

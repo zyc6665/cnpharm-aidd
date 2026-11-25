@@ -34,6 +34,14 @@ describe('结果 SDF 导出', () => {
     expect(buildSdfExportText([recordWith('CCO'), recordWith('CCO')], [{ smiles: 'CCO' }])).toBe('')
   })
 
+  it('disambiguates shared-SMILES conformers when unique moleculeId matches record identity', () => {
+    const pose1 = `pose_1\n  test\n\n  0  0  0  0  0  0  0  0  0  0999 V2000\nM  END\n> <SMILES>\nCCO\n\n$$$$\n`
+    const pose2 = `pose_2\n  test\n\n  0  0  0  0  0  0  0  0  0  0999 V2000\nM  END\n> <SMILES>\nCCO\n\n$$$$\n`
+    const text = buildSdfExportText([pose1, pose2], [{ smiles: 'CCO', moleculeId: 'pose_2' }])
+    expect(text).toContain('pose_2')
+    expect(text).not.toContain('pose_1')
+  })
+
   it('能从 SDF 记录里读出 SMILES 属性', () => {
     expect(readSdfRecordSmiles(recordWith('CC(=O)O'))).toBe('CC(=O)O')
   })
