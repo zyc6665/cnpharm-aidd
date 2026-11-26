@@ -931,11 +931,25 @@
 
   async function handleLoadSample(): Promise<void> {
     const sample = createSampleDesignFiles()
+    let receptorFile = sample.receptorFile
+    if (typeof fetch === 'function') {
+      try {
+        const res = await fetch('/demo/egfr-1m17.pdb')
+        if (res.ok) {
+          const pdbText = await res.text()
+          if (pdbText.includes('ATOM')) {
+            receptorFile = new File([pdbText], 'egfr-1m17.pdb', { type: 'chemical/x-pdb' })
+          }
+        }
+      } catch {
+        // Fallback to bundled inline PDB when static /demo asset is not served (e.g. unit tests).
+      }
+    }
     sourceMode.value = 'upload'
     if (!uploadProjectId.value) {
       uploadProjectId.value = projectOptions.value[0]?.value ?? pocketSelection.value?.projectId ?? ''
     }
-    structureFile.value = sample.receptorFile
+    structureFile.value = receptorFile
     pocketFile.value = sample.pocketFile
     parsedPocketFile = sample.pocketFile
     uploadCenter.value = sample.pocketCenter

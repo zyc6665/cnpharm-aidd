@@ -21,15 +21,14 @@
       </div>
     </section>
 
-    <!-- Live 3D Structure & Pocket Preview -->
+    <!-- Live 3D Protein Preview -->
     <section class="preview-section">
       <div class="section-title">{{ previewTitle }}</div>
       <div v-if="previewScene" class="preview-viewer">
         <MoleculeViewer
           :scene="previewScene"
-          :voxel-grid="voxelGrid"
           variant="compact"
-          mode="pocket"
+          mode="protein"
           :allow-native-fullscreen="false"
         />
       </div>
@@ -101,7 +100,6 @@
 import { computed, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CheckCircleOutlined, InboxOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
-import { buildPocketBoxVoxelGrid } from '@/domain/pockets/pocket-preview'
 import type { VisualizationScene } from '@/domain/tasks'
 import type { AxisVector } from '@/types/targets'
 
@@ -150,9 +148,9 @@ const safeT = (key: string, fallback: string): string => {
   return typeof te === 'function' && te(key) ? t(key) : fallback
 }
 
-const previewTitle = computed(() => safeT('design.molecule.context.previewTitle', '蛋白与口袋三维视图'))
+const previewTitle = computed(() => safeT('design.molecule.context.previewTitle', '蛋白结构三维视图'))
 const emptyPreviewText = computed(() =>
-  safeT('design.molecule.context.previewPlaceholder', '选定项目口袋或上传蛋白与口袋文件后，这里会实时显示 3D 结构与采样盒子。')
+  safeT('design.molecule.context.previewPlaceholder', '选定项目结构或上传蛋白 PDB 后，这里会实时显示蛋白质三维结构。')
 )
 const readinessTitle = computed(() =>
   props.canSubmit
@@ -168,8 +166,6 @@ const pocketCenterLabel = computed(() => safeT('design.molecule.context.summaryC
 const pocketBoxLabel = computed(() => safeT('design.molecule.pocketBox', '口袋包围盒'))
 const sampleCountLabel = computed(() => safeT('design.molecule.context.summarySamples', '数量'))
 const fragmentLabel = computed(() => safeT('design.molecule.context.summaryFragment', '片段 / 原子'))
-
-const voxelGrid = computed(() => buildPocketBoxVoxelGrid(props.pocketCenter, props.pocketBoxSize))
 
 const isActiveStep = (index: number): boolean => {
   if (index === 0) return true
