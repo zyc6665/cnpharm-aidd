@@ -8,7 +8,6 @@
       <svg
         :viewBox="svgViewBox"
         class="fragment-svg"
-        xmlns="http://www.w3.org/2000/svg"
       >
         <!-- Bonds -->
         <g class="bonds">
@@ -46,7 +45,7 @@
             <text
               v-if="atoms.length <= 32 && atom.isHetero"
               :x="atomCoords[atom.index]?.x"
-              :y="atomCoords[atom.index]?.y + 1"
+              :y="(atomCoords[atom.index]?.y ?? 0) + 1"
               class="atom-label"
               text-anchor="middle"
               dominant-baseline="middle"
@@ -122,7 +121,7 @@ const emit = defineEmits<{
 const { t, te } = useI18n()
 
 const safeT = (key: string, fallback: string): string => {
-  return te(key) ? t(key) : fallback
+  return typeof te === 'function' && te(key) ? t(key) : fallback
 }
 
 const isSelected = (index: number): boolean => {
@@ -147,7 +146,7 @@ const atomCoords = computed(() => {
   props.atoms.forEach(atom => {
     coords[atom.index] = {
       x: 50 + (atom.x2d - minX - rangeX / 2) * scale,
-      y: 50 - (atom.y2d - minY - rangeY / 2) * scale
+      y: 50 + (atom.y2d - minY - rangeY / 2) * scale
     }
   })
 
@@ -169,13 +168,14 @@ const modeLabel = computed(() => {
 const atomCountLabel = computed(() => {
   const total = props.atoms.length
   const selected = props.selectedIndices.length
+  const hasTe = typeof te === 'function'
   if (props.mode === 'dock' && selected === 0) {
-    return te('design.molecule.dockWholeSummary')
+    return hasTe && te('design.molecule.dockWholeSummary')
       ? t('design.molecule.dockWholeSummary', { total })
       : `全配体对接（${total} 个原子）`
   }
   const key = props.mode === 'fragment' ? 'design.molecule.keptSummary' : 'design.molecule.dockSummary'
-  if (te(key)) {
+  if (hasTe && te(key)) {
     return t(key, { selected, total })
   }
   return `共 ${total} 个原子 · 已选 ${selected} 个`

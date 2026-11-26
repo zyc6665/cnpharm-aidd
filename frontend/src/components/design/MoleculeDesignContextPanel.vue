@@ -147,7 +147,7 @@ const emit = defineEmits<{
 const { t, te } = useI18n()
 
 const safeT = (key: string, fallback: string): string => {
-  return te(key) ? t(key) : fallback
+  return typeof te === 'function' && te(key) ? t(key) : fallback
 }
 
 const previewTitle = computed(() => safeT('design.molecule.context.previewTitle', '蛋白与口袋三维视图'))

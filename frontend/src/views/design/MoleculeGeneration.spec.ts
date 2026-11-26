@@ -7,13 +7,18 @@ const POCKET2MOL = 'pocket2mol-pocket-ligand-generation'
 const LDDM = 'lddm-pocket-ligand-generation'
 const mocks = vi.hoisted(() => ({
   listTools: vi.fn(),
+  listProjects: vi.fn(),
   resolve: vi.fn(),
   submit: vi.fn(),
   upload: vi.fn()
 }))
 
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string, values?: Record<string, number>) => values ? `${key}:${values.count}:${values.lastIndex}` : key })
+  useI18n: () => ({
+    t: (key: string, values?: Record<string, number | string>) =>
+      values && 'count' in values ? `${key}:${values.count}:${values.lastIndex}` : key,
+    te: () => false
+  })
 }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('ant-design-vue', () => ({ message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -21,7 +26,7 @@ vi.mock('@/api/tools', () => ({ getToolList: mocks.listTools }))
 vi.mock('@/api/design', () => ({ resolveToolBySlug: mocks.resolve, submitDesignTask: mocks.submit }))
 vi.mock('@/api/files', () => ({ uploadFile: mocks.upload }))
 vi.mock('@/api/artifacts', () => ({ uploadProjectArtifact: vi.fn() }))
-vi.mock('@/api/projects', () => ({ listProjects: vi.fn().mockResolvedValue({ data: { items: [] } }) }))
+vi.mock('@/api/projects', () => ({ listProjects: mocks.listProjects }))
 
 const pocket = {
   projectId: 'project', structureFileId: 'protein', pocketLabel: 'Pocket 1',
@@ -86,6 +91,9 @@ function mountPage() {
         ParameterPresets: true, TaskProgressCard: true, 'a-alert': Alert, 'a-radio-button': RadioButton,
         'a-radio-group': RadioGroup, 'a-select': true, 'a-button': Button, 'a-upload': Upload,
         'a-input': Input, 'a-descriptions-item': true, 'a-descriptions': true,
+        'a-tag': { props: ['color'], template: '<span><slot /></span>' },
+        'a-modal': { props: ['open', 'title'], emits: ['update:open'], template: '<div v-if="open" data-testid="sketch-modal-stub"><slot /><slot name="footer" /></div>' },
+        MoleculeViewer: { props: ['scene', 'voxelGrid'], template: '<div data-testid="context-viewer" />' },
         'a-spin': defineComponent({ template: '<div><slot /></div>' })
       }
     }
@@ -123,6 +131,7 @@ beforeEach(async () => {
       atoms_to_dock: { type: 'string', default: '' }
     })
   ] } })
+  mocks.listProjects.mockResolvedValue({ data: { items: [{ id: 'project', name: 'Demo Project' }] } })
   mocks.resolve.mockImplementation(async slug => ({ tool: { id: slug }, version: { id: `${slug}-v1` } }))
   mocks.submit.mockResolvedValue({ data: { id: 'task' } })
   mocks.upload.mockResolvedValue({ data: { id: 'ligand' } })
@@ -244,5 +253,36 @@ describe('MoleculeGeneration', () => {
       params: expect.objectContaining({ generation_mode: 'dock' }),
       standardInputUploads: { protein_pdb: 'protein', fragment_sdf: 'ligand' }
     }))
+  })
+
+  it('loads offline sample inputs and updates fragment/dock selection via the sketch modal', async () => {
+    await selectModel(LDDM)
+    await get('molecule-mode-fragment').trigger('click')
+    await get('molecule-load-sample').trigger('click')
+    await flushPromises()
+    expect(get('molecule-fragment-preview').text()).toBe('design.molecule.fragmentAtomCount:13:12')
+    expect(blocked()).toBe(false)
+
+    // Open sketch modal in fragment mode and confirm a 2-atom kept subset -> cropped SDF uploaded
+    await get('open-fragment-sketch').trigger('click')
+    await flushPromises()
+    const sketchWrapper = wrapper.findComponent({ name: 'FragmentSketchModal' })
+    const subsetFile = structureFile('kept_fragment.sdf', `${molBlock}\r\n$$$$\r\n`)
+    sketchWrapper.vm.$emit('confirm', { selectedIndices: [0, 1], exportedFile: subsetFile })
+    await flushPromises()
+    expect(get('molecule-fragment-cropped').text()).toBe('design.molecule.subsetCroppedTag')
+    await submit().trigger('click')
+    await flushPromises()
+    expect(mocks.upload.mock.calls.some(call => call[0] === subsetFile)).toBe(true)
+
+    // Switch to dock mode and confirm selected indices -> updates atoms_to_dock cleanly
+    mocks.upload.mockClear()
+    await get('molecule-mode-dock').trigger('click')
+    await chooseFragment(structureFile('ligand.sdf', `${molBlock}\r\n$$$$\r\n`))
+    await get('open-fragment-sketch').trigger('click')
+    await flushPromises()
+    wrapper.findComponent({ name: 'FragmentSketchModal' }).vm.$emit('confirm', { selectedIndices: [0, 1], exportedFile: null })
+    await flushPromises()
+    expect((get('molecule-atoms-to-dock').element as HTMLInputElement).value).toBe('0 1')
   })
 })

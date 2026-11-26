@@ -80,7 +80,7 @@
     <p v-if="exportError" class="sketch-error" role="alert">{{ label('exportError', { reason: exportError }) }}</p>
     <template #footer>
       <a-button @click="close">{{ label('cancel') }}</a-button>
-      <a-button type="primary" data-testid="sketch-confirm" :disabled="!molecule || !indices.length" @click="confirm">
+      <a-button type="primary" data-testid="sketch-confirm" :disabled="!molecule || (mode === 'fragment' && !indices.length)" @click="confirm">
         {{ label('confirm') }}
       </a-button>
     </template>
@@ -127,8 +127,9 @@ const copy = {
 
 function label(key: keyof typeof copy, values: Record<string, string | number> = {}): string {
   const path = `design.molecule.sketch.${key}`
-  if (te(path)) return t(path, values)
-  return copy[key][locale.value.startsWith('zh') ? 0 : 1].replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ''))
+  if (typeof te === 'function' && te(path)) return t(path, values)
+  const lang = locale?.value ?? 'zh-CN'
+  return copy[key][lang.startsWith('zh') ? 0 : 1].replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ''))
 }
 
 const panels = ['editor', 'preview'] as const
@@ -275,7 +276,7 @@ function cancelBox(event: PointerEvent) {
 function close() { emit('update:open', false) }
 
 function confirm() {
-  if (!props.molecule || !indices.value.length) return
+  if (!props.molecule || (props.mode === 'fragment' && !indices.value.length)) return
   const selectedIndices = [...indices.value]
   let exportedFile: File | null = null
   if (props.mode === 'fragment' && selectedIndices.length < props.molecule.atoms.length) {

@@ -7,9 +7,9 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (k: string) => k, te: () => false })
 }))
 
-const mount = (component: typeof MoleculeInlineFragmentCard, options: Parameters<typeof baseMount>[1] = {}) =>
+const mount = (component: typeof MoleculeInlineFragmentCard, options: { props?: Record<string, unknown>; global?: { stubs?: Record<string, unknown> } } = {}) =>
   baseMount(component, {
-    ...options,
+    ...(options as Record<string, unknown>),
     global: {
       stubs: {
         'a-tag': { props: ['color'], template: '<span :color="color"><slot /></span>' },
@@ -17,7 +17,7 @@ const mount = (component: typeof MoleculeInlineFragmentCard, options: Parameters
         ...(options.global?.stubs ?? {})
       }
     }
-  })
+  } as never)
 
 describe('MoleculeInlineFragmentCard', () => {
   const createMockAtoms = (): InlineFragmentAtom[] => [

@@ -6,16 +6,16 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (k: string) => k, te: () => false })
 }))
 
-const mount = (component: typeof MoleculeDesignContextPanel, options: Parameters<typeof baseMount>[1] = {}) =>
+const mount = (component: typeof MoleculeDesignContextPanel, options: { props?: Record<string, unknown>; global?: { stubs?: Record<string, unknown> } } = {}) =>
   baseMount(component, {
-    ...options,
+    ...(options as Record<string, unknown>),
     global: {
       stubs: {
         MoleculeViewer: { props: ['scene', 'voxelGrid'], template: '<div data-testid="mock-viewer" />' },
         ...(options.global?.stubs ?? {})
       }
     }
-  })
+  } as never)
 
 describe('MoleculeDesignContextPanel', () => {
   const defaultProps = {
@@ -52,9 +52,9 @@ describe('MoleculeDesignContextPanel', () => {
     })
 
     const stepItems = wrapper.findAll('.step-item')
-    expect(stepItems[0].classes()).toContain('is-done')
-    expect(stepItems[1].classes()).toContain('is-done')
-    expect(stepItems[2].classes()).not.toContain('is-done')
+    expect(stepItems[0]!.classes()).toContain('is-done')
+    expect(stepItems[1]!.classes()).toContain('is-done')
+    expect(stepItems[2]!.classes()).not.toContain('is-done')
   })
 
   it('shows empty preview state when previewScene is null', () => {

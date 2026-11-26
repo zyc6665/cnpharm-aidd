@@ -11,26 +11,38 @@
         data-testid="molecule-tool-error"
       />
 
-      <section class="design-section">
-        <h3 class="design-section__title">{{ t('design.modelSelect.label') }}</h3>
-        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" :disabled="submitting" />
-      </section>
+      <div class="design-workbench">
+        <div class="design-workbench__main">
+          <section class="design-section" data-testid="molecule-section-model">
+            <h3 class="design-section__title">{{ t('design.modelSelect.label') }}</h3>
+            <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" :disabled="submitting" />
+          </section>
 
-      <section class="design-section">
-        <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <a-radio-group
-          v-model:value="sourceMode"
-          button-style="solid"
-          class="source-mode"
-          data-testid="molecule-source-mode"
-        >
-          <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
-          <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
-        </a-radio-group>
+          <section class="design-section" data-testid="molecule-section-input">
+            <div class="section-header-row">
+              <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
+              <a-button
+                size="small"
+                :disabled="submitting"
+                data-testid="molecule-load-sample"
+                @click="handleLoadSample"
+              >
+                {{ t('design.molecule.loadSample') }}
+              </a-button>
+            </div>
+            <a-radio-group
+              v-model:value="sourceMode"
+              button-style="solid"
+              class="source-mode"
+              data-testid="molecule-source-mode"
+            >
+              <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
+              <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
+            </a-radio-group>
 
-        <div v-if="sourceMode === 'project'" class="source-body">
-          <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" show-preview />
-        </div>
+            <div v-if="sourceMode === 'project'" class="source-body">
+              <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
+            </div>
 
         <div v-else class="source-body source-body--fields" data-testid="molecule-upload-source">
           <div class="source-field">
@@ -121,10 +133,26 @@
           <span v-if="fragmentFile" class="source-file" data-testid="molecule-fragment-name">{{ fragmentFile.name }}</span>
         </div>
         <div v-if="fragmentFile && !fragmentParsing" class="fragment-preview" data-testid="molecule-fragment-preview">
-          {{ fragmentCount === null
-            ? t('design.molecule.fragmentFileReady')
-            : t('design.molecule.fragmentAtomCount', { count: fragmentCount, lastIndex: fragmentCount - 1 }) }}
+          <span>
+            {{ fragmentCount === null
+              ? t('design.molecule.fragmentFileReady')
+              : t('design.molecule.fragmentAtomCount', { count: fragmentCount, lastIndex: fragmentCount - 1 }) }}
+          </span>
+          <span v-if="fragmentSubsetCropped && generationMode === 'fragment'" class="fragment-cropped-tag" data-testid="molecule-fragment-cropped">
+            {{ t('design.molecule.subsetCroppedTag') }}
+          </span>
         </div>
+        <MoleculeInlineFragmentCard
+          v-if="fragmentMolecule && !fragmentParsing && (generationMode === 'fragment' || generationMode === 'dock')"
+          class="fragment-inline-card"
+          :filename="fragmentFile?.name || fragmentMolecule.name"
+          :atoms="fragmentMolecule.atoms"
+          :bonds="fragmentMolecule.bonds"
+          :selected-indices="activeSketchSelection"
+          :mode="generationMode === 'dock' ? 'dock' : 'fragment'"
+          :disabled="submitting"
+          @open-sketch="sketchModalOpen = true"
+        />
         <a-alert
           v-if="fragmentIssue"
           class="fragment-alert"
@@ -192,7 +220,7 @@
         </a-descriptions>
       </section>
 
-      <section class="design-section">
+      <section class="design-section" data-testid="molecule-section-params">
         <div class="param-header">
           <h3 class="design-section__title">{{ t('design.section.parameters') }}</h3>
           <a-button size="small" :disabled="submitting" data-testid="molecule-reset-params" @click="resetParams">
@@ -236,8 +264,34 @@
           {{ t('design.molecule.submit') }}
         </a-button>
       </div>
+        </div>
+        <aside class="design-workbench__context">
+          <MoleculeDesignContextPanel
+            :model-name="selectedOption?.name || selectedSlug"
+            :mode-label="contextModeLabel"
+            :pocket-label="pocketLabelText"
+            :pocket-center="activeCenter"
+            :pocket-box-size="activeBoxSize"
+            :preview-scene="contextPreviewScene"
+            :sample-count="contextSampleCount"
+            :fragment-summary="contextFragmentSummary"
+            :steps="contextSteps"
+            :missing-items="contextMissingItems"
+            :can-submit="canSubmit"
+            @jump-to="scrollToSection"
+          />
+        </aside>
+      </div>
     </a-spin>
   </main>
+  <FragmentSketchModal
+    v-if="generationMode === 'fragment' || generationMode === 'dock'"
+    v-model:open="sketchModalOpen"
+    :molecule="fragmentMolecule"
+    :selected-indices="activeSketchSelection"
+    :mode="generationMode === 'dock' ? 'dock' : 'fragment'"
+    @confirm="handleSketchConfirm"
+  />
   <TaskProgressCard
     v-if="submittedTaskId"
     :key="submittedTaskId"
@@ -248,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
@@ -257,6 +311,9 @@
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import ParameterPresets from '@/components/design/ParameterPresets.vue'
+  import FragmentSketchModal from '@/components/design/FragmentSketchModal.vue'
+  import MoleculeInlineFragmentCard from '@/components/design/MoleculeInlineFragmentCard.vue'
+  import MoleculeDesignContextPanel from '@/components/design/MoleculeDesignContextPanel.vue'
   import TaskProgressCard from '@/components/tasks/TaskProgressCard.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
   import { useRequestSequence } from '@/composables/useRequestSequence'
@@ -265,6 +322,14 @@
   import { uploadFile } from '@/api/files'
   import { listProjects } from '@/api/projects'
   import { parsePocketGeometry } from '@/domain/pockets/pocket-geometry'
+  import {
+    formatAtomIndices,
+    parseAtomIndices,
+    parseFragmentMolecule,
+    type FragmentMolecule
+  } from '@/domain/molecules/fragment-graph'
+  import { createSampleDesignFiles } from '@/domain/molecules/sample-inputs'
+  import type { VisualizationScene } from '@/domain/tasks'
   import {
     buildDefaultValues,
     normalizeParameters,
@@ -366,6 +431,11 @@
   const generationMode = ref<GenerationMode>('denovo')
   const fragmentFile = ref<File | null>(null)
   const fragmentUpload = ref<File | null>(null)
+  const originalFragmentUpload = ref<File | null>(null)
+  const fragmentMolecule = ref<FragmentMolecule | null>(null)
+  const fragmentSelectedIndices = ref<number[]>([])
+  const fragmentSubsetCropped = ref(false)
+  const sketchModalOpen = ref(false)
   const fragmentCount = ref<number | null>(null)
   const fragmentParsing = ref(false)
   const fragmentError = ref('')
@@ -376,9 +446,14 @@
   const atomsInvalid = computed(() => {
     const value = atomsToDock.value.trim()
     if (!value || generationMode.value !== 'dock') return false
-    if (!/^\d+(?:(?:\s*,\s*|\s+)\d+)*$/.test(value)) return true
-    const count = fragmentCount.value
-    return value.split(/[\s,]+/).some(index => !Number.isSafeInteger(Number(index)) || (count !== null && Number(index) >= count))
+    return !parseAtomIndices(value, fragmentCount.value).valid
+  })
+  const activeSketchSelection = computed<number[]>(() => {
+    if (generationMode.value === 'dock') {
+      const parsed = parseAtomIndices(atomsToDock.value, fragmentCount.value)
+      return parsed.valid ? parsed.indices : []
+    }
+    return fragmentSelectedIndices.value
   })
   const moleculeSizePresets = [
     { id: 'auto', value: '' },
@@ -391,6 +466,11 @@
     fragmentSequence.next()
     fragmentFile.value = null
     fragmentUpload.value = null
+    originalFragmentUpload.value = null
+    fragmentMolecule.value = null
+    fragmentSelectedIndices.value = []
+    fragmentSubsetCropped.value = false
+    sketchModalOpen.value = false
     fragmentCount.value = null
     fragmentParsing.value = false
     fragmentError.value = ''
@@ -404,8 +484,16 @@
   }
 
   watch(generationMode, mode => {
-    if (mode === 'denovo') clearFragment()
-    else if (mode !== 'dock') atomsToDock.value = ''
+    if (mode === 'denovo') {
+      clearFragment()
+      return
+    }
+    fragmentSubsetCropped.value = false
+    if (originalFragmentUpload.value) fragmentUpload.value = originalFragmentUpload.value
+    if (mode === 'fragment') {
+      atomsToDock.value = ''
+      fragmentSelectedIndices.value = fragmentMolecule.value ? fragmentMolecule.value.atoms.map(atom => atom.index) : []
+    }
   }, { flush: 'sync' })
 
   async function handleFragmentFile(file: File): Promise<false> {
@@ -418,17 +506,16 @@
       const text = await file.text()
       if (!fragmentSequence.isCurrent(seq)) return false
       const lines = text.split(/\r?\n/)
+      let resolvedUpload: File | null = null
       if (extension === 'pdb') {
         const count = lines.filter(line => /^(ATOM|HETATM)/.test(line)).length
         if (count > 0) {
           fragmentCount.value = count
-          fragmentUpload.value = file
+          resolvedUpload = file
         } else {
           fragmentError.value = 'design.molecule.fragmentUnreadable'
         }
-        return false
-      }
-      if (extension === 'mol2') {
+      } else if (extension === 'mol2') {
         const hasTripos = /@<TRIPOS>MOLECULE/i.test(text)
         const atomIndex = lines.findIndex(line => line.trim().toUpperCase() === '@<TRIPOS>ATOM')
         const nextSection = atomIndex >= 0
@@ -442,24 +529,34 @@
           if (count > 0) fragmentCount.value = count
         }
         if (hasTripos) {
-          fragmentUpload.value = file
+          resolvedUpload = file
         } else {
           fragmentError.value = 'design.molecule.fragmentUnreadable'
         }
-        return false
-      }
-      const countsLine = lines[3] ?? ''
-      const count = /V2000\s*$/.test(countsLine) ? Number(countsLine.slice(0, 3)) : 0
-      if (Number.isInteger(count) && count > 0) fragmentCount.value = count
-      if (extension === 'sdf' && lines.some(line => line.trim() === '$$$$')) {
-        fragmentUpload.value = file
-      } else if (extension === 'mol' && /V(?:2000|3000)\s*$/.test(countsLine) && /(?:^|\n)M  END\s*$/.test(text)) {
-        // Wrap the MOL block as a single SD record without changing bonds or atom order.
-        fragmentUpload.value = new File([`${text.trimEnd()}\n$$$$\n`], file.name.replace(/\.mol$/i, '.sdf'), {
-          type: 'chemical/x-mdl-sdfile'
-        })
       } else {
-        fragmentError.value = 'design.molecule.fragmentUnreadable'
+        const countsLine = lines[3] ?? ''
+        const count = /V2000\s*$/.test(countsLine) ? Number(countsLine.slice(0, 3)) : 0
+        if (Number.isInteger(count) && count > 0) fragmentCount.value = count
+        if (extension === 'sdf' && lines.some(line => line.trim() === '$$$$')) {
+          resolvedUpload = file
+        } else if (extension === 'mol' && /V(?:2000|3000)\s*$/.test(countsLine) && /(?:^|\n)M  END\s*$/.test(text)) {
+          // Wrap the MOL block as a single SD record without changing bonds or atom order.
+          resolvedUpload = new File([`${text.trimEnd()}\n$$$$\n`], file.name.replace(/\.mol$/i, '.sdf'), {
+            type: 'chemical/x-mdl-sdfile'
+          })
+        } else {
+          fragmentError.value = 'design.molecule.fragmentUnreadable'
+        }
+      }
+      if (resolvedUpload) {
+        originalFragmentUpload.value = resolvedUpload
+        fragmentUpload.value = resolvedUpload
+        const parsed = parseFragmentMolecule(text, file.name)
+        fragmentMolecule.value = parsed
+        if (parsed) {
+          if (fragmentCount.value === null) fragmentCount.value = parsed.atoms.length
+          fragmentSelectedIndices.value = parsed.atoms.map(atom => atom.index)
+        }
       }
     } catch {
       if (fragmentSequence.isCurrent(seq)) fragmentError.value = 'design.molecule.fragmentUnreadable'
@@ -467,6 +564,21 @@
       if (fragmentSequence.isCurrent(seq)) fragmentParsing.value = false
     }
     return false
+  }
+
+  function handleSketchConfirm(payload: { selectedIndices: number[]; exportedFile: File | null }): void {
+    if (generationMode.value === 'dock') {
+      atomsToDock.value = formatAtomIndices(payload.selectedIndices)
+      return
+    }
+    fragmentSelectedIndices.value = [...payload.selectedIndices]
+    if (payload.exportedFile) {
+      fragmentUpload.value = payload.exportedFile
+      fragmentSubsetCropped.value = true
+    } else if (originalFragmentUpload.value) {
+      fragmentUpload.value = originalFragmentUpload.value
+      fragmentSubsetCropped.value = false
+    }
   }
 
   const effectiveParams = computed<ParameterValues>(() => ({
@@ -817,6 +929,166 @@
     { immediate: true }
   )
 
+  async function handleLoadSample(): Promise<void> {
+    const sample = createSampleDesignFiles()
+    sourceMode.value = 'upload'
+    if (!uploadProjectId.value) {
+      uploadProjectId.value = projectOptions.value[0]?.value ?? pocketSelection.value?.projectId ?? ''
+    }
+    structureFile.value = sample.receptorFile
+    pocketFile.value = sample.pocketFile
+    parsedPocketFile = sample.pocketFile
+    uploadCenter.value = sample.pocketCenter
+    uploadBoxSize.value = sample.pocketBoxSize
+    if (needsLigandFile.value) {
+      await handleFragmentFile(sample.ligandFile)
+    }
+    message.success(t('design.molecule.sampleLoaded'))
+  }
+
+  let uploadStructureUrl = ''
+  function revokeUploadUrl(): void {
+    if (uploadStructureUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(uploadStructureUrl)
+    }
+    uploadStructureUrl = ''
+  }
+
+  watch(structureFile, file => {
+    revokeUploadUrl()
+    if (file && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      uploadStructureUrl = URL.createObjectURL(file)
+    }
+  })
+
+  onBeforeUnmount(() => revokeUploadUrl())
+
+  const contextPreviewScene = computed<VisualizationScene | null>(() => {
+    if (sourceMode.value === 'project') {
+      const fileId = pocketSelection.value?.structureFileId
+      if (!fileId) return null
+      const urn = (pocketSelection.value?.structureUrn ?? '').toLowerCase()
+      const isCif = urn.endsWith('.cif') || urn.endsWith('.mmcif')
+      const entry = {
+        key: `context-pocket-${fileId}`,
+        url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
+        label: pocketSelection.value?.pocketLabel || 'receptor',
+        source: 'input' as const,
+        role: 'receptor' as const,
+        format: isCif ? ('mmcif' as const) : ('pdb' as const),
+        extension: isCif ? '.cif' : '.pdb'
+      }
+      return {
+        entries: [entry],
+        inputEntries: [entry],
+        outputEntries: [],
+        supportedOutputFiles: [],
+        unsupportedOutputFiles: [],
+        hasRenderableOutput: true,
+        selectedOutputKey: entry.key
+      }
+    }
+    if (!structureFile.value || !uploadStructureUrl) return null
+    const lower = structureFile.value.name.toLowerCase()
+    const isCif = lower.endsWith('.cif') || lower.endsWith('.mmcif')
+    const entry = {
+      key: `context-upload-${structureFile.value.name}`,
+      url: uploadStructureUrl,
+      label: structureFile.value.name,
+      source: 'input' as const,
+      role: 'receptor' as const,
+      format: isCif ? ('mmcif' as const) : ('pdb' as const),
+      extension: isCif ? '.cif' : '.pdb'
+    }
+    return {
+      entries: [entry],
+      inputEntries: [entry],
+      outputEntries: [],
+      supportedOutputFiles: [],
+      unsupportedOutputFiles: [],
+      hasRenderableOutput: true,
+      selectedOutputKey: entry.key
+    }
+  })
+
+  const contextModeLabel = computed(() => {
+    if (!supportsGenerationMode.value) return t('modelParams.options.generationModeDenovo')
+    return t(`modelParams.options.${modeTitles[generationMode.value]}`)
+  })
+
+  const contextSampleCount = computed(() => {
+    const val = form.params.n_samples ?? form.params.num_samples
+    return typeof val === 'number' || typeof val === 'string' ? val : null
+  })
+
+  const contextFragmentSummary = computed(() => {
+    if (!needsLigandFile.value || !fragmentFile.value) return undefined
+    const total = fragmentCount.value ?? fragmentMolecule.value?.atoms.length ?? 0
+    if (generationMode.value === 'dock') {
+      const selected = activeSketchSelection.value.length
+      return selected > 0
+        ? t('design.molecule.dockSummary', { selected, total })
+        : t('design.molecule.dockWholeSummary', { total })
+    }
+    const selected = fragmentSelectedIndices.value.length || total
+    return t('design.molecule.keptSummary', { selected, total })
+  })
+
+  const contextSteps = computed(() => [
+    {
+      id: 'model',
+      title: t('design.molecule.context.stepModel'),
+      done: Boolean(resolvedTool.value),
+      detail: selectedOption.value?.name || selectedSlug.value
+    },
+    {
+      id: 'input',
+      title: t('design.molecule.context.stepInput'),
+      done: Boolean(
+        structureReady.value &&
+        hasCenter.value &&
+        (sourceMode.value !== 'upload' || uploadProjectId.value)
+      ),
+      detail: hasCenter.value ? pocketLabelText.value : undefined
+    },
+    {
+      id: 'fragment-params',
+      title: t('design.molecule.context.stepFragmentParams'),
+      done: (!needsLigandFile.value || Boolean(fragmentUpload.value)) && !atomsInvalid.value && parameterErrors.value.length === 0
+    }
+  ])
+
+  const contextMissingItems = computed(() => {
+    const items: Array<{ id: string; label: string; targetTestId?: string }> = []
+    if (!resolvedTool.value) {
+      items.push({ id: 'tool', label: t('design.molecule.toolMissing'), targetTestId: 'molecule-section-model' })
+    }
+    if (sourceMode.value === 'upload' && !uploadProjectId.value) {
+      items.push({ id: 'project', label: t('design.molecule.needProject'), targetTestId: 'molecule-section-input' })
+    }
+    if (!structureReady.value) {
+      items.push({ id: 'structure', label: t('design.molecule.pocketMissingFile'), targetTestId: 'molecule-section-input' })
+    } else if (!hasCenter.value) {
+      items.push({ id: 'center', label: t('design.molecule.pocketMissingCenter'), targetTestId: 'molecule-section-input' })
+    }
+    if (needsLigandFile.value && !fragmentUpload.value) {
+      items.push({ id: 'fragment', label: t(fragmentIssue.value || 'design.molecule.fragmentRequired'), targetTestId: 'molecule-fragment-section' })
+    }
+    if (atomsInvalid.value) {
+      items.push({ id: 'atoms', label: t('design.molecule.atomsToDockInvalid'), targetTestId: 'molecule-fragment-section' })
+    }
+    if (parameterErrors.value.length > 0) {
+      items.push({ id: 'params', label: t('design.molecule.invalidNum'), targetTestId: 'molecule-section-params' })
+    }
+    return items
+  })
+
+  function scrollToSection(targetTestId: string): void {
+    if (typeof document === 'undefined') return
+    const target = document.querySelector(`[data-testid="${targetTestId}"]`)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   onMounted(() => {
     void loadModels().then(() => loadTool())
     void loadProjects()
@@ -919,6 +1191,60 @@
     max-width: @page-max-width;
     margin: 0 auto;
     padding: 32px 24px 48px;
+  }
+
+  .design-workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.9fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .design-workbench__main {
+    min-width: 0;
+  }
+
+  .design-workbench__context {
+    min-width: 0;
+    position: sticky;
+    top: 20px;
+  }
+
+  @media (max-width: 1180px) {
+    .design-workbench {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .design-workbench__context {
+      position: static;
+    }
+  }
+
+  .section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+
+    .design-section__title {
+      margin-bottom: 0;
+    }
+  }
+
+  .fragment-cropped-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: @accent-color-light;
+    color: @accent-color;
+    font-size: @font-size-xs;
+  }
+
+  .fragment-inline-card {
+    margin-top: 12px;
   }
 
   .design-section {
