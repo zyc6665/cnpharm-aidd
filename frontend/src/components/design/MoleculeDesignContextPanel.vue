@@ -56,7 +56,11 @@
           :key="item.id"
           class="missing-item"
           :class="{ 'is-clickable': item.targetTestId }"
+          :role="item.targetTestId ? 'button' : undefined"
+          :tabindex="item.targetTestId ? 0 : undefined"
           @click="handleMissingItemClick(item)"
+          @keydown.enter.prevent="handleMissingItemClick(item)"
+          @keydown.space.prevent="handleMissingItemClick(item)"
         >
           <exclamation-circle-outlined class="missing-icon" />
           <span class="missing-label">{{ item.label }}</span>

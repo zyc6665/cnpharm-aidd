@@ -2,7 +2,12 @@
   <div
     class="molecule-inline-fragment-card"
     :class="{ 'is-disabled': disabled }"
+    :role="disabled ? undefined : 'button'"
+    :tabindex="disabled ? -1 : 0"
+    :aria-disabled="disabled ? 'true' : undefined"
     @click="handleCardClick"
+    @keydown.enter.self.prevent="handleCardClick"
+    @keydown.space.self.prevent="handleCardClick"
   >
     <div class="fragment-preview">
       <svg

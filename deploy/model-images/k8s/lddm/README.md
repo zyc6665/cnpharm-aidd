@@ -16,8 +16,10 @@
 ```bash
 docker build \
   -f deploy/model-images/k8s/lddm/Dockerfile \
-  -t 127.0.0.1:30500/aidd/compute-lddm:1.0.0 \
+  -t 127.0.0.1:30500/aidd/compute-lddm:1.0.1 \
   /data/liudh/lddm-build
-docker push 127.0.0.1:30500/aidd/compute-lddm:1.0.0
-docker inspect --format='{{json .RepoDigests}}' 127.0.0.1:30500/aidd/compute-lddm:1.0.0
+docker push 127.0.0.1:30500/aidd/compute-lddm:1.0.1
+docker inspect --format='{{json .RepoDigests}}' 127.0.0.1:30500/aidd/compute-lddm:1.0.1
 ```
+
+> 推送后取 `RepoDigests` 中的 `sha256:...`（当前 `1.0.1` 对应 [tool.yaml](../../../example/lddm/tool-package/tool.yaml) 里的 `sha256:6fc5496e...`）写入部署环境 ToolPackage 配置即可。

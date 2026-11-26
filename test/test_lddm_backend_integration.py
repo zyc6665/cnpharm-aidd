@@ -36,6 +36,7 @@ from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.files import File as FileModel  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
+from app.models.tasks import Task, TaskStatus  # noqa: E402
 from app.models.tools import ToolCategory  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.services.standard_input_upload_plans import (  # noqa: E402
@@ -224,9 +225,13 @@ def test_lddm_static_capability_matches_tool_package_contract() -> None:
         ("pocket_pdb", "pocket_pdb", False),
         ("fragment_sdf", "fragment_sdf", False),
     }
-    assert [item.semantic_type for item in capability.outputs] == [
-        "generated_ligand",
-        "smiles_csv",
+    assert [
+        (item.semantic_type, item.source, item.path, item.required)
+        for item in capability.outputs
+    ] == [
+        ("molecule_table@1", "artifact", "molecules", True),
+        ("ligand_structure@1", "artifact", "ligands", True),
+        ("run_report@1", "artifact", "report", False),
     ]
     fragment_input = next(
         item for item in capability.inputs if item.field == "fragment_sdf"
@@ -454,6 +459,26 @@ async def test_lddm_package_publishes_and_registers_kubernetes_version(
     )
     assert fragment_slot["role_preferences"] == ["structure_file", "structure_3d_sdf"]
     assert fragment_slot["required"] is False
+
+    # 模拟候选版本通过 smoke 验证后 promote 为 active 当前版本。
+    package_db.add(
+        Task(
+            user_id=package_users["admin"].id,
+            tool_id=data["tool"]["id"],
+            tool_version_id=data["version"]["id"],
+            status=TaskStatus.SUCCESS.value,
+            extra_data={"run_kind": "tool_version_smoke"},
+        )
+    )
+    await package_db.commit()
+    promoted = await package_client.post(
+        f"/api/v1/tools/{data['tool']['id']}/versions/{data['version']['id']}/promote",
+        headers=headers,
+    )
+    assert promoted.status_code == 200, promoted.text
+    promoted_data = promoted.json()["data"]
+    assert promoted_data["is_active"] is True
+    assert promoted_data["current_version_id"] == data["version"]["id"]
 
 
 @pytest.mark.asyncio
