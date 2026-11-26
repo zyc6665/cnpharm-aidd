@@ -150,20 +150,24 @@ const safeT = (key: string, fallback: string): string => {
   return te(key) ? t(key) : fallback
 }
 
-const previewTitle = computed(() => safeT('design.context.previewTitle', '结构与口袋预览'))
+const previewTitle = computed(() => safeT('design.molecule.context.previewTitle', '蛋白与口袋三维视图'))
 const emptyPreviewText = computed(() =>
-  safeT('design.context.emptyPreview', '请上传或选择受体结构与口袋')
+  safeT('design.molecule.context.previewPlaceholder', '选定项目口袋或上传蛋白与口袋文件后，这里会实时显示 3D 结构与采样盒子。')
 )
-const readinessTitle = computed(() => safeT('design.context.readinessTitle', '就绪状态'))
-const readyText = computed(() => safeT('design.context.ready', '就绪，可提交生成任务'))
-const summaryTitle = computed(() => safeT('design.context.summaryTitle', '任务摘要'))
-const modelLabel = computed(() => safeT('design.context.model', '模型'))
-const modeFieldLabel = computed(() => safeT('design.context.mode', '模式'))
-const pocketFieldLabel = computed(() => safeT('design.context.pocket', '口袋'))
-const pocketCenterLabel = computed(() => safeT('design.context.pocketCenter', '口袋中心'))
-const pocketBoxLabel = computed(() => safeT('design.context.pocketBox', '包围盒'))
-const sampleCountLabel = computed(() => safeT('design.context.sampleCount', '生成数量'))
-const fragmentLabel = computed(() => safeT('design.context.fragment', '片段信息'))
+const readinessTitle = computed(() =>
+  props.canSubmit
+    ? safeT('design.molecule.context.panelTitle', '三维上下文与任务就绪状态')
+    : safeT('design.molecule.context.readinessMissing', '完成以下项后即可提交：')
+)
+const readyText = computed(() => safeT('design.molecule.context.readinessReady', '前置项已就绪，可提交任务'))
+const summaryTitle = computed(() => safeT('design.molecule.context.summaryTitle', '当前任务摘要'))
+const modelLabel = computed(() => safeT('design.molecule.context.summaryModel', '模型'))
+const modeFieldLabel = computed(() => safeT('design.molecule.context.summaryMode', '模式'))
+const pocketFieldLabel = computed(() => safeT('design.molecule.context.summaryPocket', '口袋'))
+const pocketCenterLabel = computed(() => safeT('design.molecule.context.summaryCenter', '中心'))
+const pocketBoxLabel = computed(() => safeT('design.molecule.pocketBox', '口袋包围盒'))
+const sampleCountLabel = computed(() => safeT('design.molecule.context.summarySamples', '数量'))
+const fragmentLabel = computed(() => safeT('design.molecule.context.summaryFragment', '片段 / 原子'))
 
 const voxelGrid = computed(() => buildPocketBoxVoxelGrid(props.pocketCenter, props.pocketBoxSize))
 

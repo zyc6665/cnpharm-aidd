@@ -1,6 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest'
+import { mount as baseMount } from '@vue/test-utils'
 import MoleculeDesignContextPanel from './MoleculeDesignContextPanel.vue'
+
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k, te: () => false })
+}))
+
+const mount = (component: typeof MoleculeDesignContextPanel, options: Parameters<typeof baseMount>[1] = {}) =>
+  baseMount(component, {
+    ...options,
+    global: {
+      stubs: {
+        MoleculeViewer: { props: ['scene', 'voxelGrid'], template: '<div data-testid="mock-viewer" />' },
+        ...(options.global?.stubs ?? {})
+      }
+    }
+  })
 
 describe('MoleculeDesignContextPanel', () => {
   const defaultProps = {

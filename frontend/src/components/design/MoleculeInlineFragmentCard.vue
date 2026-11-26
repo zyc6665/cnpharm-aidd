@@ -162,17 +162,23 @@ const modeColor = computed(() => {
 
 const modeLabel = computed(() => {
   return props.mode === 'fragment'
-    ? safeT('design.molecule.fragmentMode', '保留片段')
-    : safeT('design.molecule.dockMode', '待对接原子')
+    ? safeT('modelParams.options.generationModeFragment', '保留片段')
+    : safeT('modelParams.options.generationModeDock', '待对接原子')
 })
 
 const atomCountLabel = computed(() => {
   const total = props.atoms.length
   const selected = props.selectedIndices.length
-  return safeT(
-    'design.molecule.atomCountSummary',
-    `共 ${total} 个原子 · 已选 ${selected} 个`
-  ).replace('{total}', String(total)).replace('{selected}', String(selected))
+  if (props.mode === 'dock' && selected === 0) {
+    return te('design.molecule.dockWholeSummary')
+      ? t('design.molecule.dockWholeSummary', { total })
+      : `全配体对接（${total} 个原子）`
+  }
+  const key = props.mode === 'fragment' ? 'design.molecule.keptSummary' : 'design.molecule.dockSummary'
+  if (te(key)) {
+    return t(key, { selected, total })
+  }
+  return `共 ${total} 个原子 · 已选 ${selected} 个`
 })
 
 const selectedIndicesPreview = computed(() => {
@@ -185,8 +191,8 @@ const selectedIndicesPreview = computed(() => {
 
 const openButtonLabel = computed(() => {
   return props.mode === 'fragment'
-    ? safeT('design.molecule.editFragment', '编辑片段')
-    : safeT('design.molecule.selectDockAtoms', '选择对接原子')
+    ? safeT('design.molecule.openSketchFragment', '在画板中选择保留片段')
+    : safeT('design.molecule.openSketchDock', '在画板中选择对接原子')
 })
 
 const handleCardClick = () => {

@@ -1,7 +1,23 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount as baseMount } from '@vue/test-utils'
 import MoleculeInlineFragmentCard from './MoleculeInlineFragmentCard.vue'
 import type { InlineFragmentAtom, InlineFragmentBond } from './MoleculeInlineFragmentCard.vue'
+
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k, te: () => false })
+}))
+
+const mount = (component: typeof MoleculeInlineFragmentCard, options: Parameters<typeof baseMount>[1] = {}) =>
+  baseMount(component, {
+    ...options,
+    global: {
+      stubs: {
+        'a-tag': { props: ['color'], template: '<span :color="color"><slot /></span>' },
+        'a-button': { props: ['disabled', 'type', 'size'], template: '<button :disabled="disabled"><slot /></button>' },
+        ...(options.global?.stubs ?? {})
+      }
+    }
+  })
 
 describe('MoleculeInlineFragmentCard', () => {
   const createMockAtoms = (): InlineFragmentAtom[] => [
@@ -196,7 +212,7 @@ describe('MoleculeInlineFragmentCard', () => {
     })
 
     expect(wrapper.findAll('.selection-halo')).toHaveLength(0)
-    expect(wrapper.find('.selected-preview').text()).toBe('')
+    expect(wrapper.find('.selected-preview').exists()).toBe(false)
   })
 
   it('handles molecules with more than 32 atoms without labels', () => {
