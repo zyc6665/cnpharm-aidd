@@ -82,7 +82,16 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
 
 def test_capability_lookup_by_output() -> None:
     capabilities = get_capabilities_by_output("generated_ligand")
-    assert [item.tool_slug for item in capabilities] == []
+    # LDDM 是交付线里唯一直接产出 SDF 配体（generated_ligand）的生成模型。
+    assert [item.tool_slug for item in capabilities] == [
+        "lddm-pocket-ligand-generation",
+    ]
+
+    smiles_capabilities = get_capabilities_by_output("smiles_csv")
+    assert [item.tool_slug for item in smiles_capabilities] == [
+        "builtin-sdf-to-smiles-csv",
+        "lddm-pocket-ligand-generation",
+    ]
 
     ligand_capabilities = get_capabilities_by_output("ligand_pdb")
     assert [item.tool_slug for item in ligand_capabilities] == ["builtin-sdf-to-pdb"]

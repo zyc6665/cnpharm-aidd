@@ -74,3 +74,99 @@ async def test_ligand_structure_upload_rejects_sdf_without_record_delimiter(tmp_
             standard_ref="ligand_structure@1",
             uploaded_file=uploaded_file,
         )
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_accepts_sdf(tmp_path: Path):
+    uploaded_file = _uploaded_file(
+        tmp_path,
+        filename="fragment.sdf",
+        content=b"fragment\n  RDKit\n\n  3  2  0  0  0  0  0  0  0  0999 V2000\nM  END\n$$$$\n",
+    )
+
+    metadata = await build_standard_upload_metadata(
+        slot_name="fragment_sdf",
+        standard_ref="ligand_structure@1",
+        uploaded_file=uploaded_file,
+    )
+
+    assert metadata["ligand_id"] == "fragment"
+    assert metadata["source_database"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_accepts_pdb_fragment(tmp_path: Path):
+    uploaded_file = _uploaded_file(
+        tmp_path,
+        filename="fragment.pdb",
+        content=b"HETATM    1  C1  LIG A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n",
+    )
+
+    metadata = await build_standard_upload_metadata(
+        slot_name="fragment_sdf",
+        standard_ref="ligand_structure@1",
+        uploaded_file=uploaded_file,
+    )
+
+    assert metadata["ligand_id"] == "fragment"
+    assert metadata["input_name"] == "fragment_sdf"
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_accepts_mol_fragment(tmp_path: Path):
+    uploaded_file = _uploaded_file(
+        tmp_path,
+        filename="fragment.mol",
+        content=b"fragment\n  RDKit\n\n  3  2  0  0  0  0  0  0  0  0999 V2000\nM  END\n",
+    )
+
+    metadata = await build_standard_upload_metadata(
+        slot_name="fragment_sdf",
+        standard_ref="ligand_structure@1",
+        uploaded_file=uploaded_file,
+    )
+
+    assert metadata["ligand_id"] == "fragment"
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_accepts_mol2_fragment(tmp_path: Path):
+    uploaded_file = _uploaded_file(
+        tmp_path,
+        filename="fragment.mol2",
+        content=b"@<TRIPOS>MOLECULE\nfragment\n 3 2 0 0 0\n",
+    )
+
+    metadata = await build_standard_upload_metadata(
+        slot_name="fragment_sdf",
+        standard_ref="ligand_structure@1",
+        uploaded_file=uploaded_file,
+    )
+
+    assert metadata["ligand_id"] == "fragment"
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_rejects_pdb_fragment_without_atoms(tmp_path: Path):
+    uploaded_file = _uploaded_file(tmp_path, filename="fragment.pdb", content=b"HEADER only\n")
+
+    with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效") as exc_info:
+        await build_standard_upload_metadata(
+            slot_name="fragment_sdf",
+            standard_ref="ligand_structure@1",
+            uploaded_file=uploaded_file,
+        )
+
+    assert exc_info.value.detail["reason"] == "ligand_structure@1 需要包含 ATOM 或 HETATM 记录"
+
+
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_rejects_mol_without_end_marker(tmp_path: Path):
+    uploaded_file = _uploaded_file(tmp_path, filename="fragment.mol", content=b"fragment\n")
+
+    with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
+        await build_standard_upload_metadata(
+            slot_name="fragment_sdf",
+            standard_ref="ligand_structure@1",
+            uploaded_file=uploaded_file,
+        )
