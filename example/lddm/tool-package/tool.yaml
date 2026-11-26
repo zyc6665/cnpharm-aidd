@@ -3,8 +3,8 @@ kind: ToolPackage
 metadata:
   slug: lddm-pocket-ligand-generation
   name: LDDM 口袋条件分子生成
-  version: 1.0.0
-  description: 基于 LPDI-EPFL LDDM 的统一 3D 口袋条件分子生成模型，支持 GPU 批并行采样、分子大小约束与口袋中心自动桥接。
+  version: 1.0.1
+  description: 基于 LPDI-EPFL LDDM 的统一 3D 口袋条件分子生成模型，支持 De novo 生成、片段生长/连接、口袋对接与局部对接。
 artifacts:
   inputs:
     - name: protein_pdb
@@ -160,8 +160,8 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/aidd/compute-lddm:1.0.0
-      image_digest: "sha256:9e3594e4c78705907d1db6815fced3541f050a453bf2f44d59ab425a70701c41"
+      image: registry.example/aidd/compute-lddm:1.0.1
+      image_digest: "sha256:6fc5496e4e27b424f1042be19a6166a14739ae0434845bee21466d2031b889b6"
       includes:
         - python
         - cuda_runtime
@@ -170,7 +170,7 @@ runtime:
         - weights
     fallback:
       kind: conda_pack
-      uri: artifacts://model-envs/lddm-pocket-ligand-generation/1.0.0/conda-env.tar.gz
+      uri: artifacts://model-envs/lddm-pocket-ligand-generation/1.0.1/conda-env.tar.gz
       sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       includes:
         - python
@@ -186,7 +186,7 @@ variants:
     accelerator: nvidia_cuda
     executor_types:
       - container
-    image: registry.example/aidd/compute-lddm@sha256:9e3594e4c78705907d1db6815fced3541f050a453bf2f44d59ab425a70701c41
+    image: registry.example/aidd/compute-lddm@sha256:6fc5496e4e27b424f1042be19a6166a14739ae0434845bee21466d2031b889b6
     entrypoint:
       - /usr/bin/tini
       - --

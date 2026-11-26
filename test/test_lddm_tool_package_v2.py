@@ -44,5 +44,5 @@ def test_lddm_v2_package_validates_and_binds_to_k8s() -> None:
     )
     assert binding["type"] == "k8s_job"
     assert binding["runtime"]["image"].endswith(
-        "@sha256:9e3594e4c78705907d1db6815fced3541f050a453bf2f44d59ab425a70701c41"
+        "@sha256:6fc5496e4e27b424f1042be19a6166a14739ae0434845bee21466d2031b889b6"
     )
