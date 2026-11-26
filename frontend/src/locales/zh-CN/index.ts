@@ -2055,7 +2055,24 @@ export default {
       pocketPreview: '口袋三维预览',
       pocketPreviewMissing: '该口袋缺少可用的结构文件，暂时无法预览三维结构',
       pocketPreviewUnsupportedFormat: '暂不支持预览该格式的结构文件（仅支持 PDB / CIF）',
-      archiveStructureFailed: '结构文件已用于本次任务，但自动归档到项目数据空间失败'
+      archiveStructureFailed: '结构文件已用于本次任务，但自动归档到项目数据空间失败',
+      generationMode: '生成模式',
+      fragmentTitle: '片段 / 配体结构',
+      fragmentHint: '支持上传三维 SDF、MOL、MOL2 或 PDB 片段/配体文件；模型侧将统一标准化后采样。',
+      fragmentRequired: '请选择片段或配体结构文件后继续。',
+      fragmentAtomCount: '首个结构：{count} 个原子（索引范围 0–{lastIndex}）',
+      fragmentFileReady: '暂无法识别原子数。',
+      fragmentUnreadable: '无法读取结构，请选择有效的 SDF、MOL、MOL2 或 PDB 文件。',
+      moleculeSize: '分子大小预设',
+      atomsToDock: '局部对接原子索引',
+      atomsToDockHint: '索引从 0 开始，用逗号或空格分隔；留空表示对接整个配体。',
+      atomsToDockInvalid: '请输入显示范围内的非负整数索引，用逗号或空格分隔。',
+      modeDescription: {
+        denovo: '在口袋中从头生成候选分子。',
+        fragment: '以已上传片段为起点扩展或连接分子。',
+        dock: '对接完整配体，或指定原子进行局部对接。'
+      },
+      sizePreset: { auto: '自动', small: '小型 12–20', medium: '中型 20–30', large: '大型 30–40' }
     },
     presets: {
       title: '参数预设',
@@ -3716,7 +3733,15 @@ export default {
       model_choice: '口袋模型',
       center_x: '口袋中心 X',
       center_y: '口袋中心 Y',
-      center_z: '口袋中心 Z'
+      center_z: '口袋中心 Z',
+      generation_mode: '生成模式',
+      n_samples: '生成数量',
+      n_steps: '采样步数',
+      sampler: '采样器',
+      sampling_noise: '采样噪声',
+      molecule_size: '分子大小',
+      atoms_to_dock: '局部对接原子索引',
+      fragment_sdf: '片段 / 配体结构',
     },
     hints: {
       sequence: '支持多行或 FASTA 格式，长度需符合模型要求。',
@@ -3739,9 +3764,20 @@ export default {
       model_choice: '自动选择或指定口袋检测模型。',
       center_x: '口袋中心的 X 坐标。',
       center_y: '口袋中心的 Y 坐标。',
-      center_z: '口袋中心的 Z 坐标。'
+      center_z: '口袋中心的 Z 坐标。',
+      generation_mode: '从头生成、片段生长或对接模式。',
+      n_samples: '本次生成的分子数量。',
+      n_steps: '扩散采样步数，越高通常越精细但耗时更长。',
+      sampler: '选择扩散采样器。',
+      sampling_noise: '采样噪声强度，影响结果多样性。',
+      molecule_size: '可使用自动或区间预设，也可按模型要求自定义。',
+      atoms_to_dock: '0-based 原子索引；留空表示整个配体。',
+      fragment_sdf: '支持上传 SDF / MOL / MOL2 / PDB 结构文件。'
     },
     options: {
+      generationModeDenovo: '从头分子生成',
+      generationModeFragment: '片段生长与连接',
+      generationModeDock: '口袋对接与局部对接',
       deviceAuto: '自动',
       deviceCpu: 'CPU',
       deviceGpu: 'GPU',

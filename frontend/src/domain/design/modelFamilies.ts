@@ -9,6 +9,7 @@ export const MODEL_FAMILY_BY_SLUG: Record<string, string> = {
   'boltz2-structure-prediction': 'structure_prediction',
   'lvpocket-pocket-prediction': 'pocket_prediction',
   'pocket2mol-pocket-ligand-generation': 'molecule_generation',
+  'lddm-pocket-ligand-generation': 'molecule_generation',
   'therapainter-peptide-prediction': 'peptide_design',
   'molp-pc-property-prediction': 'admet_prediction',
   'builtin-admet-prediction': 'admet_prediction',
