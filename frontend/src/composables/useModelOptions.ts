@@ -20,6 +20,8 @@ export interface ModelOption {
   isDefault: boolean
   /** 该工具契约声明的输入字段（用于亲和力等页按模型动态渲染输入）。 */
   inputFields: string[]
+  /** 标准 Artifact 输入槽名列表（用于判断是否支持如 ref_ligand 等可选槽位）。 */
+  inputSlots: string[]
   /** 该工具声明的运行参数 schema（用于按模型动态渲染参数）。 */
   parameterSchema: ToolSchema | null
 }
@@ -38,10 +40,11 @@ const STORAGE_PREFIX = 'design:model:'
 
 export function useModelOptions(
   family: string,
-  config: { defaultSlug: string; storageKey?: string }
+  config: { defaultSlug: string; storageKey?: string; includeSlugs?: string[] }
 ): UseModelOptionsResult {
   const storageKey = config.storageKey ?? `${STORAGE_PREFIX}${family}`
   const defaultSlug = config.defaultSlug
+  const extraSlugs = new Set(config.includeSlugs ?? [])
   const options: Ref<ModelOption[]> = ref([])
   const selectedSlug: Ref<string> = ref(defaultSlug)
   const loading: Ref<boolean> = ref(false)
@@ -69,7 +72,9 @@ export function useModelOptions(
     try {
       const response = await getToolList({ view: 'public', page: 1, page_size: 100 })
       const tools: Tool[] = (response.data.items ?? []).filter(
-        tool => tool.status === 'published' && resolveModelFamily(tool) === family
+        tool =>
+          tool.status === 'published' &&
+          (resolveModelFamily(tool) === family || extraSlugs.has(tool.slug))
       )
       const next: ModelOption[] = tools.map(tool => ({
         slug: tool.slug,
@@ -81,6 +86,9 @@ export function useModelOptions(
         inputFields: (tool.contract?.capability?.inputs ?? [])
           .map(input => input.field)
           .filter((field): field is string => Boolean(field)),
+        inputSlots: (tool.contract?.artifacts?.inputs ?? [])
+          .map(slot => slot.name)
+          .filter((name): name is string => Boolean(name)),
         parameterSchema: isToolSchema(tool.contract?.schema?.input)
           ? tool.contract?.schema?.input ?? null
           : null,

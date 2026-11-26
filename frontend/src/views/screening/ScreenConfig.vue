@@ -7,8 +7,17 @@ import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { uploadFile } from '@/api/files'
 import { submitToolTask } from '@/api/screening'
 import ModelSelect from '@/components/design/ModelSelect.vue'
+import ModelParameterForm, { type ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
+import FragmentSketchModal from '@/components/design/FragmentSketchModal.vue'
+import MoleculeInlineFragmentCard from '@/components/design/MoleculeInlineFragmentCard.vue'
+import PocketCoordinatePanel, {
+  type PocketCoordinateState,
+  type PocketDefineMode,
+  type PocketTestIds
+} from '@/components/design/PocketCoordinatePanel.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
 import { SCREENING_PARAM_DEFAULTS, SCREENING_PARAM_RANGES, VINA_TOOL_SLUG } from '@/types/screening'
+import { LDDM_GENERATION_TOOL_SLUG } from '@/types/design'
 import type { ScreeningParams } from '@/types/screening'
 import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
 import { listProjects } from '@/api/projects'
@@ -20,13 +29,48 @@ import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/typ
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useRequestSequence } from '@/composables/useRequestSequence'
 import { buildInlineSmilesFile, escapeCsvCell, parseInlineSmiles, rewriteSdfRecordsWithTitle } from '@/domain/molecules/submission-smiles'
+import { formatAtomIndices, parseAtomIndices, type FragmentMolecule } from '@/domain/molecules/fragment-graph'
+import { parseAndNormalizeLigandUpload } from '@/domain/molecules/ligand-upload'
+import {
+  extractProteinHetatmPocketGeometry,
+  parseReferenceLigandGeometry,
+  type PocketGeometry
+} from '@/domain/pockets/pocket-geometry'
+import {
+  buildDefaultValues,
+  normalizeParameters,
+  validateParameters,
+  type ParameterValues
+} from '@/domain/tools/parameterSchema'
 
 const props = withDefaults(defineProps<{ projectIdOverride?: string }>(), { projectIdOverride: '' })
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const { options: modelOptions, selectedSlug, loading: modelLoading, load: loadModels } = useModelOptions('docking', { defaultSlug: VINA_TOOL_SLUG })
+const {
+  options: modelOptions,
+  selectedSlug,
+  selectedOption,
+  loading: modelLoading,
+  load: loadModels
+} = useModelOptions('docking', {
+  defaultSlug: VINA_TOOL_SLUG,
+  includeSlugs: [LDDM_GENERATION_TOOL_SLUG]
+})
 void loadModels()
+
+const displayModelOptions = computed(() =>
+  modelOptions.value.map(option =>
+    option.slug === LDDM_GENERATION_TOOL_SLUG
+      ? {
+          ...option,
+          name: t('screening.config.lddmDockModelName'),
+          description: t('screening.config.lddmDockModelDesc')
+        }
+      : option
+  )
+)
+const isLddmDock = computed(() => selectedSlug.value === LDDM_GENERATION_TOOL_SLUG)
 
 const projectId = computed(() => {
   if (props.projectIdOverride) return props.projectIdOverride
@@ -185,6 +229,10 @@ onMounted(() => { applyQueryHandoff(); void loadProjects() })
 
 const receptorFile = ref<File | null>(null)
 const receptorName = ref('')
+const detectedHetatm = ref<PocketGeometry | null>(null)
+const receptorSequence = useRequestSequence()
+let parsedReceptorFile: File | null = null
+
 const ligandFiles = ref<File[]>([])
 const ligandFormat = ref<'' | 'sdf' | 'csv'>('')
 const countedLigands = ref(0)
@@ -194,6 +242,86 @@ const ligandError = ref('')
 const pocketFile = ref<File | null>(null)
 const pocketName = ref('')
 
+// LDDM 口袋对接与局部对接状态
+const dockLigandFile = ref<File | null>(null)
+const dockLigandUpload = ref<File | null>(null)
+const dockLigandMolecule = ref<FragmentMolecule | null>(null)
+const dockLigandAtomCount = ref<number | null>(null)
+const dockLigandCentroid = ref<{ x: number; y: number; z: number } | null>(null)
+const dockLigandParsing = ref(false)
+const dockLigandError = ref('')
+const dockAtomsToDock = ref('')
+const dockSketchOpen = ref(false)
+const dockLigandSequence = useRequestSequence()
+let parsedDockLigandFile: File | null = null
+
+const dockPocketPanelRef = ref<InstanceType<typeof PocketCoordinatePanel> | null>(null)
+const dockPocketMode = ref<PocketDefineMode>('ref_ligand')
+const dockPocketState = ref<PocketCoordinateState>({
+  mode: 'ref_ligand',
+  center: null,
+  boxSize: null,
+  label: '-',
+  parsing: false,
+  hasAnyInput: false,
+  refLigandFile: null,
+  refLigandUpload: null,
+  pocketFile: null
+})
+const dockPocketTestIds: PocketTestIds = {
+  modeGroup: 'screen-dock-pocket-mode',
+  modeRefLigand: 'screen-dock-pocket-ref-ligand',
+  modeCoords: 'screen-dock-pocket-coords',
+  modeFile: 'screen-dock-pocket-file',
+  panel: 'screen-dock-pocket-panel',
+  refLigandUpload: 'screen-dock-ref-ligand-upload',
+  refLigandName: 'screen-dock-ref-ligand-name',
+  refLigandSummary: 'screen-dock-ref-ligand-summary',
+  centerX: 'screen-dock-center-x',
+  centerY: 'screen-dock-center-y',
+  centerZ: 'screen-dock-center-z',
+  pocketUpload: 'screen-dock-pocket-upload'
+}
+
+const dockAtomsParsed = computed(() =>
+  parseAtomIndices(dockAtomsToDock.value.trim(), dockLigandAtomCount.value)
+)
+const dockAtomsInvalid = computed(() =>
+  Boolean(dockAtomsToDock.value.trim()) && !dockAtomsParsed.value.valid
+)
+const dockActiveCenter = computed(() => dockPocketState.value.center)
+const dockCenterReady = computed(() => Boolean(dockActiveCenter.value))
+
+const LDDM_DOCK_PRIMARY_KEYS = ['n_samples']
+const LDDM_DOCK_HIDDEN_KEYS = ['generation_mode', 'atoms_to_dock', 'molecule_size', 'center_x', 'center_y', 'center_z']
+const lddmSchema = computed(() => (isLddmDock.value ? selectedOption?.value?.parameterSchema ?? null : null))
+const lddmParams = ref<ParameterValues>({})
+const lddmHiddenParams: Record<string, ParameterFieldOverride> = {
+  generation_mode: { hidden: true },
+  atoms_to_dock: { hidden: true },
+  molecule_size: { hidden: true },
+  center_x: { hidden: true },
+  center_y: { hidden: true },
+  center_z: { hidden: true }
+}
+const lddmEffectiveParams = computed<ParameterValues>(() => ({
+  ...lddmParams.value,
+  generation_mode: 'dock',
+  ...(dockAtomsToDock.value.trim() ? { atoms_to_dock: dockAtomsToDock.value.trim() } : {})
+}))
+const lddmParameterErrors = computed(() =>
+  isLddmDock.value ? validateParameters(lddmSchema.value, lddmEffectiveParams.value) : []
+)
+
+watch(
+  lddmSchema,
+  schema => {
+    if (!schema) return
+    lddmParams.value = buildDefaultValues(schema, { omit: LDDM_DOCK_HIDDEN_KEYS })
+  },
+  { immediate: true }
+)
+
 const params = reactive<ScreeningParams>({ ...SCREENING_PARAM_DEFAULTS })
 const submitting = ref(false)
 const formError = ref('')
@@ -201,13 +329,23 @@ const formError = ref('')
 const canSubmit = computed(() => {
   if (submitting.value) return false
   const usesProjectAssets =
-    receptorSource.value === 'project' || ligandSource.value === 'candidate'
+    receptorSource.value === 'project' || (!isLddmDock.value && ligandSource.value === 'candidate')
   if (usesProjectAssets && !projectId.value) return false
   const receptorReady =
     receptorSource.value === 'project'
       ? Boolean(selectedStructureFileId.value)
       : Boolean(receptorFile.value)
   if (!receptorReady) return false
+  if (isLddmDock.value) {
+    if (dockLigandParsing.value || dockPocketState.value.parsing) return false
+    const hasDockLigand = Boolean(dockLigandUpload.value || preuploadedLigandFileId.value)
+    return (
+      hasDockLigand &&
+      !dockAtomsInvalid.value &&
+      dockCenterReady.value &&
+      lddmParameterErrors.value.length === 0
+    )
+  }
   if (ligandSource.value === 'inline') return Boolean(inlineParsed.value.validRows.length)
   if (ligandSource.value === 'candidate') return Boolean(candidateSetId.value && selectedCandidateSet.value)
   if (preuploadedLigandFileId.value) return !ligandError.value
@@ -218,9 +356,23 @@ function fileStem(name: string): string {
   return name.replace(/\.[^.]+$/, '')
 }
 
-function handleReceptorUpload(file: File): boolean {
+async function handleReceptorUpload(file: File): Promise<boolean> {
+  const seq = receptorSequence.next()
   receptorFile.value = file
   receptorName.value = file.name
+  parsedReceptorFile = file
+  detectedHetatm.value = null
+  const lower = file.name.toLowerCase()
+  if (!lower.endsWith('.pdb') && !lower.endsWith('.ent')) return false
+  try {
+    const text = await file.text()
+    if (!receptorSequence.isCurrent(seq) || parsedReceptorFile !== file || receptorFile.value !== file) {
+      return false
+    }
+    detectedHetatm.value = extractProteinHetatmPocketGeometry(text)
+  } catch {
+    // 共晶配体探测失败不影响受体上传。
+  }
   return false
 }
 
@@ -228,6 +380,59 @@ function handlePocketUpload(file: File): boolean {
   pocketFile.value = file
   pocketName.value = file.name
   return false
+}
+
+async function handleDockLigandUpload(file: File): Promise<boolean> {
+  const seq = dockLigandSequence.next()
+  dockLigandFile.value = file
+  parsedDockLigandFile = file
+  dockLigandUpload.value = null
+  dockLigandMolecule.value = null
+  dockLigandAtomCount.value = null
+  dockLigandCentroid.value = null
+  dockLigandError.value = ''
+  dockAtomsToDock.value = ''
+  dockLigandParsing.value = true
+  try {
+    const text = await file.text()
+    if (!dockLigandSequence.isCurrent(seq) || parsedDockLigandFile !== file || dockLigandFile.value !== file) {
+      return false
+    }
+    const prepared = await parseAndNormalizeLigandUpload(file, text, { convertNonSdfToSdf: false })
+    if (!dockLigandSequence.isCurrent(seq) || parsedDockLigandFile !== file || dockLigandFile.value !== file) {
+      return false
+    }
+    if (!prepared) {
+      dockLigandError.value = t('screening.config.dockLigandUnreadable')
+      return false
+    }
+    dockLigandUpload.value = prepared.uploadFile
+    dockLigandMolecule.value = prepared.molecule
+    dockLigandAtomCount.value = prepared.atomCount
+    dockLigandCentroid.value = parseReferenceLigandGeometry(text, file.name)?.center ?? null
+  } catch {
+    if (dockLigandSequence.isCurrent(seq) && parsedDockLigandFile === file) {
+      dockLigandError.value = t('screening.config.dockLigandUnreadable')
+    }
+  } finally {
+    if (dockLigandSequence.isCurrent(seq) && parsedDockLigandFile === file) {
+      dockLigandParsing.value = false
+    }
+  }
+  return false
+}
+
+function handleDockSketchConfirm(payload: { selectedIndices: number[]; exportedFile: File | null }): void {
+  dockAtomsToDock.value = formatAtomIndices(payload.selectedIndices)
+}
+
+function handleDockPocketStateChange(state: PocketCoordinateState): void {
+  dockPocketState.value = state
+}
+
+function applyCenterToCoords(center: { x: number; y: number; z: number }, noticeKey: string): void {
+  dockPocketPanelRef.value?.setCoordinates(center)
+  message.success(t(noticeKey))
 }
 
 function detectFormat(name: string): 'sdf' | 'csv' | '' {
@@ -319,6 +524,74 @@ async function buildCsvPayload(files: File[]): Promise<File> {
 
 async function handleSubmit(): Promise<void> {
   formError.value = ''
+  if (isLddmDock.value) {
+    if (receptorSource.value === 'project') {
+      if (!projectId.value) { formError.value = t('screening.config.needProject'); return }
+      if (!selectedStructureFileId.value) { formError.value = t('screening.config.needStructure'); return }
+    } else if (!receptorFile.value) {
+      formError.value = t('screening.config.needReceptor')
+      return
+    }
+    const ligandIdFallback = preuploadedLigandFileId.value
+    if (!dockLigandUpload.value && !ligandIdFallback) {
+      formError.value = t('screening.config.dockNeedLigand')
+      return
+    }
+    if (dockAtomsInvalid.value) {
+      formError.value = t('design.molecule.atomsToDockInvalid')
+      return
+    }
+    if (!dockActiveCenter.value) {
+      formError.value = t('screening.config.dockNeedPocketCenter')
+      return
+    }
+    if (lddmParameterErrors.value.length > 0) {
+      formError.value = t('design.molecule.invalidNum')
+      return
+    }
+
+    const center = dockActiveCenter.value
+    const supportsRefLigand = Boolean(selectedOption?.value?.inputSlots?.includes('ref_ligand'))
+    const trimmedAtoms = dockAtomsToDock.value.trim()
+    submitting.value = true
+    try {
+      const uploads: Record<string, string> = {}
+      uploads.protein_pdb =
+        receptorSource.value === 'project'
+          ? selectedStructureFileId.value
+          : (await uploadFile(receptorFile.value as File)).data.id
+      uploads.fragment_sdf = dockLigandUpload.value
+        ? (await uploadFile(dockLigandUpload.value)).data.id
+        : ligandIdFallback
+      const refLigandUpload = dockPocketState.value.refLigandUpload
+      if (dockPocketState.value.mode === 'ref_ligand' && refLigandUpload && supportsRefLigand) {
+        uploads.ref_ligand = (await uploadFile(refLigandUpload)).data.id
+      }
+
+      const task = await submitToolTask({
+        toolSlug: selectedSlug.value,
+        projectId: projectId.value || undefined,
+        name: `LDDM 口袋对接 ${new Date().toISOString().slice(0, 10)}`,
+        params: {
+          ...normalizeParameters(lddmSchema.value, lddmEffectiveParams.value),
+          generation_mode: 'dock',
+          ...(trimmedAtoms ? { atoms_to_dock: trimmedAtoms } : {}),
+          center_x: center.x,
+          center_y: center.y,
+          center_z: center.z
+        },
+        standardInputUploads: uploads
+      })
+      message.success(t('screening.config.success'))
+      await router.push(`/tasks/${task.id}/results`)
+    } catch (error) {
+      formError.value = error instanceof Error ? error.message : t('screening.config.submitFailed')
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
   const snapshot = {
     receptorSource: receptorSource.value,
     receptorFile: receptorFile.value,
@@ -411,7 +684,7 @@ const paramFields = computed(() => [
     </a-card>
 
     <a-card :title="t('design.modelSelect.label')">
-      <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+      <ModelSelect v-model="selectedSlug" :options="displayModelOptions" :loading="modelLoading" />
     </a-card>
 
     <a-card :title="t('screening.config.inputs')">
@@ -436,10 +709,22 @@ const paramFields = computed(() => [
               :max-count="1"
               accept=".pdb,.cif,.ent"
               :file-list="[]"
+              data-testid="screen-config-receptor-upload"
             >
               <a-button>{{ t('screening.config.chooseFile') }}</a-button>
             </a-upload>
             <span v-if="receptorName" class="screen-config__file">{{ receptorName }}</span>
+            <div v-if="isLddmDock && detectedHetatm" class="screen-config__hetatm" data-testid="screen-dock-hetatm-banner">
+              <span>{{ t('design.molecule.hetatmDetected', { count: detectedHetatm.pointCount }) }}</span>
+              <a-button
+                type="link"
+                size="small"
+                data-testid="screen-dock-use-hetatm"
+                @click="applyCenterToCoords(detectedHetatm.center, 'design.molecule.hetatmApplied')"
+              >
+                {{ t('design.molecule.useHetatmCenter') }}
+              </a-button>
+            </div>
           </template>
 
           <template v-else>
@@ -486,7 +771,7 @@ const paramFields = computed(() => [
           </template>
         </a-form-item>
 
-        <a-form-item :label="t('screening.config.ligandLibrary')" required>
+        <a-form-item v-if="!isLddmDock" :label="t('screening.config.ligandLibrary')" required>
           <a-radio-group
             v-model:value="ligandSource"
             button-style="solid"
@@ -570,7 +855,75 @@ const paramFields = computed(() => [
           </template>
         </a-form-item>
 
-        <a-form-item :label="t('screening.config.pocket')">
+        <template v-else>
+          <a-form-item :label="t('screening.config.dockLigandTitle')" required data-testid="screen-dock-ligand-section">
+            <div class="screen-config__files">
+              <a-upload
+                :before-upload="handleDockLigandUpload"
+                :max-count="1"
+                accept=".sdf,.sd,.mol,.mol2,.pdb"
+                :file-list="[]"
+                data-testid="screen-dock-ligand-upload"
+              >
+                <a-button>{{ t('screening.config.chooseFile') }}</a-button>
+              </a-upload>
+              <span v-if="dockLigandFile" class="screen-config__file" data-testid="screen-dock-ligand-name">
+                {{ dockLigandFile.name }}
+              </span>
+              <a-button
+                v-if="dockLigandCentroid"
+                type="link"
+                size="small"
+                data-testid="screen-dock-use-ligand-center"
+                @click="applyCenterToCoords(dockLigandCentroid, 'screening.config.dockLigandCenterApplied')"
+              >
+                {{ t('screening.config.dockUseLigandCenter') }}
+              </a-button>
+            </div>
+            <p class="screen-config__hint">{{ t('screening.config.dockLigandHint') }}</p>
+            <div v-if="dockLigandFile && !dockLigandParsing && dockLigandAtomCount !== null" class="screen-config__hint">
+              {{ t('design.molecule.fragmentAtomCount', { count: dockLigandAtomCount, lastIndex: dockLigandAtomCount - 1 }) }}
+            </div>
+            <MoleculeInlineFragmentCard
+              v-if="dockLigandMolecule && !dockLigandParsing"
+              class="screen-config__sketch-card"
+              :filename="dockLigandFile?.name || dockLigandMolecule.name"
+              :atoms="dockLigandMolecule.atoms"
+              :bonds="dockLigandMolecule.bonds"
+              :selected-indices="dockAtomsParsed.valid ? dockAtomsParsed.indices : []"
+              mode="dock"
+              :disabled="submitting"
+              @open-sketch="dockSketchOpen = true"
+            />
+            <a-alert v-if="dockLigandError" type="warning" show-icon :message="dockLigandError" />
+            <div class="screen-config__atoms-field">
+              <label class="screen-config__atoms-label" for="screen-dock-atoms">{{ t('design.molecule.atomsToDock') }}</label>
+              <a-input
+                id="screen-dock-atoms"
+                v-model:value="dockAtomsToDock"
+                :disabled="submitting"
+                :status="dockAtomsInvalid ? 'error' : undefined"
+                placeholder="0 1 2"
+                data-testid="screen-dock-atoms-input"
+              />
+              <span class="screen-config__hint">
+                {{ t(dockAtomsInvalid ? 'design.molecule.atomsToDockInvalid' : 'design.molecule.atomsToDockHint') }}
+              </span>
+            </div>
+          </a-form-item>
+
+          <a-form-item :label="t('design.molecule.pocketDefineMode')" required data-testid="screen-dock-pocket-section">
+            <PocketCoordinatePanel
+              ref="dockPocketPanelRef"
+              v-model="dockPocketMode"
+              :disabled="submitting"
+              :test-ids="dockPocketTestIds"
+              @change="handleDockPocketStateChange"
+            />
+          </a-form-item>
+        </template>
+
+        <a-form-item v-if="!isLddmDock" :label="t('screening.config.pocket')">
           <a-upload :before-upload="handlePocketUpload" :max-count="1" accept=".pdb" :file-list="[]">
             <a-button>{{ t('screening.config.chooseFile') }}</a-button>
           </a-upload>
@@ -580,7 +933,7 @@ const paramFields = computed(() => [
       </a-form>
     </a-card>
 
-    <a-row :gutter="16">
+    <a-row v-if="!isLddmDock" :gutter="16">
       <a-col :xs="24" :lg="12">
         <a-card :title="t('screening.config.params')">
           <a-form layout="vertical">
@@ -632,6 +985,49 @@ const paramFields = computed(() => [
       </a-col>
     </a-row>
 
+    <a-row v-else :gutter="16">
+      <a-col :xs="24" :lg="12">
+        <a-card :title="t('screening.config.params')">
+          <ModelParameterForm
+            v-if="lddmSchema"
+            v-model="lddmParams"
+            :schema="lddmSchema"
+            :overrides="lddmHiddenParams"
+            :primary-keys="LDDM_DOCK_PRIMARY_KEYS"
+            :disabled="submitting"
+          />
+        </a-card>
+      </a-col>
+
+      <a-col :xs="24" :lg="12">
+        <a-card :title="t('screening.config.dockSummaryTitle')" data-testid="screen-dock-summary">
+          <p class="screen-config__hint">{{ t('screening.config.dockSummaryHint') }}</p>
+          <ol class="screen-config__rules">
+            <li>
+              <strong>{{ t('screening.config.dockModeSummary') }}</strong>
+              <span>
+                {{
+                  dockAtomsParsed.valid && dockAtomsParsed.indices.length > 0
+                    ? t('screening.config.dockSummaryPartial', { count: dockAtomsParsed.indices.length })
+                    : t('screening.config.dockSummaryFull')
+                }}
+              </span>
+            </li>
+            <li>
+              <strong>{{ t('design.molecule.pocketCenter') }}</strong>
+              <span>
+                {{
+                  dockActiveCenter
+                    ? `${dockActiveCenter.x.toFixed(2)}, ${dockActiveCenter.y.toFixed(2)}, ${dockActiveCenter.z.toFixed(2)} Å`
+                    : '-'
+                }}
+              </span>
+            </li>
+          </ol>
+        </a-card>
+      </a-col>
+    </a-row>
+
     <div class="screen-config__footer">
       <a-alert v-if="formError" type="error" show-icon :message="formError" data-testid="screen-config-error" />
       <a-button
@@ -642,9 +1038,24 @@ const paramFields = computed(() => [
         data-testid="screen-config-submit"
         @click="handleSubmit"
       >
-        {{ submitting ? t('screening.config.submitting') : t('screening.config.submit') }}
+        {{
+          submitting
+            ? t('screening.config.submitting')
+            : isLddmDock
+              ? t('screening.config.submitLddmDock')
+              : t('screening.config.submit')
+        }}
       </a-button>
     </div>
+
+    <FragmentSketchModal
+      v-if="isLddmDock"
+      v-model:open="dockSketchOpen"
+      :molecule="dockLigandMolecule"
+      :selected-indices="dockAtomsParsed.valid ? dockAtomsParsed.indices : []"
+      mode="dock"
+      @confirm="handleDockSketchConfirm"
+    />
   </main>
 </template>
 
@@ -706,5 +1117,28 @@ const paramFields = computed(() => [
   flex-direction: column;
   gap: 12px;
   align-items: flex-start;
+}
+
+.screen-config__hetatm,
+.screen-config__atoms-field,
+.screen-config__sketch-card {
+  margin-top: 12px;
+}
+
+.screen-config__hetatm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.screen-config__atoms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screen-config__atoms-label {
+  font-weight: 500;
 }
 </style>

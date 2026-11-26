@@ -29,7 +29,6 @@
         {{ preset.name }}
       </a-tag>
     </div>
-    <p v-else class="parameter-presets__empty">{{ t('design.presets.empty') }}</p>
 
     <a-modal
       v-model:open="saveModalOpen"

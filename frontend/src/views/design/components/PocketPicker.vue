@@ -1,16 +1,16 @@
 <template>
   <div class="pocket-picker" data-testid="pocket-picker">
     <a-steps :current="currentStep" size="small" class="pocket-stepper" data-testid="pocket-stepper">
-      <a-step :title="t('design.pocket.project')" />
+      <a-step v-if="!hideProjectSelect" :title="t('design.pocket.project')" />
       <a-step :title="t('design.pocket.target')" />
       <a-step :title="t('design.pocket.protein')" />
       <a-step :title="t('design.pocket.structure')" />
-      <a-step :title="t('design.pocket.pocket')" />
+      <a-step v-if="!hidePocketSelect" :title="t('design.pocket.pocket')" />
     </a-steps>
 
     <a-spin :spinning="loadingProjects">
       <a-row :gutter="16">
-        <a-col :xs="24" :sm="12" :lg="8">
+        <a-col v-if="!hideProjectSelect" :xs="24" :sm="12" :lg="8">
           <a-form-item :label="t('design.pocket.project')">
             <a-select
               v-model:value="selectedProject"
@@ -87,7 +87,7 @@
           </a-form-item>
         </a-col>
 
-        <a-col :xs="24" :sm="12" :lg="8">
+        <a-col v-if="!hidePocketSelect" :xs="24" :sm="12" :lg="8">
           <a-form-item :label="t('design.pocket.pocket')">
             <a-select
               v-model:value="selectedPocket"
@@ -117,7 +117,7 @@
       </section>
 
       <!-- 上游缺已选口袋：就地预测 / 选定 -->
-      <section v-else-if="selectedStructure && !pockets.length" class="relay-panel" data-testid="pocket-missing-pocket">
+      <section v-else-if="!hidePocketSelect && selectedStructure && !pockets.length" class="relay-panel" data-testid="pocket-missing-pocket">
         <div class="relay-title">{{ t('design.upstream.missingPocket') }}</div>
         <PocketPredictPanel
           :structure-id="selectedStructure"
@@ -171,7 +171,7 @@ import type {
   TargetSummary,
 } from '@/types/targets'
 import type { ResearchProject } from '@/types/projects'
-import type { DesignPocketSelection } from '@/types/design'
+import type { DesignPocketSelection, DesignStructureSelection } from '@/types/design'
 
 /**
  * 三维预览按需加载：`MoleculeViewer` 会拉起 Mol* 整套渲染栈，
@@ -185,10 +185,20 @@ const props = withDefaults(
   defineProps<{
     modelValue: DesignPocketSelection | null
     defaultProjectId?: string
+    /** 外部受控项目 ID（隐藏内置项目选择器时与外层统一项目同步）。 */
+    projectId?: string
+    hideProjectSelect?: boolean
+    hidePocketSelect?: boolean
     /** 是否在口袋选定后展示紧凑的三维预览（默认关闭，保持既有调用方行为）。 */
     showPreview?: boolean
   }>(),
-  { defaultProjectId: '', showPreview: false }
+  {
+    defaultProjectId: '',
+    projectId: '',
+    hideProjectSelect: false,
+    hidePocketSelect: false,
+    showPreview: false
+  }
 )
 
 /**
@@ -216,6 +226,7 @@ function urnExtension(urn: string): string {
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: DesignPocketSelection | null): void
+  (event: 'structure-change', value: DesignStructureSelection | null): void
 }>()
 
 const { t } = useI18n()
@@ -336,12 +347,18 @@ const relaySequence = useRequestSequence()
 const error = ref('')
 
 const currentStep = computed(() => {
-  if (!selectedProject.value) return 0
-  if (!selectedTarget.value) return 1
-  if (!selectedProtein.value) return 2
-  if (!selectedStructure.value) return 3
-  if (!selectedPocket.value) return 4
-  return 5
+  const stepIndex = !selectedProject.value
+    ? 0
+    : !selectedTarget.value
+      ? 1
+      : !selectedProtein.value
+        ? 2
+        : !selectedStructure.value
+          ? 3
+          : !selectedPocket.value
+            ? 4
+            : 5
+  return props.hideProjectSelect ? Math.max(0, stepIndex - 1) : stepIndex
 })
 
 function structureLabel(structure: ProteinStructureDetail, index: number): string {
@@ -369,11 +386,34 @@ function clearBelow(level: 'target' | 'protein' | 'structure' | 'pocket'): void 
     structures.value = []
     selectedStructure.value = undefined
     loadingStructures.value = false
+    emit('structure-change', null)
   }
   pockets.value = []
   selectedPocket.value = undefined
   loadingPockets.value = false
   emit('update:modelValue', null)
+}
+
+function emitStructureSelection(structureId: string): void {
+  if (!selectedProject.value || !selectedTarget.value || !selectedProtein.value) {
+    emit('structure-change', null)
+    return
+  }
+  const structure = structures.value.find(item => item.id === structureId)
+  if (!structure) {
+    emit('structure-change', null)
+    return
+  }
+  emit('structure-change', {
+    projectId: selectedProject.value,
+    targetId: selectedTarget.value,
+    proteinId: selectedProtein.value,
+    structureId: structure.id,
+    structureFileId: structure.prepared_file_id ?? structure.structure_file_id ?? null,
+    structureUrn: structure.prepared_file_id
+      ? structure.prepared_urn ?? structure.structure_urn ?? null
+      : structure.structure_urn ?? structure.prepared_urn ?? null,
+  })
 }
 
 function emitPocketSelection(pocket: PocketSummary): void {
@@ -454,7 +494,11 @@ async function loadPocketsForStructure(structureId: string): Promise<void> {
 
 async function handleStructureChange(value: unknown): Promise<void> {
   pocketSequence.invalidate(); relaySequence.invalidate(); clearBelow('pocket')
-  if (typeof value !== 'string') return
+  if (typeof value !== 'string') {
+    emit('structure-change', null)
+    return
+  }
+  emitStructureSelection(value)
   await loadPocketsForStructure(value)
 }
 
@@ -464,7 +508,7 @@ async function handleStructurePredicted(): Promise<void> {
   const proteinId = selectedProtein.value
   if (!proteinId) return
   const seq = predictedSequence.next(); loadingStructures.value = true
-  try { const fresh = await listProteinStructures(proteinId); if (!predictedSequence.isCurrent(seq) || selectedProtein.value !== proteinId) return; structures.value = fresh; const added = selectNewlyAdded(structureSnapshot.value, fresh); if (added) { selectedStructure.value = added.id; await loadPocketsForStructure(added.id) } }
+  try { const fresh = await listProteinStructures(proteinId); if (!predictedSequence.isCurrent(seq) || selectedProtein.value !== proteinId) return; structures.value = fresh; const added = selectNewlyAdded(structureSnapshot.value, fresh); if (added) { selectedStructure.value = added.id; emitStructureSelection(added.id); await loadPocketsForStructure(added.id) } }
   catch { if (predictedSequence.isCurrent(seq)) error.value = t('design.pocket.loadFailed') }
   finally { if (predictedSequence.isCurrent(seq)) loadingStructures.value = false }
 }
@@ -487,9 +531,24 @@ function handlePocketChange(value: unknown): void {
   emitPocketSelection(pocket)
 }
 
+watch(
+  () => props.projectId,
+  nextProjectId => {
+    if (!props.hideProjectSelect) return
+    const normalized = nextProjectId || undefined
+    if (normalized === selectedProject.value) return
+    selectedProject.value = normalized
+    void handleProjectChange(normalized)
+  }
+)
+
 onMounted(async () => {
   await loadProjects()
-  if (!selectedProject.value && props.defaultProjectId) { selectedProject.value = props.defaultProjectId; await handleProjectChange(props.defaultProjectId) }
+  const initialProject = props.projectId || props.defaultProjectId
+  if (!selectedProject.value && initialProject) {
+    selectedProject.value = initialProject
+    await handleProjectChange(initialProject)
+  }
 })
 </script>
 

@@ -1,3 +1,4 @@
+import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -53,18 +54,26 @@ vi.mock('@/api/files', () => ({
 vi.mock('@/components/design/ModelSelect.vue', () => ({
   default: {
     name: 'ModelSelect',
-    props: ['value', 'options', 'loading'],
+    props: ['modelValue', 'options', 'loading'],
+    emits: ['update:modelValue'],
     template: '<div class="model-select" />'
   }
 }))
 
+const mockModelState = vi.hoisted(() => ({
+  selectedSlugRef: null as { value: string } | null,
+  selectedOptionRef: null as { value: unknown } | null
+}))
+
 vi.mock('@/composables/useModelOptions', async () => {
   const { ref } = await import('vue')
+  mockModelState.selectedSlugRef = ref('autodock-vina-docking')
+  mockModelState.selectedOptionRef = ref(null)
   return {
     useModelOptions: () => ({
       options: ref([]),
-      selectedSlug: ref('autodock-vina-docking'),
-      selectedOption: ref(null),
+      selectedSlug: mockModelState.selectedSlugRef,
+      selectedOption: mockModelState.selectedOptionRef,
       loading: ref(false),
       load: vi.fn()
     })
@@ -84,13 +93,32 @@ const ASelectStub = {
 const AButtonStub = {
   props: ['disabled', 'loading', 'type', 'size'],
   emits: ['click'],
-  template: '<button class="a-button" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>'
+  template: '<button class="a-button" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>'
 }
 
 const ARadioGroupStub = {
   props: ['value'],
   emits: ['update:value'],
   template: '<div class="radio-group"><slot /></div>'
+}
+
+const AUploadStub = defineComponent({
+  name: 'AUploadStub',
+  props: ['beforeUpload', 'accept', 'maxCount', 'multiple', 'fileList'],
+  template: '<div class="upload"><slot /></div>'
+})
+
+const AInputStub = {
+  props: ['value', 'status', 'disabled', 'placeholder'],
+  emits: ['update:value'],
+  template: '<input :value="value" :disabled="disabled" @input="$emit(\'update:value\', $event.target.value)" />'
+}
+
+const AInputNumberStub = {
+  props: ['value', 'min', 'max', 'step', 'precision', 'placeholder'],
+  emits: ['update:value'],
+  template: `<input type="number" class="number" :value="value ?? ''"
+    @input="$emit('update:value', $event.target.value === '' ? null : Number($event.target.value))" />`
 }
 
 function mountPage(props: Record<string, unknown> = {}) {
@@ -105,12 +133,20 @@ function mountPage(props: Record<string, unknown> = {}) {
         'a-form-item': { props: ['label'], template: '<div><slot /></div>' },
         'a-radio-group': ARadioGroupStub,
         'a-radio-button': { template: '<button class="radio-button"><slot /></button>' },
-        'a-upload': { template: '<div class="upload"><slot /></div>' },
-        'a-input-number': { props: ['value'], template: '<input class="number" />' },
+        'a-upload': AUploadStub,
+        'a-input': AInputStub,
+        'a-input-number': AInputNumberStub,
         'a-tag': { template: '<span class="tag"><slot /></span>' },
         'a-alert': { props: ['message'], template: '<div class="alert">{{ message }}</div>' },
         'a-row': { template: '<div><slot /></div>' },
-        'a-col': { template: '<div><slot /></div>' }
+        'a-col': { template: '<div><slot /></div>' },
+        ModelParameterForm: { props: ['modelValue', 'schema', 'overrides', 'primaryKeys', 'disabled'], template: '<div data-testid="lddm-param-form" />' },
+        FragmentSketchModal: {
+          name: 'FragmentSketchModal',
+          props: ['open', 'molecule', 'selectedIndices', 'mode'],
+          emits: ['update:open', 'confirm'],
+          template: '<div v-if="open" data-testid="dock-sketch-modal" />'
+        }
       }
     }
   })
@@ -120,6 +156,8 @@ describe('ScreenConfig input sources', () => {
   beforeEach(() => {
     route.params = {}
     route.query = {}
+    if (mockModelState.selectedSlugRef) mockModelState.selectedSlugRef.value = 'autodock-vina-docking'
+    if (mockModelState.selectedOptionRef) mockModelState.selectedOptionRef.value = null
     replaceMock.mockReset()
     pushMock.mockReset()
     uploadFileMock.mockReset()
@@ -301,5 +339,99 @@ describe('ScreenConfig input sources', () => {
     expect(payload.standardInputUploads.protein_pdb).toBe('file-receptor')
     expect(payload.standardInputUploads.ligand_smiles).toBe('file-generated-ligands')
     expect(pushMock).toHaveBeenCalledWith('/tasks/task-1/screening')
+  })
+
+  it('supports LDDM pocket & partial docking with sketch selection and ref_ligand submission', async () => {
+    mockModelState.selectedSlugRef!.value = 'lddm-pocket-ligand-generation'
+    mockModelState.selectedOptionRef!.value = {
+      slug: 'lddm-pocket-ligand-generation',
+      name: 'LDDM 口袋条件分子生成',
+      isDefault: false,
+      inputFields: ['protein_pdb', 'fragment_sdf'],
+      inputSlots: ['protein_pdb', 'pocket', 'fragment_sdf', 'ref_ligand'],
+      parameterSchema: {
+        type: 'object',
+        properties: {
+          generation_mode: { type: 'string', enum: ['denovo', 'fragment', 'dock'], default: 'denovo' },
+          n_samples: { type: 'integer', default: 10 },
+          n_steps: { type: 'integer', default: 100 },
+          atoms_to_dock: { type: 'string', default: '' },
+          molecule_size: { type: 'string', default: '' },
+          center_x: { type: 'number' },
+          center_y: { type: 'number' },
+          center_z: { type: 'number' }
+        }
+      }
+    }
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="screen-dock-ligand-section"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="screen-config-rules"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="screen-dock-summary"]').exists()).toBe(true)
+
+    const makeTextFile = (name: string, text: string) => {
+      const file = new File([text], name)
+      Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue(text) })
+      return file
+    }
+
+    const molBlock = [
+      'Methanol', '  Test', '', '  2  1  0  0  0  0            999 V2000',
+      '    1.0000    2.0000    3.0000 C   0  0  0  0  0  0  0  0  0  0  0  0',
+      '    3.0000    6.0000    9.0000 O   0  0  0  0  0  0  0  0  0  0  0  0',
+      '  1  2  1  0  0  0  0', 'M  END'
+    ].join('\n')
+
+    const receptorUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-config-receptor-upload')!
+    const ligandUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-dock-ligand-upload')!
+    const refLigandUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-dock-ref-ligand-upload')!
+
+    const receptorFile = makeTextFile('receptor.pdb', 'ATOM      1  CA  GLY A   1      1.000  2.000  3.000  1.00  0.00           C\nEND\n')
+    const ligandMol = makeTextFile('ligand.mol', molBlock)
+    const refSdf = makeTextFile('ref.sdf', `${molBlock}\n$$$$\n`)
+
+    await (receptorUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(receptorFile)
+    await (ligandUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(ligandMol)
+    await (refLigandUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(refSdf)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="screen-dock-ref-ligand-summary"]').exists()).toBe(true)
+
+    // Partial-dock validation & sketcher confirm
+    const atomsInput = wrapper.find('[data-testid="screen-dock-atoms-input"]')
+    await atomsInput.setValue('2')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="screen-config-submit"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="open-fragment-sketch"]').trigger('click')
+    await flushPromises()
+    wrapper.findComponent({ name: 'FragmentSketchModal' }).vm.$emit('confirm', { selectedIndices: [0, 1], exportedFile: null })
+    await flushPromises()
+    expect((atomsInput.element as HTMLInputElement).value).toBe('0 1')
+
+    await wrapper.find('[data-testid="screen-config-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(3)
+    expect(submitToolTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      toolSlug: 'lddm-pocket-ligand-generation',
+      params: expect.objectContaining({
+        generation_mode: 'dock',
+        atoms_to_dock: '0 1',
+        n_samples: 10,
+        n_steps: 100,
+        center_x: 2,
+        center_y: 4,
+        center_z: 6
+      }),
+      standardInputUploads: {
+        protein_pdb: 'file-uploaded',
+        fragment_sdf: 'file-uploaded',
+        ref_ligand: 'file-uploaded'
+      }
+    }))
+    expect(pushMock).toHaveBeenCalledWith('/tasks/task-1/results')
   })
 })
