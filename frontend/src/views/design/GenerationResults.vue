@@ -1998,10 +1998,10 @@
     min-width: 0;
   }
 
-  /* 桌面端 50% 列表 / 50% 黏性详情面板；窄屏自动堆叠。 */
+  /* 桌面端左侧列表充分铺开、右侧保持 380~560px 黏性详情面板；窄屏自动堆叠。 */
   .results-workbench {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) clamp(380px, 34%, 560px);
     gap: 20px;
     align-items: start;
   }
