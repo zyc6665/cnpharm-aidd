@@ -373,7 +373,13 @@ def _enrich_molecule_rows(
     return enriched, output_fieldnames, summary
 
 
-def pocket2mol(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, Any]:
+def pocket2mol(
+    output_dir: Path,
+    task_id: str,
+    legacy: dict[str, Any],
+    *,
+    tool_slug: str = "pocket2mol-pocket-ligand-generation",
+) -> dict[str, Any]:
     outputs = legacy.get("outputs") or {}
     source = str(outputs.get("smiles_file") or "artifacts/SMILES.txt")
     source_path = output_dir / source
@@ -403,7 +409,7 @@ def pocket2mol(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[s
     report_summary = dict(outputs)
     report_summary.update(summary)
     report = run_report(
-        output_dir, task_id, "pocket2mol-pocket-ligand-generation", report_summary
+        output_dir, task_id, tool_slug, report_summary
     )
     return {
         "result_version": RESULT_VERSION,
@@ -468,7 +474,18 @@ def therapainter(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict
     }
 
 
+def lddm(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, Any]:
+    """LDDM pocket-conditioned ligand generation -> molecule_table@1 + ligand_structure@1."""
+    return pocket2mol(
+        output_dir,
+        task_id,
+        legacy,
+        tool_slug="lddm-pocket-ligand-generation",
+    )
+
+
 BUILDERS = {
+    "lddm": lddm,
     "molp-pc": molp_pc,
     "msign": msign,
     "pocket2mol": pocket2mol,
