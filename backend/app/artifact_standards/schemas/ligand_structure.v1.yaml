@@ -4,8 +4,16 @@ file_roles:
   - role: structure_file
     required: true
     primary: true
-    allowed_formats: [sdf]
-    content_types: [chemical/x-mdl-sdfile, application/octet-stream]
+    # 主结构文件允许配体的常见交换格式：SDF/MOL/MOL2/PDB。
+    # LDDM 等生成模型的 fragment/参考配体输入原本就是这几种格式，
+    # 适配器侧统一转换成 SDF 再推理（见 deploy/model-images/k8s/lddm）。
+    allowed_formats: [sdf, mol, mol2, pdb]
+    content_types:
+      - chemical/x-mdl-sdfile
+      - chemical/x-mdl-molfile
+      - chemical/x-mol2
+      - chemical/x-pdb
+      - application/octet-stream
     recommended_name: ligand.sdf
   - role: structure_2d_sdf
     required: false
