@@ -82,6 +82,7 @@ export const STAGE_STEP_MAP: Readonly<Record<string, WorkflowStepKey>> = {
   molecule_generation: 'moleculeGenerationOrVirtualScreening',
   virtual_screening: 'moleculeGenerationOrVirtualScreening',
   'pocket2mol-pocket-ligand-generation': 'moleculeGenerationOrVirtualScreening',
+  'lddm-pocket-ligand-generation': 'moleculeGenerationOrVirtualScreening',
   docking_scoring: 'molecularDockingAndAffinityPrediction',
   docking: 'molecularDockingAndAffinityPrediction',
   affinity_prediction: 'molecularDockingAndAffinityPrediction',

@@ -2024,7 +2024,7 @@ export default {
       pocketRadius: 'Pocket radius (Å)',
       device: 'Compute device',
       deviceAuto: 'Auto',
-      paramHint: 'Count, pocket center and radius are passed directly to Pocket2Mol; the center comes from the selected pocket.',
+      paramHint: 'Parameters and the selected pocket center are passed directly to {model}.',
       pocketSummary: 'Selected pocket',
       pocketLabel: 'Pocket',
       pocketCenter: 'Pocket center',
@@ -3794,7 +3794,7 @@ export default {
       n_steps: 'Diffusion sampling steps; higher values usually improve refinement but take longer.',
       sampler: 'Diffusion sampler to use.',
       sampling_noise: 'Sampling noise controls output diversity.',
-      molecule_size: 'Use Auto or a range preset, or provide a model-specific custom value.',
+      molecule_size: 'Leave blank for pocket-adaptive, or enter 25 / uniform_15_30.',
       atoms_to_dock: '0-based atom indices; empty docks the whole ligand.',
       fragment_sdf: 'Supports SDF, MOL, MOL2, or PDB structure files.'
     },

@@ -2013,7 +2013,7 @@ export default {
       pocketRadius: '口袋半径 (Å)',
       device: '计算设备',
       deviceAuto: '自动',
-      paramHint: '生成数量、口袋中心与半径会直接传给 Pocket2Mol；口袋中心取自当前选定的口袋。',
+      paramHint: '生成参数与选定口袋中心会直接传给 {model}。',
       pocketSummary: '当前口袋',
       pocketLabel: '口袋',
       pocketCenter: '口袋中心',
@@ -2072,7 +2072,7 @@ export default {
         fragment: '以已上传片段为起点扩展或连接分子。',
         dock: '对接完整配体，或指定原子进行局部对接。'
       },
-      sizePreset: { auto: '自动', small: '小型 12–20', medium: '中型 20–30', large: '大型 30–40' }
+      sizePreset: { auto: '自适应', small: '小型 12–20', medium: '中型 20–30', large: '大型 30–40' }
     },
     presets: {
       title: '参数预设',
@@ -3770,7 +3770,7 @@ export default {
       n_steps: '扩散采样步数，越高通常越精细但耗时更长。',
       sampler: '选择扩散采样器。',
       sampling_noise: '采样噪声强度，影响结果多样性。',
-      molecule_size: '可使用自动或区间预设，也可按模型要求自定义。',
+      molecule_size: '留空按口袋自适应，或填 25 / uniform_15_30。',
       atoms_to_dock: '0-based 原子索引；留空表示整个配体。',
       fragment_sdf: '支持上传 SDF / MOL / MOL2 / PDB 结构文件。'
     },

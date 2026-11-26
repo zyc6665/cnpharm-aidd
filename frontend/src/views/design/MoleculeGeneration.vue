@@ -97,15 +97,17 @@
             class="mode-card"
             :data-testid="`molecule-mode-${mode}`"
           >
-            <strong>{{ t(`modelParams.options.${modeTitles[mode]}`) }}</strong>
-            <span>{{ t(`design.molecule.modeDescription.${mode}`) }}</span>
+            <span class="mode-card__body">
+              <strong class="mode-card__title">{{ t(`modelParams.options.${modeTitles[mode]}`) }}</strong>
+              <span class="mode-card__desc">{{ t(`design.molecule.modeDescription.${mode}`) }}</span>
+            </span>
           </a-radio-button>
         </a-radio-group>
       </section>
 
       <section v-if="needsLigandFile" class="design-section fragment-section" data-testid="molecule-fragment-section">
         <h3 class="design-section__title">{{ t('design.molecule.fragmentTitle') }}</h3>
-        <p class="param-hint">{{ t('design.molecule.fragmentHint') }}</p>
+        <p class="fragment-hint">{{ t('design.molecule.fragmentHint') }}</p>
         <div class="source-upload">
           <a-upload
             :show-upload-list="false"
@@ -213,7 +215,7 @@
           :disabled="submitting"
           :primary-keys="PRIMARY_PARAM_KEYS"
         />
-        <p class="param-hint">{{ t('design.molecule.paramHint') }}</p>
+        <p class="param-hint">{{ t('design.molecule.paramHint', { model: selectedOption?.name || 'Pocket2Mol' }) }}</p>
       </section>
 
       <div class="design-actions">
@@ -595,7 +597,13 @@
     center_x: { hidden: true },
     center_y: { hidden: true },
     center_z: { hidden: true },
-    ...(supportsGenerationMode.value ? { generation_mode: { hidden: true }, atoms_to_dock: { hidden: true } } : {})
+    ...(supportsGenerationMode.value
+      ? {
+          generation_mode: { hidden: true },
+          atoms_to_dock: { hidden: true },
+          ...(generationMode.value === 'dock' ? { molecule_size: { hidden: true } } : {})
+        }
+      : {})
   }))
 
   const activeCenter = computed(() =>
@@ -824,37 +832,68 @@
 
   .mode-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: 12px;
     width: 100%;
 
     :deep(.ant-radio-button-wrapper) {
       height: auto;
       padding: 12px 14px;
       white-space: normal;
+      text-align: left;
+      background: @bg-elevated;
       border: 1px solid @border-color;
-      border-radius: 8px;
+      border-radius: @border-radius-md;
+      transition: all @transition-fast;
 
       &::before {
         display: none;
       }
 
+      &:hover {
+        border-color: @border-color-hover;
+      }
+
       &.ant-radio-button-wrapper-checked {
-        border-color: @primary-color;
+        border-color: @accent-color;
+        background: @accent-color-light;
+        box-shadow: 0 0 0 1px @accent-color-border;
+
+        .mode-card__title {
+          color: @accent-color;
+        }
       }
     }
   }
 
-  .mode-card {
+  .mode-card__body {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    width: 100%;
+  }
 
-    span {
-      color: @text-tertiary;
-      font-size: @font-size-sm;
-      line-height: 1.5;
-    }
+  .mode-card__title {
+    display: block;
+    color: @text-primary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-semibold;
+    line-height: 1.4;
+  }
+
+  .mode-card__desc {
+    display: block;
+    color: @text-secondary;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-regular;
+    line-height: 1.5;
+  }
+
+  .fragment-hint {
+    margin: 0 0 12px;
+    color: @text-secondary;
+    font-size: @font-size-sm;
+    line-height: 1.5;
   }
 
   .fragment-presets {
