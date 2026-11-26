@@ -13,7 +13,7 @@
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.modelSelect.label') }}</h3>
-        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+        <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" :disabled="submitting" />
       </section>
 
       <section class="design-section">
@@ -79,6 +79,84 @@
               <span class="source-hint">{{ t('design.molecule.pocketFileHint') }}</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section v-if="supportsGenerationMode" class="design-section mode-section" data-testid="molecule-generation-modes">
+        <h3 class="design-section__title">{{ t('design.molecule.generationMode') }}</h3>
+        <a-radio-group
+          v-model:value="generationMode"
+          class="mode-cards"
+          :aria-label="t('design.molecule.generationMode')"
+          :disabled="submitting"
+        >
+          <a-radio-button
+            v-for="mode in generationModes"
+            :key="mode"
+            :value="mode"
+            class="mode-card"
+            :data-testid="`molecule-mode-${mode}`"
+          >
+            <strong>{{ t(`modelParams.options.${modeTitles[mode]}`) }}</strong>
+            <span>{{ t(`design.molecule.modeDescription.${mode}`) }}</span>
+          </a-radio-button>
+        </a-radio-group>
+      </section>
+
+      <section v-if="needsLigandFile" class="design-section fragment-section" data-testid="molecule-fragment-section">
+        <h3 class="design-section__title">{{ t('design.molecule.fragmentTitle') }}</h3>
+        <p class="param-hint">{{ t('design.molecule.fragmentHint') }}</p>
+        <div class="source-upload">
+          <a-upload
+            :show-upload-list="false"
+            :before-upload="handleFragmentFile"
+            :disabled="submitting"
+            accept=".sdf,.mol,.mol2,.pdb"
+            data-testid="molecule-upload-fragment"
+          >
+            <a-button size="small" :disabled="submitting">{{ t('design.molecule.chooseFile') }}</a-button>
+          </a-upload>
+          <span v-if="fragmentFile" class="source-file" data-testid="molecule-fragment-name">{{ fragmentFile.name }}</span>
+        </div>
+        <div v-if="fragmentFile && !fragmentParsing" class="fragment-preview" data-testid="molecule-fragment-preview">
+          {{ fragmentCount === null
+            ? t('design.molecule.fragmentFileReady')
+            : t('design.molecule.fragmentAtomCount', { count: fragmentCount, lastIndex: fragmentCount - 1 }) }}
+        </div>
+        <a-alert
+          v-if="fragmentIssue"
+          class="fragment-alert"
+          :type="fragmentError ? 'error' : 'warning'"
+          show-icon
+          :message="t(fragmentIssue)"
+          data-testid="molecule-fragment-required"
+        />
+        <div v-if="generationMode === 'fragment' && schema?.properties?.molecule_size" class="fragment-presets" data-testid="molecule-size-presets">
+          <span>{{ t('design.molecule.moleculeSize') }}</span>
+          <a-button
+            v-for="preset in moleculeSizePresets"
+            :key="preset.id"
+            size="small"
+            :disabled="submitting"
+            :type="(form.params.molecule_size ?? '') === preset.value ? 'primary' : 'default'"
+            :data-testid="`molecule-size-${preset.id}`"
+            @click="form.params.molecule_size = preset.value"
+          >
+            {{ t(`design.molecule.sizePreset.${preset.id}`) }}
+          </a-button>
+        </div>
+        <div v-if="generationMode === 'dock' && schema?.properties?.atoms_to_dock" class="source-field fragment-dock-field">
+          <label class="source-label" for="atoms-to-dock">{{ t('design.molecule.atomsToDock') }}</label>
+          <a-input
+            id="atoms-to-dock"
+            v-model:value="atomsToDock"
+            :disabled="submitting"
+            :status="atomsInvalid ? 'error' : undefined"
+            aria-describedby="atoms-to-dock-hint"
+            placeholder="0 1 2"
+            data-testid="molecule-atoms-to-dock"
+          />
+          <span id="atoms-to-dock-hint" class="source-hint">{{ t(atomsInvalid ? 'design.molecule.atomsToDockInvalid' : 'design.molecule.atomsToDockHint') }}</span>
         </div>
       </section>
 
@@ -268,12 +346,141 @@
   } = useModelOptions('molecule_generation', { defaultSlug: MOLECULE_GENERATION_TOOL_SLUG })
 
   const form = reactive<{ params: ParameterValues }>({ params: {} })
+  const modeTitles = {
+    denovo: 'generationModeDenovo',
+    fragment: 'generationModeFragment',
+    dock: 'generationModeDock'
+  } as const
+  type GenerationMode = keyof typeof modeTitles
+  const schema = computed(() => selectedOption.value?.parameterSchema ?? null)
+  const generationModes = computed(() => {
+    const field = schema.value?.properties?.generation_mode
+    return field
+      ? (Object.keys(modeTitles) as GenerationMode[]).filter(mode => !field.enum || field.enum.includes(mode))
+      : []
+  })
+  const supportsGenerationMode = computed(() => generationModes.value.length > 0)
+  const modeParamKeys = computed(() => supportsGenerationMode.value ? ['generation_mode', 'atoms_to_dock'] : [])
+  const generationMode = ref<GenerationMode>('denovo')
+  const fragmentFile = ref<File | null>(null)
+  const fragmentUpload = ref<File | null>(null)
+  const fragmentCount = ref<number | null>(null)
+  const fragmentParsing = ref(false)
+  const fragmentError = ref('')
+  const atomsToDock = ref('')
+  const fragmentSequence = useRequestSequence()
+  const needsLigandFile = computed(() => supportsGenerationMode.value && generationMode.value !== 'denovo')
+  const fragmentIssue = computed(() => fragmentError.value || (!fragmentFile.value ? 'design.molecule.fragmentRequired' : ''))
+  const atomsInvalid = computed(() => {
+    const value = atomsToDock.value.trim()
+    if (!value || generationMode.value !== 'dock') return false
+    if (!/^\d+(?:(?:\s*,\s*|\s+)\d+)*$/.test(value)) return true
+    const count = fragmentCount.value
+    return value.split(/[\s,]+/).some(index => !Number.isSafeInteger(Number(index)) || (count !== null && Number(index) >= count))
+  })
+  const moleculeSizePresets = [
+    { id: 'auto', value: '' },
+    { id: 'small', value: 'uniform_12_20' },
+    { id: 'medium', value: 'uniform_20_30' },
+    { id: 'large', value: 'uniform_30_40' }
+  ]
+
+  function clearFragment(): void {
+    fragmentSequence.next()
+    fragmentFile.value = null
+    fragmentUpload.value = null
+    fragmentCount.value = null
+    fragmentParsing.value = false
+    fragmentError.value = ''
+    atomsToDock.value = ''
+  }
+
+  function resetGeneration(): void {
+    generationMode.value = generationModes.value.find(mode => mode === schema.value?.properties?.generation_mode?.default)
+      ?? generationModes.value[0] ?? 'denovo'
+    clearFragment()
+  }
+
+  watch(generationMode, mode => {
+    if (mode === 'denovo') clearFragment()
+    else if (mode !== 'dock') atomsToDock.value = ''
+  }, { flush: 'sync' })
+
+  async function handleFragmentFile(file: File): Promise<false> {
+    clearFragment()
+    const seq = fragmentSequence.next()
+    fragmentFile.value = file
+    fragmentParsing.value = true
+    const extension = file.name.split('.').pop()?.toLowerCase()
+    try {
+      const text = await file.text()
+      if (!fragmentSequence.isCurrent(seq)) return false
+      const lines = text.split(/\r?\n/)
+      if (extension === 'pdb') {
+        const count = lines.filter(line => /^(ATOM|HETATM)/.test(line)).length
+        if (count > 0) {
+          fragmentCount.value = count
+          fragmentUpload.value = file
+        } else {
+          fragmentError.value = 'design.molecule.fragmentUnreadable'
+        }
+        return false
+      }
+      if (extension === 'mol2') {
+        const hasTripos = /@<TRIPOS>MOLECULE/i.test(text)
+        const atomIndex = lines.findIndex(line => line.trim().toUpperCase() === '@<TRIPOS>ATOM')
+        const nextSection = atomIndex >= 0
+          ? lines.slice(atomIndex + 1).findIndex(line => line.trim().startsWith('@<TRIPOS>'))
+          : -1
+        if (atomIndex >= 0) {
+          const slice = nextSection >= 0
+            ? lines.slice(atomIndex + 1, atomIndex + 1 + nextSection)
+            : lines.slice(atomIndex + 1)
+          const count = slice.filter(line => line.trim().length > 0).length
+          if (count > 0) fragmentCount.value = count
+        }
+        if (hasTripos) {
+          fragmentUpload.value = file
+        } else {
+          fragmentError.value = 'design.molecule.fragmentUnreadable'
+        }
+        return false
+      }
+      const countsLine = lines[3] ?? ''
+      const count = /V2000\s*$/.test(countsLine) ? Number(countsLine.slice(0, 3)) : 0
+      if (Number.isInteger(count) && count > 0) fragmentCount.value = count
+      if (extension === 'sdf' && lines.some(line => line.trim() === '$$$$')) {
+        fragmentUpload.value = file
+      } else if (extension === 'mol' && /V(?:2000|3000)\s*$/.test(countsLine) && /(?:^|\n)M  END\s*$/.test(text)) {
+        // Wrap the MOL block as a single SD record without changing bonds or atom order.
+        fragmentUpload.value = new File([`${text.trimEnd()}\n$$$$\n`], file.name.replace(/\.mol$/i, '.sdf'), {
+          type: 'chemical/x-mdl-sdfile'
+        })
+      } else {
+        fragmentError.value = 'design.molecule.fragmentUnreadable'
+      }
+    } catch {
+      if (fragmentSequence.isCurrent(seq)) fragmentError.value = 'design.molecule.fragmentUnreadable'
+    } finally {
+      if (fragmentSequence.isCurrent(seq)) fragmentParsing.value = false
+    }
+    return false
+  }
+
+  const effectiveParams = computed<ParameterValues>(() => ({
+    ...form.params,
+    ...(supportsGenerationMode.value ? { generation_mode: generationMode.value } : {}),
+    ...(generationMode.value === 'dock' && schema.value?.properties?.atoms_to_dock
+      ? { atoms_to_dock: atomsToDock.value.trim() }
+      : {})
+  }))
+  const parameterErrors = computed(() => validateParameters(schema.value, effectiveParams.value))
 
   /** 提交成功后保留在当前页展示实时进度，而不是直接把用户踢到结果页。 */
   const submittedTaskId = ref<string | null>(null)
 
   /** 常用参数展开、其余收进「高级参数」；键名不存在时分组自然为空。 */
-  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples']
+  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'n_samples', 'n_steps', 'molecule_size']
 
   const PARAM_STORAGE_PREFIX = 'design:molecule-params:'
   const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
@@ -309,7 +516,7 @@
     const storedParams: ParameterValues = {}
     for (const [key, value] of Object.entries(form.params)) {
       // 中心坐标来自当前口袋，不属于「用户配置」，不写入记忆。
-      if (key.startsWith('center_')) continue
+      if (key.startsWith('center_') || modeParamKeys.value.includes(key)) continue
       storedParams[key] = value
     }
     try {
@@ -332,7 +539,7 @@
     const allowed = new Set(Object.keys(properties))
     const next: ParameterValues = {}
     for (const [key, value] of Object.entries(values)) {
-      if (key.startsWith('center_')) continue
+      if (key.startsWith('center_') || modeParamKeys.value.includes(key)) continue
       if (allowed.size > 0 && !allowed.has(key)) continue
       next[key] = value
     }
@@ -343,6 +550,7 @@
     const hints: ParameterValues = {}
     const properties = selectedOption.value?.parameterSchema?.properties ?? {}
     for (const key of Object.keys(properties)) {
+      if (modeParamKeys.value.includes(key)) continue
       const raw = route.query[key]
       const value = Array.isArray(raw) ? raw[0] : raw
       if (typeof value !== 'string' || value.trim() === '') continue
@@ -353,7 +561,7 @@
   }
 
   function applyDefaults(option: { parameterSchema: ToolSchema | null } | null): void {
-    const defaults = buildDefaultValues(option?.parameterSchema ?? null)
+    const defaults = buildDefaultValues(option?.parameterSchema ?? null, { omit: modeParamKeys.value })
     const stored = readStoredParams()
     const restored = stored ? schemaOnly(stored.params) : {}
     const explicit = defaultProjectId.value
@@ -363,7 +571,7 @@
     }
     if (explicit) uploadProjectId.value = explicit
     form.params = { ...defaults, ...restored, ...queryParamHints() }
-
+    resetGeneration()
   }
 
   function resetParams(): void {
@@ -374,7 +582,8 @@
         // ignore
       }
     }
-    form.params = buildDefaultValues(selectedOption.value?.parameterSchema ?? null)
+    form.params = buildDefaultValues(schema.value, { omit: modeParamKeys.value })
+    resetGeneration()
     message.success(t('design.molecule.paramsReset'))
   }
 
@@ -382,11 +591,12 @@
     form.params = { ...form.params, ...schemaOnly(params) }
   }
 
-  const hiddenParams: Record<string, ParameterFieldOverride> = {
+  const hiddenParams = computed<Record<string, ParameterFieldOverride>>(() => ({
     center_x: { hidden: true },
     center_y: { hidden: true },
-    center_z: { hidden: true }
-  }
+    center_z: { hidden: true },
+    ...(supportsGenerationMode.value ? { generation_mode: { hidden: true }, atoms_to_dock: { hidden: true } } : {})
+  }))
 
   const activeCenter = computed(() =>
     sourceMode.value === 'project' ? pocketSelection.value?.center ?? null : uploadCenter.value
@@ -414,10 +624,13 @@
       Boolean(
         resolvedTool.value &&
           (sourceMode.value !== 'upload' || uploadProjectId.value) &&
+          !resolving.value &&
           !pocketParsing.value &&
+          (!needsLigandFile.value || Boolean(fragmentUpload.value)) &&
+          !atomsInvalid.value &&
           structureReady.value &&
           hasCenter.value &&
-          validateParameters(selectedOption.value?.parameterSchema ?? null, form.params).length === 0
+          parameterErrors.value.length === 0
       )
   )
 
@@ -475,6 +688,8 @@
   }
 
   function validate(): string | null {
+    if (needsLigandFile.value && !fragmentUpload.value) return t(fragmentIssue.value || 'design.molecule.fragmentRequired')
+    if (atomsInvalid.value) return t('design.molecule.atomsToDockInvalid')
     if (!structureReady.value) {
       return t('design.molecule.pocketMissingFile')
     }
@@ -484,8 +699,7 @@
     if (!hasCenter.value) {
       return t('design.molecule.pocketMissingCenter')
     }
-    const errors = validateParameters(selectedOption.value?.parameterSchema ?? null, form.params)
-    if (errors.length > 0) return t('design.molecule.invalidNum')
+    if (parameterErrors.value.length > 0) return t('design.molecule.invalidNum')
     return null
   }
 
@@ -513,7 +727,7 @@
   }
 
   async function handleSubmit(): Promise<void> {
-    if (submitting.value || pocketParsing.value) return
+    if (submitting.value || resolving.value || pocketParsing.value || fragmentParsing.value) return
     if (!resolvedTool.value) {
       message.warning(t('design.molecule.selectPocketFirst'))
       return
@@ -525,27 +739,28 @@
     }
 
     const center = activeCenter.value
-    const schema = selectedOption.value?.parameterSchema ?? null
     const projectId = sourceMode.value === 'upload' ? uploadProjectId.value : pocketSelection.value?.projectId ?? ''
-    const structureSnapshot = structureFile.value
     const snapshot = {
       projectId,
       toolId: resolvedTool.value.tool.id,
       toolVersionId: resolvedTool.value.version.id,
       params: {
-        ...normalizeParameters(schema, form.params),
+        ...normalizeParameters(schema.value, effectiveParams.value),
         center_x: toNumber(center?.x, 0),
         center_y: toNumber(center?.y, 0),
         center_z: toNumber(center?.z, 0)
       },
-      structureFile: structureSnapshot,
+      structureFile: sourceMode.value === 'upload' ? structureFile.value : null,
+      proteinFileId: pocketSelection.value?.structureFileId ?? '',
+      fragmentFile: needsLigandFile.value ? fragmentUpload.value : null,
       name: t('design.molecule.taskName')
     }
 
     submitting.value = true
     try {
-      let proteinPdbFileId = pocketSelection.value?.structureFileId ?? ''
-      if (sourceMode.value === 'upload' && snapshot.structureFile) {
+      let proteinPdbFileId = snapshot.proteinFileId
+      const fragmentFileId = snapshot.fragmentFile ? (await uploadFile(snapshot.fragmentFile)).data.id : ''
+      if (snapshot.structureFile) {
         proteinPdbFileId = (await uploadFile(snapshot.structureFile)).data.id
         if (snapshot.projectId) {
           void uploadProjectArtifact(snapshot.projectId, {
@@ -559,14 +774,18 @@
           })
         }
       }
-      const response = await submitDesignTask({
+      const taskInput = {
         name: snapshot.name,
         projectId: snapshot.projectId,
         toolId: snapshot.toolId,
         toolVersionId: snapshot.toolVersionId,
         params: snapshot.params,
         standardInputUploads: { protein_pdb: proteinPdbFileId }
-      })
+      }
+      const response = await submitDesignTask(fragmentFileId ? {
+        ...taskInput,
+        standardInputUploads: { ...taskInput.standardInputUploads, fragment_sdf: fragmentFileId }
+      } : taskInput)
       persistParams()
       submittedTaskId.value = response.data.id
       message.success(t('design.molecule.submittedStay'))
@@ -602,6 +821,60 @@
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
+
+  .mode-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    gap: 8px;
+    width: 100%;
+
+    :deep(.ant-radio-button-wrapper) {
+      height: auto;
+      padding: 12px 14px;
+      white-space: normal;
+      border: 1px solid @border-color;
+      border-radius: 8px;
+
+      &::before {
+        display: none;
+      }
+
+      &.ant-radio-button-wrapper-checked {
+        border-color: @primary-color;
+      }
+    }
+  }
+
+  .mode-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    span {
+      color: @text-tertiary;
+      font-size: @font-size-sm;
+      line-height: 1.5;
+    }
+  }
+
+  .fragment-presets {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .fragment-alert,
+  .fragment-dock-field {
+    margin-top: 12px;
+  }
+
+  .fragment-preview {
+    margin-top: 8px;
+    color: @text-secondary;
+    font-size: @font-size-sm;
+  }
 
   .design-page {
     max-width: @page-max-width;

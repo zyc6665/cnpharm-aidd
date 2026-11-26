@@ -2068,7 +2068,24 @@ export default {
       pocketPreviewUnsupportedFormat:
         'This structure format cannot be previewed here (PDB and CIF are supported)',
       archiveStructureFailed:
-        'Structure uploaded for this task, but archiving it to the project workspace failed'
+        'Structure uploaded for this task, but archiving it to the project workspace failed',
+      generationMode: 'Generation mode',
+      fragmentTitle: 'Fragment / ligand structure',
+      fragmentHint: 'Select a 3D SDF, MOL, MOL2, or PDB fragment/ligand file; the model adapter normalizes formats automatically.',
+      fragmentRequired: 'Select a fragment or ligand structure file to continue.',
+      fragmentAtomCount: 'First structure: {count} atoms (indices 0–{lastIndex})',
+      fragmentFileReady: 'Atom count unavailable.',
+      fragmentUnreadable: 'Could not read a supported structure. Select a valid SDF, MOL, MOL2, or PDB file.',
+      moleculeSize: 'Molecule size presets',
+      atomsToDock: 'Atoms to dock',
+      atomsToDockHint: 'Use zero-based indices separated by commas or spaces. Leave blank to dock the whole ligand.',
+      atomsToDockInvalid: 'Use non-negative integer indices within the displayed range, separated by commas or spaces.',
+      modeDescription: {
+        denovo: 'Generate candidate molecules from scratch in the pocket.',
+        fragment: 'Grow or link molecules starting from the uploaded fragment.',
+        dock: 'Dock the whole ligand or select atoms for partial docking.'
+      },
+      sizePreset: { auto: 'Auto', small: 'Small 12–20', medium: 'Medium 20–30', large: 'Large 30–40' }
     },
     presets: {
       title: 'Parameter presets',
@@ -3740,7 +3757,15 @@ export default {
       model_choice: 'Pocket model',
       center_x: 'Pocket center X',
       center_y: 'Pocket center Y',
-      center_z: 'Pocket center Z'
+      center_z: 'Pocket center Z',
+      generation_mode: 'Generation mode',
+      n_samples: 'Number of molecules',
+      n_steps: 'Sampling steps',
+      sampler: 'Sampler',
+      sampling_noise: 'Sampling noise',
+      molecule_size: 'Molecule size',
+      atoms_to_dock: 'Atoms to dock',
+      fragment_sdf: 'Fragment / ligand structure',
     },
     hints: {
       sequence: 'Accepts multi-line or FASTA format; length must satisfy the model requirements.',
@@ -3763,10 +3788,21 @@ export default {
       model_choice: 'Auto-select or specify a pocket detection model.',
       center_x: 'X coordinate of the pocket center.',
       center_y: 'Y coordinate of the pocket center.',
-      center_z: 'Z coordinate of the pocket center.'
+      center_z: 'Z coordinate of the pocket center.',
+      generation_mode: 'Choose de novo, fragment growing, or docking mode.',
+      n_samples: 'Number of molecules to generate.',
+      n_steps: 'Diffusion sampling steps; higher values usually improve refinement but take longer.',
+      sampler: 'Diffusion sampler to use.',
+      sampling_noise: 'Sampling noise controls output diversity.',
+      molecule_size: 'Use Auto or a range preset, or provide a model-specific custom value.',
+      atoms_to_dock: '0-based atom indices; empty docks the whole ligand.',
+      fragment_sdf: 'Supports SDF, MOL, MOL2, or PDB structure files.'
     },
     options: {
       deviceAuto: 'Auto',
+      generationModeDenovo: 'De novo design',
+      generationModeFragment: 'Fragment growing & linking',
+      generationModeDock: 'Docking & partial docking',
       deviceCpu: 'CPU',
       deviceGpu: 'GPU',
       waterTip3p: 'TIP3P',
