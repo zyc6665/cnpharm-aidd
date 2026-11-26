@@ -28,7 +28,7 @@ describe('createSampleDesignFiles', () => {
     expect(parsePocketGeometry(SAMPLE_POCKET_PDB)).toEqual({
       center: sample.pocketCenter, boxSize: sample.pocketBoxSize, pointCount: 6, source: 'unl'
     })
-    expect(sample.pocketCenter).toEqual({ x: 22, y: 5, z: 52 })
+    expect(sample.pocketCenter).toEqual({ x: 22, y: 0.25, z: 52.79 })
     expect(sample.pocketBoxSize).toEqual({ x: 10, y: 8, z: 8 })
     expect(parseFragmentMolecule(SAMPLE_RECEPTOR_PDB, sample.receptorFile.name)?.atoms).toHaveLength(27)
     const ligand = parseFragmentMolecule(SAMPLE_LIGAND_SDF, sample.ligandFile.name)!

@@ -11,7 +11,7 @@ const mount = (component: typeof MoleculeDesignContextPanel, options: { props?: 
     ...(options as Record<string, unknown>),
     global: {
       stubs: {
-        MoleculeViewer: { props: ['scene', 'voxelGrid'], template: '<div data-testid="mock-viewer" />' },
+        MoleculeViewer: { props: ['scene', 'voxelGrid', 'mode'], template: '<div data-testid="mock-viewer" :data-mode="mode" />' },
         ...(options.global?.stubs ?? {})
       }
     }
@@ -278,5 +278,116 @@ describe('MoleculeDesignContextPanel', () => {
     })
 
     expect(wrapper.exists()).toBe(true)
+  })
+
+  it('passes protein mode to MoleculeViewer when no ligand present', () => {
+    const mockScene = {
+      entries: [
+        {
+          key: 'test-receptor',
+          url: '/test.pdb',
+          label: 'Test Receptor',
+          source: 'input' as const,
+          role: 'receptor' as const,
+          format: 'pdb' as const,
+          extension: '.pdb'
+        }
+      ],
+      inputEntries: [],
+      outputEntries: [],
+      supportedOutputFiles: [],
+      unsupportedOutputFiles: [],
+      hasRenderableOutput: true,
+      selectedOutputKey: 'test-receptor'
+    }
+
+    const wrapper = mount(MoleculeDesignContextPanel, {
+      props: {
+        ...defaultProps,
+        previewScene: mockScene
+      }
+    })
+
+    const mockViewer = wrapper.find('[data-testid="mock-viewer"]')
+    expect(mockViewer.exists()).toBe(true)
+    expect(mockViewer.attributes('data-mode')).toBe('protein')
+    expect(wrapper.find('.preview-mode-badge').text()).toBe('受体蛋白')
+  })
+
+  it('passes docking mode to MoleculeViewer when receptor and ligand present', () => {
+    const mockScene = {
+      entries: [
+        {
+          key: 'test-ligand',
+          url: '/ligand.sdf',
+          label: 'Test Ligand',
+          source: 'input' as const,
+          role: 'ligand' as const,
+          format: 'sdf' as const,
+          extension: '.sdf'
+        },
+        {
+          key: 'test-receptor',
+          url: '/test.pdb',
+          label: 'Test Receptor',
+          source: 'input' as const,
+          role: 'receptor' as const,
+          format: 'pdb' as const,
+          extension: '.pdb'
+        }
+      ],
+      inputEntries: [],
+      outputEntries: [],
+      supportedOutputFiles: [],
+      unsupportedOutputFiles: [],
+      hasRenderableOutput: true,
+      selectedOutputKey: 'test-ligand'
+    }
+
+    const wrapper = mount(MoleculeDesignContextPanel, {
+      props: {
+        ...defaultProps,
+        previewScene: mockScene
+      }
+    })
+
+    const mockViewer = wrapper.find('[data-testid="mock-viewer"]')
+    expect(mockViewer.exists()).toBe(true)
+    expect(mockViewer.attributes('data-mode')).toBe('docking')
+    expect(wrapper.find('.preview-mode-badge').text()).toBe('复合物预览')
+  })
+
+  it('passes molecule mode to MoleculeViewer when only ligand present', () => {
+    const mockScene = {
+      entries: [
+        {
+          key: 'test-ligand',
+          url: '/ligand.sdf',
+          label: 'Test Ligand',
+          source: 'input' as const,
+          role: 'ligand' as const,
+          format: 'sdf' as const,
+          extension: '.sdf'
+        }
+      ],
+      inputEntries: [],
+      outputEntries: [],
+      supportedOutputFiles: [],
+      unsupportedOutputFiles: [],
+      hasRenderableOutput: true,
+      selectedOutputKey: 'test-ligand'
+    }
+
+    const wrapper = mount(MoleculeDesignContextPanel, {
+      props: {
+        ...defaultProps,
+        previewScene: mockScene
+      }
+    })
+
+    const mockViewer = wrapper.find('[data-testid="mock-viewer"]')
+    expect(mockViewer.exists()).toBe(true)
+    expect(mockViewer.attributes('data-mode')).toBe('molecule')
+    expect(wrapper.find('.preview-mode-badge').exists()).toBe(false)
   })
 })

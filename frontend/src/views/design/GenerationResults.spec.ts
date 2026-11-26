@@ -54,6 +54,8 @@ vi.mock('@ant-design/icons-vue', () => ({
 import { message } from 'ant-design-vue'
 import { getDesignGenerationResult, findMoleculeTableArtifact, loadDesignTable } from '@/api/design'
 import { uploadFile } from '@/api/files'
+import { getTaskDetail } from '@/api/tasks'
+import { fetchProtectedFileText, saveBlobAsFile } from '@/utils/protected-file-access'
 import GenerationResults from './GenerationResults.vue'
 import type { DesignTable } from '@/types/design'
 
@@ -110,7 +112,7 @@ const stubs = {
   TaskContextBar: true,
   ResultDisclaimer: true,
   Smiles2DCell: { props: ['smiles'], template: '<div class="smiles-stub" />' },
-  MoleculeViewer: true,
+  MoleculeViewer: { name: 'MoleculeViewer', props: ['scene', 'mode'], template: '<div />' },
   DruglikenessRadar: {
     props: ['properties', 'size'],
     template: '<div data-testid="druglikeness-radar" />',
@@ -197,12 +199,97 @@ describe('GenerationResults', () => {
     vi.clearAllMocks()
     push.mockReset()
     window.localStorage.clear()
+    vi.mocked(getTaskDetail).mockRejectedValue(new Error('no task detail in unit test'))
     vi.mocked(getDesignGenerationResult).mockResolvedValue({
       status: 'success',
       project_id: 'p1',
       outputs: [],
     } as never)
     mockTable(smilesOnlyTable)
+  })
+
+  describe('LDDM standard artifacts', () => {
+    const ligandUrl = '/api/v1/artifacts/ligands/versions/v1/files/structure_file/download'
+    const sdfRecord = (name: string) => `${name}\n  LDDM\n\n  0  0  0  0  0  0  0  0  0  0999 V2000\nM  END\n$$$$\n`
+    const scoredTable: DesignTable = {
+      columns: ['smiles', 'mol_index', 'sa_score', 'qed', 'logp', 'mw', 'score'].map(key => ({
+        key, title: key, numeric: key !== 'smiles',
+      })),
+      rows: [
+        { __rowKey: '0', smiles: 'CCO', mol_index: '1', sa_score: '1.5', qed: '0.45', logp: '0.2', mw: '46', score: '0.5' },
+        { __rowKey: '1', smiles: 'CCN', mol_index: '3', sa_score: '1.2', qed: '0.42', logp: '0.1', mw: '45', score: '0.7' },
+      ],
+    }
+
+    beforeEach(() => {
+      mockTable(scoredTable)
+      vi.mocked(getDesignGenerationResult).mockResolvedValue({
+        status: 'success',
+        project_id: 'p1',
+        tool_slug: 'lddm-pocket-ligand-generation',
+        outputs: [
+          { id: 'molecules', version_id: 'v1', semantic_type: 'molecule_table@1', filename: 'molecules.csv' },
+          { id: 'report', version_id: 'v1', semantic_type: 'run_report@1', filename: 'report.json' },
+          { id: 'ligands', version_id: 'v1', semantic_type: 'ligand_structure@1', filename: 'ligands.sdf' },
+        ],
+      } as never)
+      vi.mocked(getTaskDetail).mockResolvedValue({
+        data: {
+          input_snapshots: [{
+            inputRole: 'RECEPTOR', fileId: 'receptor', detail: { slot: 'protein_pdb', filename: 'protein.pdb' },
+          }],
+        },
+      } as never)
+      vi.mocked(fetchProtectedFileText).mockResolvedValue(sdfRecord('pose 1') + sdfRecord('pose 3'))
+    })
+
+    it('previews and exports the selected LDDM pose after sorting by the generation score', async () => {
+      const wrapper = await mountResults()
+
+      expect(wrapper.get('[data-testid="viewer-smiles"]').text()).toContain('CCN')
+      expect(wrapper.get('[data-testid="molecule-table"]').text()).toContain('sa_score')
+      const viewer = wrapper.getComponent({ name: 'MoleculeViewer' })
+      expect(viewer.props('mode')).toBe('docking')
+      expect(viewer.props('scene').entries).toEqual([
+        expect.objectContaining({ role: 'receptor', url: '/api/v1/files/receptor/download' }),
+        expect.objectContaining({ role: 'ligand', url: ligandUrl, sdfRecordIndex: 1 }),
+      ])
+
+      await wrapper.get('[data-testid="molecule-row"] input[type="checkbox"]').setValue(true)
+      await wrapper.get('[data-testid="results-export-sdf"]').trigger('click')
+      await flushPromises()
+
+      expect(fetchProtectedFileText).toHaveBeenCalledExactlyOnceWith(ligandUrl)
+      expect(saveBlobAsFile).toHaveBeenCalledWith(sdfRecord('pose 3'), 'molecules-task-1.sdf', 'chemical/x-mdl-sdfile')
+    })
+
+    it('shows the 2D structure when the artifact record count disagrees with the table', async () => {
+      vi.mocked(fetchProtectedFileText).mockResolvedValue(sdfRecord('pose 1'))
+      const wrapper = await mountResults()
+
+      const fallback = wrapper.get('[data-testid="results-viewer-fallback"]')
+      expect(fallback.find('.smiles-stub').exists()).toBe(true)
+      expect(fallback.text()).toContain(t('design.results.noMatching3d'))
+      expect(wrapper.findComponent({ name: 'MoleculeViewer' }).exists()).toBe(false)
+    })
+
+    it('matches a tagged artifact pose when the CSV has no model indices', async () => {
+      mockTable(smilesOnlyTable)
+      const taggedPose = sdfRecord('pose 1').replace('$$$$', '> <SMILES>\nCCO\n\n$$$$')
+      vi.mocked(fetchProtectedFileText).mockResolvedValue(taggedPose)
+      const wrapper = await mountResults()
+
+      expect(wrapper.getComponent({ name: 'MoleculeViewer' }).props('scene').entries[1]).toEqual(
+        expect.objectContaining({ url: ligandUrl, sdfRecordIndex: 0 })
+      )
+    })
+
+    it('opens a fresh molecule generation form in the result project', async () => {
+      const wrapper = await mountResults()
+      await wrapper.get('[data-testid="results-new-generation"]').trigger('click')
+
+      expect(push).toHaveBeenCalledWith({ name: 'MoleculeGeneration', query: { project_id: 'p1' } })
+    })
   })
 
   describe('SMILES-only results', () => {

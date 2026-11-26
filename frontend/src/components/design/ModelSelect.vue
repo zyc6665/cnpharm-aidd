@@ -93,6 +93,11 @@ const MODEL_META_DEFINITIONS: ModelMetaDefinition[] = [
     durationKey: 'design.modelSelect.meta.boltz2.duration',
     scenarioKey: 'design.modelSelect.meta.boltz2.scenario',
   },
+  {
+    prefix: 'lddm',
+    durationKey: 'design.modelSelect.meta.lddm.duration',
+    scenarioKey: 'design.modelSelect.meta.lddm.scenario',
+  },
 ]
 
 const selectedOption = computed(

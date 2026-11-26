@@ -23,12 +23,17 @@
 
     <!-- Live 3D Protein Preview -->
     <section class="preview-section">
-      <div class="section-title">{{ previewTitle }}</div>
+      <div class="section-title">
+        {{ previewTitle }}
+        <span v-if="previewScene && previewModeBadge" class="preview-mode-badge">
+          {{ previewModeBadge }}
+        </span>
+      </div>
       <div v-if="previewScene" class="preview-viewer">
         <MoleculeViewer
           :scene="previewScene"
           variant="compact"
-          mode="protein"
+          :mode="previewViewerMode"
           :allow-native-fullscreen="false"
         />
       </div>
@@ -147,6 +152,29 @@ const { t, te } = useI18n()
 const safeT = (key: string, fallback: string): string => {
   return typeof te === 'function' && te(key) ? t(key) : fallback
 }
+
+const previewViewerMode = computed(() => {
+  if (!props.previewScene) return 'protein'
+  const hasLigand = props.previewScene.entries.some(e => e.role === 'ligand')
+  const hasReceptor = props.previewScene.entries.some(e => e.role === 'receptor')
+  const hasPocket = props.previewScene.entries.some(e => e.role === 'pocket')
+  if (hasReceptor && hasLigand) return 'docking'
+  if (hasLigand && !hasReceptor) return 'molecule'
+  if (hasPocket) return 'pocket'
+  return 'protein'
+})
+
+const previewModeBadge = computed(() => {
+  if (!props.previewScene) return null
+  const mode = previewViewerMode.value
+  if (mode === 'docking') {
+    return safeT('design.molecule.context.previewComplexBadge', '复合物预览')
+  }
+  if (mode === 'protein' || mode === 'pocket') {
+    return safeT('design.molecule.context.previewReceptorBadge', '受体蛋白')
+  }
+  return null
+})
 
 const previewTitle = computed(() => safeT('design.molecule.context.previewTitle', '蛋白结构三维视图'))
 const emptyPreviewText = computed(() =>
@@ -296,6 +324,25 @@ const handleMissingItemClick = (item: MissingItem) => {
 
 // Preview Section
 .preview-section {
+  .section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-xs;
+  }
+
+  .preview-mode-badge {
+    font-size: @font-size-xs;
+    font-weight: @font-weight-medium;
+    text-transform: none;
+    letter-spacing: normal;
+    padding: 2px @spacing-xs;
+    border-radius: @border-radius-round;
+    background: @bg-hover;
+    border: 1px solid @border-color;
+    color: @text-secondary;
+  }
+
   .preview-viewer {
     border: 1px solid @border-color;
     border-radius: @border-radius-sm;

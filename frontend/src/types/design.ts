@@ -13,6 +13,13 @@ import type { AxisVector } from '@/types/targets'
 
 /** P-15 分子生成工具 slug（契约冻结，不可改）。 */
 export const MOLECULE_GENERATION_TOOL_SLUG = 'pocket2mol-pocket-ligand-generation'
+/** LDDM 分子生成工具 slug（契约冻结，不可改）。 */
+export const LDDM_GENERATION_TOOL_SLUG = 'lddm-pocket-ligand-generation'
+/** 所有分子生成工具 slug 集合。 */
+export const MOLECULE_GENERATION_TOOL_SLUGS = [
+  MOLECULE_GENERATION_TOOL_SLUG,
+  LDDM_GENERATION_TOOL_SLUG,
+] as const
 /** P-16 多肽设计工具 slug（契约冻结，不可改）。 */
 export const PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-prediction'
 /** 结构预测工具 slug（对齐后端 `app/services/domain_targets.py` 的 STRUCTURE_PREDICT_TOOL_SLUGS）。 */

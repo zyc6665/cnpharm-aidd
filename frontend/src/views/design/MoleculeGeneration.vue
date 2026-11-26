@@ -243,7 +243,7 @@
           :disabled="submitting"
           :primary-keys="PRIMARY_PARAM_KEYS"
         />
-        <p class="param-hint">{{ t('design.molecule.paramHint', { model: selectedOption?.name || 'Pocket2Mol' }) }}</p>
+        <p class="param-hint">{{ t('design.molecule.paramHint', { model: selectedOption?.name || selectedSlug || 'Pocket2Mol' }) }}</p>
       </section>
 
       <div class="design-actions">
@@ -378,6 +378,23 @@
   const pocketParsing = ref(false)
   const pocketSequence = useRequestSequence()
   let parsedPocketFile: File | null = null
+
+  const uploadStructureUrl = ref<string | null>(null)
+  const uploadLigandUrl = ref<string | null>(null)
+
+  function revokeUploadUrl(): void {
+    if (uploadStructureUrl.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(uploadStructureUrl.value)
+    }
+    uploadStructureUrl.value = null
+  }
+
+  function revokeLigandUrl(): void {
+    if (uploadLigandUrl.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(uploadLigandUrl.value)
+    }
+    uploadLigandUrl.value = null
+  }
 
   const projectOptions = computed(() =>
     projects.value.map((project) => ({ label: project.name, value: project.id }))
@@ -960,68 +977,95 @@
     message.success(t('design.molecule.sampleLoaded'))
   }
 
-  let uploadStructureUrl = ''
-  function revokeUploadUrl(): void {
-    if (uploadStructureUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(uploadStructureUrl)
-    }
-    uploadStructureUrl = ''
-  }
-
   watch(structureFile, file => {
     revokeUploadUrl()
     if (file && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-      uploadStructureUrl = URL.createObjectURL(file)
+      uploadStructureUrl.value = URL.createObjectURL(file)
     }
   })
 
-  onBeforeUnmount(() => revokeUploadUrl())
+  watch(fragmentUpload, file => {
+    revokeLigandUrl()
+    if (file && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      uploadLigandUrl.value = URL.createObjectURL(file)
+    }
+  })
+
+  onBeforeUnmount(() => {
+    revokeUploadUrl()
+    revokeLigandUrl()
+  })
 
   const contextPreviewScene = computed<VisualizationScene | null>(() => {
+    const entries: VisualizationScene['entries'] = []
+
+    // Build receptor entry when available
+    let receptorEntry: VisualizationScene['entries'][number] | null = null
     if (sourceMode.value === 'project') {
       const fileId = pocketSelection.value?.structureFileId
-      if (!fileId) return null
-      const urn = (pocketSelection.value?.structureUrn ?? '').toLowerCase()
-      const isCif = urn.endsWith('.cif') || urn.endsWith('.mmcif')
-      const entry = {
-        key: `context-pocket-${fileId}`,
-        url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
-        label: pocketSelection.value?.pocketLabel || 'receptor',
+      if (fileId) {
+        const urn = (pocketSelection.value?.structureUrn ?? '').toLowerCase()
+        const isCif = urn.endsWith('.cif') || urn.endsWith('.mmcif')
+        receptorEntry = {
+          key: `context-pocket-${fileId}`,
+          url: `/api/v1/files/${encodeURIComponent(fileId)}/download`,
+          label: pocketSelection.value?.pocketLabel || 'receptor',
+          source: 'input' as const,
+          role: 'receptor' as const,
+          format: isCif ? ('mmcif' as const) : ('pdb' as const),
+          extension: isCif ? '.cif' : '.pdb'
+        }
+      }
+    } else if (structureFile.value && uploadStructureUrl.value) {
+      const lower = structureFile.value.name.toLowerCase()
+      const isCif = lower.endsWith('.cif') || lower.endsWith('.mmcif')
+      receptorEntry = {
+        key: `context-upload-${structureFile.value.name}`,
+        url: uploadStructureUrl.value,
+        label: structureFile.value.name,
         source: 'input' as const,
         role: 'receptor' as const,
         format: isCif ? ('mmcif' as const) : ('pdb' as const),
         extension: isCif ? '.cif' : '.pdb'
       }
-      return {
-        entries: [entry],
-        inputEntries: [entry],
-        outputEntries: [],
-        supportedOutputFiles: [],
-        unsupportedOutputFiles: [],
-        hasRenderableOutput: true,
-        selectedOutputKey: entry.key
+    }
+
+    if (receptorEntry) entries.push(receptorEntry)
+
+    // Build ligand entry when fragment uploaded
+    if (needsLigandFile.value && fragmentUpload.value && uploadLigandUrl.value) {
+      const lower = fragmentUpload.value.name.toLowerCase()
+      let format: 'pdb' | 'sdf' | 'mol2' = 'sdf'
+      let extension = '.sdf'
+      if (lower.endsWith('.pdb')) {
+        format = 'pdb'
+        extension = '.pdb'
+      } else if (lower.endsWith('.mol2')) {
+        format = 'mol2'
+        extension = '.mol2'
       }
+      const ligandEntry = {
+        key: `context-ligand-${fragmentUpload.value.name}`,
+        url: uploadLigandUrl.value,
+        label: fragmentUpload.value.name,
+        source: 'input' as const,
+        role: 'ligand' as const,
+        format,
+        extension
+      }
+      entries.push(ligandEntry)
     }
-    if (!structureFile.value || !uploadStructureUrl) return null
-    const lower = structureFile.value.name.toLowerCase()
-    const isCif = lower.endsWith('.cif') || lower.endsWith('.mmcif')
-    const entry = {
-      key: `context-upload-${structureFile.value.name}`,
-      url: uploadStructureUrl,
-      label: structureFile.value.name,
-      source: 'input' as const,
-      role: 'receptor' as const,
-      format: isCif ? ('mmcif' as const) : ('pdb' as const),
-      extension: isCif ? '.cif' : '.pdb'
-    }
+
+    if (entries.length === 0) return null
+
     return {
-      entries: [entry],
-      inputEntries: [entry],
+      entries,
+      inputEntries: entries,
       outputEntries: [],
       supportedOutputFiles: [],
       unsupportedOutputFiles: [],
       hasRenderableOutput: true,
-      selectedOutputKey: entry.key
+      selectedOutputKey: entries[0]?.key ?? ''
     }
   })
 

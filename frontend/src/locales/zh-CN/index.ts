@@ -1940,6 +1940,10 @@ export default {
           duration: '约 10 ~ 30 分钟',
           scenario: '口袋条件的从头分子生成，适合已知结合位点的批量探索'
         },
+        lddm: {
+          duration: '约 1 ~ 5 分钟',
+          scenario: '支持从头生成、固定片段生长/连接与局部或全配体对接，贴合药物化学先导优化'
+        },
         diffdock: {
           duration: '约 1 ~ 5 分钟',
           scenario: '蛋白-配体对接，输出候选结合姿态与打分'
@@ -2008,7 +2012,7 @@ export default {
     molecule: {
       title: '分子生成',
       subtitle: '基于选定口袋批量生成候选分子，产出可直接进入下一步评估的候选集',
-      toolMissing: '未找到分子生成工具（pocket2mol-pocket-ligand-generation），请先在工具库发布该工具包',
+      toolMissing: '未找到分子生成工具（Pocket2Mol / LDDM），请先在工具库发布相应工具包',
       numSamples: '生成数量',
       pocketRadius: '口袋半径 (Å)',
       device: '计算设备',
@@ -2108,6 +2112,8 @@ export default {
         stepInput: '蛋白与口袋',
         stepFragmentParams: '片段与参数',
         previewTitle: '蛋白结构三维视图',
+        previewComplexBadge: '复合物预览',
+        previewReceptorBadge: '受体蛋白',
         previewPlaceholder: '选定项目结构或上传蛋白 PDB 后，这里会实时显示蛋白质三维结构。',
         readinessReady: '前置项已就绪，可提交任务',
         readinessMissing: '完成以下项后即可提交：',
@@ -2207,6 +2213,7 @@ export default {
     results: {
       title: '生成结果',
       subtitle: '查看生成分子的 2D 结构、评分与理化性质',
+      newGeneration: '新建分子生成任务',
       viewTask: '查看任务',
       saveToSet: '保存至候选集合',
       loadFailed: '结果加载失败，请稍后重试',

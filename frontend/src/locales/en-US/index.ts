@@ -1951,6 +1951,10 @@ export default {
           duration: 'About 10–30 min',
           scenario: 'Pocket-conditioned de novo generation for batch exploration of a known binding site'
         },
+        lddm: {
+          duration: 'About 1–5 min',
+          scenario: 'Supports de novo design, fragment growing/linking, and whole/local ligand docking for lead optimization'
+        },
         diffdock: {
           duration: 'About 1–5 min',
           scenario: 'Protein–ligand docking to produce candidate binding poses and scores'
@@ -2019,7 +2023,7 @@ export default {
     molecule: {
       title: 'Molecule Generation',
       subtitle: 'Generate candidate molecules for a selected pocket; results are ready for downstream evaluation',
-      toolMissing: 'Molecule generation tool (pocket2mol-pocket-ligand-generation) not found. Publish the tool package first.',
+      toolMissing: 'No molecule generation tool (Pocket2Mol / LDDM) found. Publish a tool package in Tools first.',
       numSamples: 'Number of molecules',
       pocketRadius: 'Pocket radius (Å)',
       device: 'Compute device',
@@ -2121,6 +2125,8 @@ export default {
         stepInput: 'Receptor & pocket',
         stepFragmentParams: 'Fragment & params',
         previewTitle: 'Protein 3D view',
+        previewComplexBadge: 'Complex preview',
+        previewReceptorBadge: 'Receptor only',
         previewPlaceholder: 'Select a project structure or upload a protein PDB to preview the 3D protein structure.',
         readinessReady: 'All prerequisites ready — submit anytime',
         readinessMissing: 'Complete the items below to enable submit:',
@@ -2220,6 +2226,7 @@ export default {
     results: {
       title: 'Generation Results',
       subtitle: 'View 2D structures, scores and physicochemical properties of generated molecules',
+      newGeneration: 'New molecule generation run',
       viewTask: 'View task',
       saveToSet: 'Save to candidate set',
       loadFailed: 'Failed to load results. Please try again later.',

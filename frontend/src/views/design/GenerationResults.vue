@@ -2,6 +2,9 @@
   <main class="results-page" data-testid="generation-results-page">
     <AppPageHeader :title="t('design.results.title')" :subtitle="t('design.results.subtitle')">
       <template #actions>
+        <a-button v-if="canStartGeneration" data-testid="results-new-generation" @click="startGeneration">
+          {{ t('design.results.newGeneration') }}
+        </a-button>
         <a-button
           type="primary"
           :disabled="!canSave"
@@ -578,17 +581,19 @@
                 </a-button>
               </div>
 
-				  <div v-if="has3d && !simplifiedMode" class="results-viewer__stage" data-testid="results-3d-viewer">
-				    <MoleculeViewer v-if="matchedViewerScene" :scene="matchedViewerScene" variant="compact" mode="docking" :allow-native-fullscreen="false" />
-				    <p v-else class="results-viewer__note">{{ t('design.results.noMatching3d') }}</p>
-				  </div>
+              <div v-if="matchedViewerScene && !simplifiedMode" class="results-viewer__stage" data-testid="results-3d-viewer">
+                <MoleculeViewer :scene="matchedViewerScene" variant="compact" mode="docking" :allow-native-fullscreen="false" />
+              </div>
 
               <div v-else class="results-viewer__fallback" data-testid="results-viewer-fallback">
                 <p v-if="!has3d" class="results-viewer__note">
                   {{ t('design.results.no3dStructure') }}
                 </p>
-                <p v-else class="results-viewer__note">
+                <p v-else-if="simplifiedMode" class="results-viewer__note">
                   {{ t('design.results.simplifiedHint') }}
+                </p>
+                <p v-else-if="!loadingStructure" class="results-viewer__note">
+                  {{ t('design.results.noMatching3d') }}
                 </p>
 
                 <div class="results-viewer__structure">
@@ -739,6 +744,8 @@
   import {
     buildVisualizationResultItems,
     buildVisualizationScene,
+    createVisualizationScene,
+    type VisualizationSceneEntry,
     type VisualizationScene,
   } from '@/domain/tasks'
   import {
@@ -753,7 +760,7 @@
     type MetricKind,
     type MetricTone,
   } from '@/domain/molecules/druglikeness'
-import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecule-export'
+  import { buildMoleculeCsv, buildSdfExportText, readSdfRecordSmiles } from '@/domain/molecules/molecule-export'
   import { findGenerationRowStructure } from './generation-viewer'
   import { uploadFile } from '@/api/files'
   import type { CandidateCreateInput } from '@/types/compounds'
@@ -868,7 +875,12 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
     )
   }
 
-  const scoreColumn = computed(() => findColumn([/score/i, /评分/i]))
+  const scoreColumn = computed(() =>
+    findColumn([/^score$/i]) ??
+    findColumn([/^composite_score$/i]) ??
+    findColumn([/^(?:docking|vina)_score$/i]) ??
+    findColumn([/^(?!sa[_ -]?score$|qed[_ -]?score$).*score/i, /评分/i])
+  )
   const mwColumn = computed(() => findColumn([/^mw$/i, /molecular_weight/i, /分子量/i]))
   const logpColumn = computed(() => findColumn([/logp/i, /xlogp/i, /脂水/i]))
   const qedColumn = computed(() => findColumn([/qed/i]))
@@ -879,6 +891,17 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
   const sequenceColumn = computed(() => findColumn([/sequence/i, /序列/i]))
   const moleculeIdColumn = computed(() => findColumn([/^(molecule_id|ligand_id|compound_id|id)$/i]))
   const isPeptideResult = computed(() => Boolean(sequenceColumn.value) && !smilesColumn.value)
+  const toolSlug = computed(() => detail.value?.tool_slug ?? taskDetail.value?.tool_slug)
+  const canStartGeneration = computed(() =>
+    isTerminal.value && detail.value?.project_id && !isPeptideResult.value &&
+      toolSlug.value !== 'therapainter-peptide-prediction'
+  )
+
+  function startGeneration(): void {
+    const projectId = detail.value?.project_id
+    if (!projectId) return
+    void router.push({ name: 'MoleculeGeneration', query: { project_id: projectId } })
+  }
 
   /** 骨架列（scaffold / murcko_scaffold）；CSV 没有这一列时整块骨架 UI 都不渲染。 */
   const scaffoldColumn = computed(() =>
@@ -1069,30 +1092,119 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
     () => sortedRows.value.find(row => row.__rowKey === activeRowKey.value) ?? null
   )
 
-  const viewerScene = computed<VisualizationScene | null>(() =>
-    taskDetail.value ? buildVisualizationScene(taskDetail.value) : null
-  )
-  const has3d = computed(() => Boolean(viewerScene.value?.entries.length))
-  const viewerMatch = ref<Awaited<ReturnType<typeof findGenerationRowStructure>>>(null)
+  const lddmLigand = computed<VisualizationSceneEntry | undefined>(() => {
+    if (toolSlug.value !== 'lddm-pocket-ligand-generation') return
+    const ligand = detail.value?.outputs.find(output =>
+      [output.semantic_type, output.standard_type, output.artifact_type].some(type =>
+        type === 'ligand_structure@1' || type === 'ligand_structure'
+      )
+    )
+    if (!ligand?.version_id) return
+    const artifactPath = `/api/v1/artifacts/${ligand.id}/versions/${ligand.version_id}`
+    return {
+      key: `artifact-${ligand.id}`,
+      url: `${artifactPath}/files/structure_file/download`,
+      label: ligand.filename ?? 'ligands.sdf',
+      source: 'output',
+      role: 'ligand',
+      format: 'sdf',
+      extension: '.sdf',
+    }
+  })
+  const legacyLigand = computed(() => buildVisualizationResultItems(taskDetail.value)
+    .find(item => item.entry?.format === 'sdf' && item.entry.role === 'ligand')?.entry)
+  const has3d = computed(() => Boolean(lddmLigand.value || legacyLigand.value))
+
+  // LDDM keeps the original, one-based mol_index in the CSV. Its combined SDF omits
+  // invalid poses, so CSV order (with possible gaps in mol_index) is the shared order.
+  const hasOrderedLddmRows = computed(() => rows.value.length > 0 && rows.value.every((row, index) => {
+    const modelIndex = Number(row.mol_index ?? '')
+    const previousIndex = Number(rows.value[index - 1]?.mol_index ?? 0)
+    return Number.isSafeInteger(modelIndex) && modelIndex > previousIndex
+  }))
+
+  let lddmSdf: { url: string; records: Promise<string[]> } | undefined
+  async function loadLddmRecords(entry: VisualizationSceneEntry): Promise<string[]> {
+    if (lddmSdf?.url !== entry.url) {
+      lddmSdf = { url: entry.url, records: fetchProtectedFileText(entry.url).then(splitSdfRecords) }
+    }
+    const request = lddmSdf
+    try {
+      return await request.records
+    } catch {
+      if (lddmSdf === request) lddmSdf = undefined
+      return []
+    }
+  }
+
+  function hasMatchingLddmOrder(records: readonly string[]): boolean {
+    return hasOrderedLddmRows.value && records.length === rows.value.length
+  }
+
+  function findLddmRecordIndex(row: DesignTableRow, records: readonly string[]): number {
+    if (hasMatchingLddmOrder(records)) return rows.value.indexOf(row)
+    const smiles = rowSmiles(row)
+    if (!smiles || rows.value.some(other => other !== row && rowSmiles(other) === smiles)) return -1
+    const matches = records.map(readSdfRecordSmiles)
+    const index = matches.indexOf(smiles)
+    return index === matches.lastIndexOf(smiles) ? index : -1
+  }
+
+  const viewerMatch = ref<VisualizationSceneEntry | null>(null)
+  const loadingStructure = ref(false)
   let viewerRequest = 0
-  watch([activeRow, taskDetail, rows], async ([active, task]) => {
+  watch([activeRow, taskDetail, lddmLigand, rows, simplifiedMode], async ([active, task, ligand]) => {
     const request = ++viewerRequest
     viewerMatch.value = null
-    if (!active || !task || !has3d.value) return
+    loadingStructure.value = Boolean(active && has3d.value && !simplifiedMode.value)
+    if (!active || !loadingStructure.value) return
     try {
-      const match = await findGenerationRowStructure(task, active, rows.value)
-      if (request === viewerRequest) viewerMatch.value = match
+      if (ligand) {
+        const records = await loadLddmRecords(ligand)
+        if (request !== viewerRequest) return
+        const index = findLddmRecordIndex(active, records)
+        if (index >= 0) {
+          viewerMatch.value = { ...ligand, sdfRecordIndex: index }
+          return
+        }
+      }
+      if (task && legacyLigand.value) {
+        const match = await findGenerationRowStructure(task, active, rows.value)
+        if (request === viewerRequest && match) {
+          viewerMatch.value = { ...match.entry, sdfRecordIndex: match.sdfRecordIndex }
+        }
+      }
     } catch {
-      if (request === viewerRequest) viewerMatch.value = null
+      // The 2D preview remains available when the structure download fails.
+    } finally {
+      if (request === viewerRequest) loadingStructure.value = false
     }
   }, { immediate: true })
   const matchedViewerScene = computed<VisualizationScene | null>(() => {
-    const scene = viewerScene.value
-    const match = viewerMatch.value
-    if (!scene || !match) return null
-    const entries = scene.entries.filter(entry => entry.role !== 'ligand')
-    entries.push({ ...match.entry, sdfRecordIndex: match.sdfRecordIndex })
-    return { ...scene, entries, outputEntries: [...scene.outputEntries.filter(entry => entry.role !== 'ligand'), { ...match.entry, sdfRecordIndex: match.sdfRecordIndex }], selectedOutputKey: match.entry.key }
+    if (!viewerMatch.value) return null
+    const { inputEntries } = buildVisualizationScene(taskDetail.value)
+    const snapshots = taskDetail.value?.input_snapshots ?? []
+    const snapshot = snapshots.find(input => {
+      const slots = input.detail?.slots
+      return input.fileId && (input.detail?.slot === 'protein_pdb' ||
+        (Array.isArray(slots) && slots.includes('protein_pdb')))
+    }) ?? snapshots.find(input => input.inputRole === 'RECEPTOR' && input.fileId)
+    let receptor = inputEntries.find(entry => entry.role === 'receptor')
+    if (snapshot?.fileId) {
+      const url = `/api/v1/files/${encodeURIComponent(snapshot.fileId)}/download`
+      const filename = typeof snapshot.detail?.filename === 'string' ? snapshot.detail.filename : 'protein.pdb'
+      const extension = filename.toLowerCase().match(/\.(?:cif|mmcif)$/)?.[0] ?? '.pdb'
+      receptor = inputEntries.find(entry => entry.role === 'receptor' && entry.url === url) ?? {
+        key: `input-${snapshot.fileId}`,
+        url,
+        label: filename,
+        source: 'input',
+        role: 'receptor',
+        format: extension === '.pdb' ? 'pdb' : 'mmcif',
+        extension,
+      }
+    }
+    return createVisualizationScene(receptor ? [receptor] : [], [viewerMatch.value], [])
   })
 
   const activeProperties = computed<LipinskiProperties | null>(() =>
@@ -1667,10 +1779,7 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
   }
 
   async function findSdfText(): Promise<string> {
-    if (!taskDetail.value) return ''
-    // 同时覆盖 output_files 与标准产物（ligand_structure / molecule_table 的 3D SDF）。
-    const items = buildVisualizationResultItems(taskDetail.value)
-    const entry = items.find(item => item.kind === 'structure' && item.entry?.format === 'sdf')?.entry
+    const entry = legacyLigand.value
     if (!entry) return ''
     try {
       return await fetchProtectedFileText(entry.url)
@@ -1685,11 +1794,14 @@ import { buildMoleculeCsv, buildSdfExportText } from '@/domain/molecules/molecul
       message.warning(t('design.results.exportEmpty'))
       return
     }
-    const sdfText = await findSdfText()
-    const text = buildSdfExportText(
-      sdfText ? splitSdfRecords(sdfText) : [],
-      targetRows.map(row => ({ smiles: rowSmiles(row), moleculeId: rowMoleculeId(row) || undefined }))
-    )
+    const ligand = lddmLigand.value
+    const records = ligand ? await loadLddmRecords(ligand) : []
+    const text = hasMatchingLddmOrder(records)
+      ? targetRows.map(row => records[rows.value.indexOf(row)]).join('')
+      : buildSdfExportText(
+        records.length ? records : splitSdfRecords(await findSdfText()),
+        targetRows.map(row => ({ smiles: rowSmiles(row), moleculeId: rowMoleculeId(row) || undefined }))
+      )
     const exported = text ? splitSdfRecords(text).length : 0
     if (exported === 0) {
       message.warning(t('design.results.exportSdfUnconfirmed', { count: targetRows.length }))

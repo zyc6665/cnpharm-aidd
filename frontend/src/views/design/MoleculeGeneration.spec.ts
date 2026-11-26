@@ -285,4 +285,58 @@ describe('MoleculeGeneration', () => {
     await flushPromises()
     expect((get('molecule-atoms-to-dock').element as HTMLInputElement).value).toBe('0 1')
   })
+
+  it('builds contextPreviewScene with both receptor and ligand entries when fragment uploaded', async () => {
+    await selectModel(LDDM)
+    await get('molecule-mode-fragment').trigger('click')
+    const ligandFile = structureFile('ligand.sdf', `${molBlock}\r\n$$$$\r\n`)
+    await chooseFragment(ligandFile)
+    await flushPromises()
+
+    // MoleculeDesignContextPanel is not stubbed, so we can find it and check its scene prop
+    const contextPanel = wrapper.findComponent({ name: 'MoleculeDesignContextPanel' })
+    expect(contextPanel.exists()).toBe(true)
+
+    const scene = contextPanel.props('previewScene')
+    expect(scene).toBeTruthy()
+    expect(scene.entries).toHaveLength(2)
+
+    const ligandEntry = scene.entries.find((e: any) => e.role === 'ligand')
+    const receptorEntry = scene.entries.find((e: any) => e.role === 'receptor')
+
+    expect(ligandEntry).toBeTruthy()
+    expect(ligandEntry.format).toBe('sdf')
+    expect(ligandEntry.source).toBe('input')
+    expect(ligandEntry.url).toMatch(/^blob:/)
+
+    expect(receptorEntry).toBeTruthy()
+    expect(receptorEntry.format).toBe('pdb')
+    expect(receptorEntry.source).toBe('input')
+    expect(receptorEntry.url).toContain('/api/v1/files/')
+  })
+
+  it('updates contextPreviewScene when fragment is cropped to subset', async () => {
+    await selectModel(LDDM)
+    await get('molecule-mode-fragment').trigger('click')
+    await chooseFragment(structureFile('ligand.sdf', `${molBlock}\r\n$$$$\r\n`))
+    await flushPromises()
+
+    const contextPanel = wrapper.findComponent({ name: 'MoleculeDesignContextPanel' })
+    const beforeScene = contextPanel.props('previewScene')
+    const beforeLigandKey = beforeScene?.entries.find((e: any) => e.role === 'ligand')?.key
+
+    await get('open-fragment-sketch').trigger('click')
+    await flushPromises()
+    const subsetFile = structureFile('cropped.sdf', `${molBlock}\r\n$$$$\r\n`)
+    wrapper.findComponent({ name: 'FragmentSketchModal' }).vm.$emit('confirm', { selectedIndices: [0, 1], exportedFile: subsetFile })
+    await flushPromises()
+
+    const afterScene = contextPanel.props('previewScene')
+    const afterLigandEntry = afterScene?.entries.find((e: any) => e.role === 'ligand')
+
+    expect(afterLigandEntry).toBeTruthy()
+    expect(afterLigandEntry.key).not.toBe(beforeLigandKey)
+    expect(afterLigandEntry.label).toBe('cropped.sdf')
+    expect(afterScene?.entries).toHaveLength(2)
+  })
 })
