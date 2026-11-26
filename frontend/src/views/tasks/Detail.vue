@@ -450,7 +450,7 @@ import {
   readTaskQueueInfo,
 } from '@/domain/tasks'
 import { resolveTaskResultPath } from '@/domain/design/runs'
-import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
+import { MOLECULE_GENERATION_TOOL_SLUGS } from '@/types/design'
 
 const route = useRoute()
 const router = useRouter()
@@ -556,8 +556,9 @@ const showStandaloneQueueNotice = computed(
 const progressDetail = computed(() => parseTaskProgressDetail(task.value))
 const isMoleculeGenerationTask = computed(
   () =>
-    (task.value?.tool_slug ?? task.value?.tool?.slug) ===
-    MOLECULE_GENERATION_TOOL_SLUG
+    (MOLECULE_GENERATION_TOOL_SLUGS as readonly string[]).includes(
+      task.value?.tool_slug ?? task.value?.tool?.slug ?? ''
+    )
 )
 const failureAdvice = computed(() => buildTaskFailureAdvice(task.value))
 const showFailureAdvice = computed(

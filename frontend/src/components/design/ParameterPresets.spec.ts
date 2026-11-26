@@ -53,6 +53,21 @@ const schema: ToolSchema = {
   },
 }
 
+const lddmSchema: ToolSchema = {
+  type: 'object',
+  properties: {
+    n_samples: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
+    batch_size: { type: 'integer', default: 8 },
+  },
+}
+
+const lddmSchemaWithLowCap: ToolSchema = {
+  type: 'object',
+  properties: {
+    n_samples: { type: 'integer', default: 50, minimum: 1, maximum: 200 },
+  },
+}
+
 function mountPresets(values: Record<string, number> = {}) {
   return mount(ParameterPresets, {
     props: { schema, values },
@@ -99,5 +114,38 @@ describe('ParameterPresets', () => {
     await wrapper.setProps({ storageKey: 'design:parameter-presets:other' })
     expect(wrapper.text()).toContain('另一模型预设')
     expect(wrapper.text()).not.toContain('恢复的预设')
+  })
+
+  it('LDDM schema 的内置预设自动映射到 n_samples', async () => {
+    const wrapper = mount(ParameterPresets, {
+      props: { schema: lddmSchema, values: {} },
+      global: { stubs },
+    })
+    await wrapper.get('select').setValue('quick')
+
+    const [payload] = wrapper.emitted('load')?.[0] as [Record<string, number>]
+    expect(payload).toEqual({ n_samples: 20 })
+  })
+
+  it('LDDM schema 的内置预设自动钳位到 maximum', async () => {
+    const wrapper = mount(ParameterPresets, {
+      props: { schema: lddmSchemaWithLowCap, values: {} },
+      global: { stubs },
+    })
+    await wrapper.get('select').setValue('fine')
+
+    const [payload] = wrapper.emitted('load')?.[0] as [Record<string, number>]
+    expect(payload).toEqual({ n_samples: 200 })
+  })
+
+  it('LDDM schema 的 standard 预设不超过 maximum', async () => {
+    const wrapper = mount(ParameterPresets, {
+      props: { schema: lddmSchema, values: {} },
+      global: { stubs },
+    })
+    await wrapper.get('select').setValue('standard')
+
+    const [payload] = wrapper.emitted('load')?.[0] as [Record<string, number>]
+    expect(payload).toEqual({ n_samples: 100 })
   })
 })

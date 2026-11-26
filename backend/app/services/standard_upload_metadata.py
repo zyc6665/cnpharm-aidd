@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from pathlib import Path
 
 from app.common.exceptions import ValidationException
 from app.files.content import read_file_bytes
 from app.models.files import File as FileModel
+
+#: MDL MOL 文件的结束标记（规范写法 ``M  END``，部分工具写成 ``M END``）。
+_MOL_END_PATTERN = re.compile(r"^M\s+END\s*$", re.MULTILINE)
 
 
 async def build_standard_upload_metadata(
@@ -154,7 +158,7 @@ async def _ligand_structure_upload_metadata(
     slot_name: str,
     uploaded_file: FileModel,
 ) -> dict[str, object]:
-    await _validate_sdf_content(slot_name, uploaded_file)
+    await _validate_ligand_structure_content(slot_name, uploaded_file)
     return {
         "ligand_id": Path(uploaded_file.filename).stem or str(uploaded_file.id),
         "source_database": "manual",
@@ -181,14 +185,55 @@ async def _read_pdb_stats(uploaded_file: FileModel) -> dict[str, object]:
     }
 
 
-async def _validate_sdf_content(slot_name: str, uploaded_file: FileModel) -> None:
+async def _validate_ligand_structure_content(
+    slot_name: str,
+    uploaded_file: FileModel,
+) -> None:
+    """按扩展名校验配体结构内容。
+
+    ``ligand_structure@1`` 的主结构文件允许 SDF/MOL/MOL2/PDB（见
+    ``artifact_standards/schemas/ligand_structure.v1.yaml``），每种格式的
+    「像不像这个格式」的判据不同，不能再统一要求 SDF 的 ``$$$$`` 分隔符。
+    """
     text = await _read_text(uploaded_file)
+    extension = Path(uploaded_file.filename).suffix.lower().lstrip(".")
+    if extension == "pdb":
+        if not _has_pdb_atom_records(text):
+            raise _invalid_content_error(
+                slot_name,
+                uploaded_file,
+                "ligand_structure@1 需要包含 ATOM 或 HETATM 记录",
+            )
+        return
+    if extension == "mol":
+        if not _MOL_END_PATTERN.search(text):
+            raise _invalid_content_error(
+                slot_name,
+                uploaded_file,
+                "ligand_structure@1 需要包含 MOL 结束标记 M  END",
+            )
+        return
+    if extension == "mol2":
+        if "@<TRIPOS>MOLECULE" not in text.upper():
+            raise _invalid_content_error(
+                slot_name,
+                uploaded_file,
+                "ligand_structure@1 需要包含 MOL2 记录标记 @<TRIPOS>MOLECULE",
+            )
+        return
     if "$$$$" not in text:
         raise _invalid_content_error(
             slot_name,
             uploaded_file,
             "ligand_structure@1 需要包含 SDF 记录分隔符 $$$$",
         )
+
+
+def _has_pdb_atom_records(text: str) -> bool:
+    return any(
+        line.startswith(("ATOM", "HETATM"))
+        for line in text.splitlines()
+    )
 
 
 def _structure_format(filename: str) -> str:

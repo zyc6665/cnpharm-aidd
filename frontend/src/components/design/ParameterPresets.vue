@@ -99,6 +99,31 @@ const BUILT_IN_PRESETS: BuiltInPreset[] = [
   { id: 'fine', nameKey: 'design.presets.builtInPresets.fine', params: { num_samples: 300 } },
 ]
 
+/**
+ * 将内置预设的参数映射到当前 schema：Pocket2Mol 用 `num_samples`，LDDM 用 `n_samples`。
+ * 如果 schema 定义了 `minimum`/`maximum`，自动钳位到范围内。
+ */
+function resolveBuiltInPresetParams(preset: BuiltInPreset, schema: ToolSchema | null): ParameterValues {
+  const baseValue = preset.params.num_samples
+  if (typeof baseValue !== 'number' || !Number.isFinite(baseValue)) return {}
+
+  const schemaProps = schema?.properties ?? {}
+  const result: ParameterValues = {}
+
+  for (const key of ['num_samples', 'n_samples'] as const) {
+    if (!(key in schemaProps)) continue
+    const prop = schemaProps[key]
+    const min = typeof prop?.minimum === 'number' ? prop.minimum : undefined
+    const max = typeof prop?.maximum === 'number' ? prop.maximum : undefined
+    let clamped = baseValue
+    if (min !== undefined && clamped < min) clamped = min
+    if (max !== undefined && clamped > max) clamped = max
+    result[key] = clamped
+  }
+
+  return result
+}
+
 const selectedPresetId = ref<string | undefined>(undefined)
 const saveModalOpen = ref(false)
 const presetName = ref('')
@@ -170,12 +195,15 @@ const presetOptions = computed(() => [
 
 function handleSelect(value: unknown): void {
   if (typeof value !== 'string') return
-  const preset =
-    BUILT_IN_PRESETS.find(item => item.id === value) ??
-    customPresets.value.find(item => item.id === value)
+  const builtIn = BUILT_IN_PRESETS.find(item => item.id === value)
+  const custom = customPresets.value.find(item => item.id === value)
   selectedPresetId.value = undefined
-  if (!preset) return
-  emit('load', filterToSchema(preset.params))
+
+  if (builtIn) {
+    emit('load', filterToSchema(resolveBuiltInPresetParams(builtIn, props.schema)))
+  } else if (custom) {
+    emit('load', filterToSchema(custom.params))
+  }
 }
 
 function openSaveModal(): void {

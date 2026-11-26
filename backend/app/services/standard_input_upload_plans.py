@@ -10,6 +10,7 @@ from app.artifact_standards.registry import (
     FileRoleSpec,
     StandardArtifactRef,
     StandardArtifactRegistryError,
+    StandardArtifactSpec,
     get_standard_artifact_spec,
     parse_standard_ref,
 )
@@ -167,12 +168,39 @@ def _standard_roles_for_slot(
             str(exc),
             detail={"input_name": slot_name},
         ) from exc
-    primary_role = next(
+    required_roles = [role for role in spec.file_roles if role.required]
+    primary_role = _select_primary_role(spec, slot, required_roles)
+    return standard_ref, primary_role, required_roles
+
+
+def _select_primary_role(
+    spec: StandardArtifactSpec,
+    slot: dict,
+    required_roles: list[FileRoleSpec],
+) -> FileRoleSpec:
+    """按工具契约声明的 ``role_preferences`` 选主文件角色。
+
+    直传只会物化一个物理文件，所以只能落在**必需角色**上：可选角色做主角色的
+    话，必需角色就没有文件可挂（``_is_generated_metadata_role`` 只兜底 JSON
+    元数据），会撞上「无法自动补齐必需文件角色」。偏好里没有必需角色时退回
+    规范声明的 primary。
+    """
+    required_by_name = {role.role: role for role in required_roles}
+    for preference in _slot_role_preferences(slot):
+        role = required_by_name.get(preference)
+        if role is not None:
+            return role
+    return next(
         (role for role in spec.file_roles if role.primary),
         spec.file_roles[0],
     )
-    required_roles = [role for role in spec.file_roles if role.required]
-    return standard_ref, primary_role, required_roles
+
+
+def _slot_role_preferences(slot: dict) -> list[str]:
+    raw = slot.get("role_preferences")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [str(item) for item in raw if item]
 
 
 async def _load_standard_upload_file(

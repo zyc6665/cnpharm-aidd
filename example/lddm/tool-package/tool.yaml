@@ -1,0 +1,202 @@
+api_version: aidd.platform/tool-package
+kind: ToolPackage
+metadata:
+  slug: lddm-pocket-ligand-generation
+  name: LDDM 口袋条件分子生成
+  version: 1.0.1
+  description: 基于 LPDI-EPFL LDDM 的统一 3D 口袋条件分子生成模型，支持 De novo 生成、片段生长/连接、口袋对接与局部对接。
+artifacts:
+  inputs:
+    - name: protein_pdb
+      title: 蛋白结构
+      type: protein_structure@1
+      required: true
+      role_preferences:
+        - prepared_pdb
+        - structure_file
+    - name: pocket
+      title: 结合口袋
+      type: binding_pocket@1
+      required: false
+    - name: fragment_sdf
+      title: 片段或配体结构（片段生长 / 对接模式必填）
+      type: ligand_structure@1
+      required: false
+      role_preferences:
+        - structure_file
+        - structure_3d_sdf
+    - name: ref_ligand
+      title: 参考配体（可选，未传时由口袋中心自动生成）
+      type: ligand_structure@1
+      required: false
+      role_preferences:
+        - structure_file
+        - structure_3d_sdf
+  outputs:
+    - name: molecules
+      type: molecule_table@1
+      cardinality: one
+      required: true
+    - name: ligands
+      type: ligand_structure@1
+      cardinality: one
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    generation_mode:
+      type: string
+      enum:
+        - denovo
+        - fragment
+        - dock
+      default: denovo
+      title: 生成模式
+      description: denovo：从头分子生成；fragment：固定片段生长/连接；dock：口袋内全配体或局部对接。
+    device:
+      type: string
+      enum:
+        - auto
+        - gpu
+        - cpu
+      default: auto
+      title: 计算设备
+      description: 默认 auto：有 GPU 时用 cuda:0，否则退回 CPU。
+    n_samples:
+      type: integer
+      minimum: 1
+      maximum: 500
+      default: 10
+      title: 生成数量
+      description: 本次希望生成的分子总数。
+    batch_size:
+      type: integer
+      minimum: 1
+      maximum: 64
+      default: 10
+      title: 并行批大小
+      description: 单次前向并行采样的分子数；显存紧张时可调小。
+    n_steps:
+      type: integer
+      minimum: 10
+      maximum: 1000
+      default: 100
+      title: 采样步数
+      description: ODE 积分步数，越高通常几何质量更好但耗时略增。
+    sampler:
+      type: string
+      enum:
+        - ForwardEuler
+        - HeunSampler
+      default: ForwardEuler
+      title: 积分采样器
+      description: ODE 积分器（ForwardEuler 更快，HeunSampler 精度更高）。
+    sampling_noise:
+      type: number
+      minimum: 0.0
+      maximum: 50.0
+      default: 5.0
+      title: 采样噪声尺度
+      description: 坐标采样过程注入随机噪声尺度。
+    molecule_size:
+      type: string
+      default: ""
+      title: 目标分子大小
+      description: 留空则按口袋尺寸直方图自适应采样；也可填固定原子数（如 25）或 uniform_15_30。
+    atoms_to_dock:
+      type: string
+      default: ""
+      title: 局部对接原子索引
+      description: 仅 dock 模式生效；留空则全配体对接，填写逗号或空格分隔的 0 基原子索引可做局部/共价对接。
+    seed:
+      type: integer
+      minimum: 0
+      default: 2020
+      title: 随机种子
+    center_x:
+      type: number
+      title: 口袋中心 X
+    center_y:
+      type: number
+      title: 口袋中心 Y
+    center_z:
+      type: number
+      title: 口袋中心 Z
+  additionalProperties: false
+adapter:
+  input:
+    - input: protein_pdb
+      method: mount_protein_structure_pdb
+    - input: pocket
+      method: mount_binding_pocket_primary_pdb_and_metadata
+    - input: fragment_sdf
+      method: mount_ligand_structure_sdf
+    - input: ref_ligand
+      method: mount_reference_ligand_sdf
+  output:
+    - output: molecules
+      method: collect_generated_molecule_table
+      validator_profile: molecule_table_v1_core
+    - output: ligands
+      method: collect_combined_ligand_sdf
+      validator_profile: ligand_structure_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: "3.11"
+  cuda: "12.4"
+  executor_support:
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; checkpoint lddm.ckpt bundled in image"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/aidd/compute-lddm:1.0.1
+      image_digest: "sha256:6fc5496e4e27b424f1042be19a6166a14739ae0434845bee21466d2031b889b6"
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+        - weights
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/lddm-pocket-ligand-generation/1.0.1/conda-env.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      includes:
+        - python
+        - dependencies
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+    mutable_host_paths_forbidden: true
+variants:
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - container
+    image: registry.example/aidd/compute-lddm@sha256:6fc5496e4e27b424f1042be19a6166a14739ae0434845bee21466d2031b889b6
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /opt/aidd/platform_adaptor/entrypoint.sh
+    resources:
+      cpu: 4
+      memory_mb: 16384
+      gpu_memory_mb: 16384
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: unvalidated
+    hardware_validated: false

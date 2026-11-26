@@ -628,6 +628,53 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         virtual=False,
     ),
+    "lddm-pocket-ligand-generation": ToolCapability(
+        tool_slug="lddm-pocket-ligand-generation",
+        capability="lddm-pocket-ligand-generation",
+        stage="lddm-pocket-ligand-generation",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+            CapabilityInput(
+                "pocket_pdb",
+                "pocket_pdb",
+                required=False,
+                accepted_extensions=(".pdb",),
+            ),
+            # 片段/参考配体既可以是 SDF，也可以是 MOL/MOL2/PDB，适配器统一转 SDF。
+            CapabilityInput(
+                "fragment_sdf",
+                "fragment_sdf",
+                required=False,
+                accepted_extensions=(".sdf", ".mol", ".mol2", ".pdb"),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="molecules",
+            ),
+            CapabilityOutput(
+                "ligand_structure@1",
+                "artifact",
+                OutputMatch(content_type="ligand_structure@1"),
+                path="ligands",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
     "therapainter-peptide-prediction": ToolCapability(
         tool_slug="therapainter-peptide-prediction",
         capability="therapainter-peptide-prediction",
@@ -685,6 +732,7 @@ MODEL_FAMILY_BY_SLUG: dict[str, str] = {
     "boltz2-structure-prediction": "structure_prediction",
     "lvpocket-pocket-prediction": "pocket_prediction",
     "pocket2mol-pocket-ligand-generation": "molecule_generation",
+    "lddm-pocket-ligand-generation": "molecule_generation",
     "therapainter-peptide-prediction": "peptide_design",
     "molp-pc-property-prediction": "admet_prediction",
     "builtin-admet-prediction": "admet_prediction",

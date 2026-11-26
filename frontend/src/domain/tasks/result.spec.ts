@@ -25,6 +25,7 @@ describe('resolveTaskResultKind', () => {
     expect(resolveTaskResultKind(STRUCTURE_PREDICT_TOOL_SLUG)).toBe('structure')
     expect(resolveTaskResultKind(POCKET_PREDICT_TOOL_SLUG)).toBe('pocket')
     expect(resolveTaskResultKind('pocket2mol-pocket-ligand-generation')).toBe('generation')
+    expect(resolveTaskResultKind('lddm-pocket-ligand-generation')).toBe('generation')
     expect(resolveTaskResultKind('therapainter-peptide-prediction')).toBe('generation')
     expect(resolveTaskResultKind('molp-pc-property-prediction')).toBe('predict')
     expect(resolveTaskResultKind('builtin-vina-docking')).toBe('screening')

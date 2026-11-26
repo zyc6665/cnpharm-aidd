@@ -16,7 +16,7 @@ import type { TaskStatus } from '@/types/models'
  * `types/screening.ts`、`api/md.ts`），此处只做集中引用，不重复声明字面量。
  */
 import {
-  MOLECULE_GENERATION_TOOL_SLUG,
+  MOLECULE_GENERATION_TOOL_SLUGS,
   PEPTIDE_DESIGN_TOOL_SLUG,
   STRUCTURE_PREDICT_TOOL_SLUG,
   POCKET_PREDICT_TOOL_SLUG,
@@ -46,7 +46,7 @@ export const DESIGN_RUN_CATEGORIES: readonly DesignRunCategory[] = [
   },
   {
     key: 'molecule',
-    slugs: [MOLECULE_GENERATION_TOOL_SLUG],
+    slugs: [...MOLECULE_GENERATION_TOOL_SLUGS],
     resultPath: taskId => `/tasks/${taskId}/results`
   },
   {

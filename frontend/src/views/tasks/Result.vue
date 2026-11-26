@@ -167,7 +167,18 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/styles/variables.less';
+
   .task-result-page {
+    > .container {
+      max-width: @page-max-width;
+
+      :deep(.results-page) {
+        padding-left: 0;
+        padding-right: 0;
+      }
+    }
+
     &__progress-message {
       margin-top: @spacing-md;
       color: @text-secondary;

@@ -82,7 +82,12 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
 
 def test_capability_lookup_by_output() -> None:
     capabilities = get_capabilities_by_output("generated_ligand")
-    assert [item.tool_slug for item in capabilities] == []
+    assert capabilities == []
+
+    smiles_capabilities = get_capabilities_by_output("smiles_csv")
+    assert [item.tool_slug for item in smiles_capabilities] == [
+        "builtin-sdf-to-smiles-csv",
+    ]
 
     ligand_capabilities = get_capabilities_by_output("ligand_pdb")
     assert [item.tool_slug for item in ligand_capabilities] == ["builtin-sdf-to-pdb"]
@@ -98,6 +103,22 @@ def test_capability_lookup_by_output() -> None:
         "builtin-rdkit-conformer",
         "autodock-vina-docking",
         "pocket2mol-pocket-ligand-generation",
+        "lddm-pocket-ligand-generation",
+    ]
+
+    molecule_table_slugs = [
+        item.tool_slug for item in get_capabilities_by_output("molecule_table@1")
+    ]
+    assert "lddm-pocket-ligand-generation" in molecule_table_slugs
+
+    lddm = get_capability("lddm-pocket-ligand-generation")
+    assert [
+        (item.semantic_type, item.source, item.path, item.required)
+        for item in lddm.outputs
+    ] == [
+        ("molecule_table@1", "artifact", "molecules", True),
+        ("ligand_structure@1", "artifact", "ligands", True),
+        ("run_report@1", "artifact", "report", False),
     ]
 
     docking_capabilities = get_capabilities_by_output("docking_report")

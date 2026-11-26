@@ -129,7 +129,7 @@ const WORKFLOW_NODE_LIBRARY = {
     id: 'tool-molecule-generation',
     type: 'tool',
     stepKey: 'moleculeGenerationOrVirtualScreening',
-    toolSlugs: ['pocket2mol-pocket-ligand-generation'],
+    toolSlugs: ['pocket2mol-pocket-ligand-generation', 'lddm-pocket-ligand-generation'],
     recommendedToolSlug: 'pocket2mol-pocket-ligand-generation',
     titleKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.title',
     descriptionKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.description',

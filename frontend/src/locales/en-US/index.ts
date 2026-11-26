@@ -1951,6 +1951,10 @@ export default {
           duration: 'About 10–30 min',
           scenario: 'Pocket-conditioned de novo generation for batch exploration of a known binding site'
         },
+        lddm: {
+          duration: 'About 1–5 min',
+          scenario: 'Supports de novo design, fragment growing/linking, and whole/local ligand docking for lead optimization'
+        },
         diffdock: {
           duration: 'About 1–5 min',
           scenario: 'Protein–ligand docking to produce candidate binding poses and scores'
@@ -2019,12 +2023,12 @@ export default {
     molecule: {
       title: 'Molecule Generation',
       subtitle: 'Generate candidate molecules for a selected pocket; results are ready for downstream evaluation',
-      toolMissing: 'Molecule generation tool (pocket2mol-pocket-ligand-generation) not found. Publish the tool package first.',
+      toolMissing: 'No molecule generation tool (Pocket2Mol / LDDM) found. Publish a tool package in Tools first.',
       numSamples: 'Number of molecules',
       pocketRadius: 'Pocket radius (Å)',
       device: 'Compute device',
       deviceAuto: 'Auto',
-      paramHint: 'Count, pocket center and radius are passed directly to Pocket2Mol; the center comes from the selected pocket.',
+      paramHint: 'Parameters and the selected pocket center are passed directly to {model}.',
       pocketSummary: 'Selected pocket',
       pocketLabel: 'Pocket',
       pocketCenter: 'Pocket center',
@@ -2068,7 +2072,72 @@ export default {
       pocketPreviewUnsupportedFormat:
         'This structure format cannot be previewed here (PDB and CIF are supported)',
       archiveStructureFailed:
-        'Structure uploaded for this task, but archiving it to the project workspace failed'
+        'Structure uploaded for this task, but archiving it to the project workspace failed',
+      generationMode: 'Generation mode',
+      fragmentTitle: 'Fragment / ligand structure',
+      fragmentHint: 'Select a 3D SDF, MOL, MOL2, or PDB fragment/ligand file; the model adapter normalizes formats automatically.',
+      fragmentRequired: 'Select a fragment or ligand structure file to continue.',
+      fragmentAtomCount: 'First structure: {count} atoms (indices 0–{lastIndex})',
+      fragmentFileReady: 'Atom count unavailable.',
+      fragmentUnreadable: 'Could not read a supported structure. Select a valid SDF, MOL, MOL2, or PDB file.',
+      moleculeSize: 'Molecule size presets',
+      atomsToDock: 'Atoms to dock',
+      atomsToDockHint: 'Use zero-based indices separated by commas or spaces. Leave blank to dock the whole ligand.',
+      atomsToDockInvalid: 'Use non-negative integer indices within the displayed range, separated by commas or spaces.',
+      modeDescription: {
+        denovo: 'Generate candidate molecules from scratch in the pocket.',
+        fragment: 'Grow or link molecules starting from the uploaded fragment.',
+        dock: 'Dock the whole ligand or select atoms for partial docking.'
+      },
+      sizePreset: { auto: 'Auto', small: 'Small 12–20', medium: 'Medium 20–30', large: 'Large 30–40' },
+      loadSample: 'Load sample (protein + pocket + ligand)',
+      sampleLoaded: 'Loaded offline sample (EGFR ATP pocket & ligand)',
+      fragmentCardTitle: 'Loaded structure preview',
+      openSketchFragment: 'Select kept fragment in sketcher',
+      openSketchDock: 'Select atoms to dock in sketcher',
+      keptSummary: 'Keeping {selected} / {total} atoms',
+      dockSummary: 'Docking {selected} / {total} atoms',
+      dockWholeSummary: 'Full-ligand docking ({total} atoms)',
+      subsetCroppedTag: 'Cropped to selected fragment',
+      sketch: {
+        titleFragment: 'Select kept fragment',
+        titleDock: 'Select atoms to dock',
+        subtitleFragment: 'Click or box-select atoms to keep as the fixed fragment; selecting a subset crops and submits that fragment.',
+        subtitleDock: 'Click or box-select 0-based atoms to re-dock while keeping the rest fixed; leave empty to dock the full ligand.',
+        toolClick: 'Click atom',
+        toolBox: 'Box select',
+        toolRing: 'Select ring',
+        selectAll: 'Select all',
+        invertSelection: 'Invert',
+        clearSelection: 'Clear',
+        resetView: 'Reset view',
+        previewTitle: 'Structure preview',
+        selectedCount: 'Selected atoms: {selected} / {total}',
+        selectedIndicesLabel: 'Selected atom indices (0-based)',
+        emptySelection: 'No atoms selected',
+        fragmentEmptyGuard: 'Keep at least 1 atom in fragment mode',
+        cancel: 'Cancel',
+        confirm: 'Confirm'
+      },
+      context: {
+        panelTitle: '3D context & task readiness',
+        stepModel: 'Model & mode',
+        stepInput: 'Receptor & pocket',
+        stepFragmentParams: 'Fragment & params',
+        previewTitle: 'Protein 3D view',
+        previewComplexBadge: 'Complex preview',
+        previewReceptorBadge: 'Receptor only',
+        previewPlaceholder: 'Select a project structure or upload a protein PDB to preview the 3D protein structure.',
+        readinessReady: 'All prerequisites ready — submit anytime',
+        readinessMissing: 'Complete the items below to enable submit:',
+        summaryTitle: 'Task summary',
+        summaryModel: 'Model',
+        summaryMode: 'Mode',
+        summaryPocket: 'Pocket',
+        summaryCenter: 'Center',
+        summarySamples: 'Samples',
+        summaryFragment: 'Fragment / atoms'
+      }
     },
     presets: {
       title: 'Parameter presets',
@@ -2157,6 +2226,7 @@ export default {
     results: {
       title: 'Generation Results',
       subtitle: 'View 2D structures, scores and physicochemical properties of generated molecules',
+      newGeneration: 'New molecule generation run',
       viewTask: 'View task',
       saveToSet: 'Save to candidate set',
       loadFailed: 'Failed to load results. Please try again later.',
@@ -3740,7 +3810,15 @@ export default {
       model_choice: 'Pocket model',
       center_x: 'Pocket center X',
       center_y: 'Pocket center Y',
-      center_z: 'Pocket center Z'
+      center_z: 'Pocket center Z',
+      generation_mode: 'Generation mode',
+      n_samples: 'Number of molecules',
+      n_steps: 'Sampling steps',
+      sampler: 'Sampler',
+      sampling_noise: 'Sampling noise',
+      molecule_size: 'Molecule size',
+      atoms_to_dock: 'Atoms to dock',
+      fragment_sdf: 'Fragment / ligand structure',
     },
     hints: {
       sequence: 'Accepts multi-line or FASTA format; length must satisfy the model requirements.',
@@ -3763,10 +3841,21 @@ export default {
       model_choice: 'Auto-select or specify a pocket detection model.',
       center_x: 'X coordinate of the pocket center.',
       center_y: 'Y coordinate of the pocket center.',
-      center_z: 'Z coordinate of the pocket center.'
+      center_z: 'Z coordinate of the pocket center.',
+      generation_mode: 'Choose de novo, fragment growing, or docking mode.',
+      n_samples: 'Number of molecules to generate.',
+      n_steps: 'Diffusion sampling steps; higher values usually improve refinement but take longer.',
+      sampler: 'Diffusion sampler to use.',
+      sampling_noise: 'Sampling noise controls output diversity.',
+      molecule_size: 'Leave blank for pocket-adaptive, or enter 25 / uniform_15_30.',
+      atoms_to_dock: '0-based atom indices; empty docks the whole ligand.',
+      fragment_sdf: 'Supports SDF, MOL, MOL2, or PDB structure files.'
     },
     options: {
       deviceAuto: 'Auto',
+      generationModeDenovo: 'De novo design',
+      generationModeFragment: 'Fragment growing & linking',
+      generationModeDock: 'Docking & partial docking',
       deviceCpu: 'CPU',
       deviceGpu: 'GPU',
       waterTip3p: 'TIP3P',

@@ -27,7 +27,7 @@ function readDeployedToolSlugs(): Set<string> {
     slugs.add(match[1] ?? '')
   }
   const capabilities = readFileSync(resolve(root, 'tools', 'capabilities.py'), 'utf8')
-  for (const match of capabilities.matchAll(/^\s{4}"(builtin-[a-z0-9-]+)":\s*ToolCapability\(/gm)) {
+  for (const match of capabilities.matchAll(/^\s{4}"([a-z0-9-]+)":\s*ToolCapability\(/gm)) {
     slugs.add(match[1] ?? '')
   }
   return slugs
