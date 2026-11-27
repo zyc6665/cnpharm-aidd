@@ -62,8 +62,8 @@ def test_analysis_and_rmsf_columns_are_declared():
     # 回转半径进逐帧时间序列
     assert 'writer.writerow(columns + ["rmsd_nm", "rg_nm"])' in source
     assert '"gyrate"' in source
-    # RMSF 单独一张逐残基表
-    assert 'writer.writerow(["residue_seq", "residue_name", "rmsf_nm"])' in source
+    # RMSF 单独一张逐残基表；chain_id 必须在，否则多链体系里 A/B 链同号残基会碰撞
+    assert 'writer.writerow(["chain_id", "residue_seq", "residue_name", "rmsf_nm"])' in source
     assert '"rmsf_csv": file_ref(output_dir, "artifacts/rmsf.csv")' in source
     assert '"contacts_csv": file_ref(output_dir, "artifacts/contacts.csv")' in source
     assert '"interactions_json": file_ref(output_dir, "artifacts/interactions.json")' in source

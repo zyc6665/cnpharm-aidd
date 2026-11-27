@@ -65,9 +65,32 @@ def chain_residue_ranges(pdb: Path) -> tuple[int, int]:
     return counts[0], sum(counts)
 
 
+_GROUP_LINE = re.compile(r"^\s*(\d+)\s+(\S+)\s*:", re.MULTILINE)
+
+
+def _index_group_names(work: Path) -> list[str]:
+    """按出现顺序读回 ``index.ndx`` 的组名（下标即组号）。"""
+    names: list[str] = []
+    for line in (work / "index.ndx").read_text(encoding="utf-8", errors="ignore").splitlines():
+        if line.startswith("[") and line.rstrip().endswith("]"):
+            names.append(line.strip()[1:-1].strip())
+    return names
+
+
 def make_index(work: Path, receptor_residues: int, total_residues: int) -> tuple[int, int]:
-    """Create Receptor/Ligand groups with gmx make_ndx and return their indices."""
-    commands = f"ri 1-{receptor_residues}\nname 19 Receptor\nri {receptor_residues + 1}-{total_residues}\nname 20 Ligand\nq\n"
+    """建立 Receptor/Ligand 索引组并返回它们的真实组号。
+
+    历史实现把组号写死成 ``name 19`` / ``name 20``：这两个数字只是「默认组
+    恰好有 19 个」时的巧合，水模型、离子、force field 一变，默认组数量就变，
+    ``name 19`` 会静默把**别的组**改名成 Receptor，MMPBSA 随后对错误的受体
+    求能量，结果看起来完全正常。所以这里只命令 ``ri`` 建组，组号从
+    ``make_ndx`` 的输出/``index.ndx`` 里动态读，读不到再退化为「最后两个组」。
+    """
+    commands = (
+        f"ri 1-{receptor_residues}\n"
+        f"ri {receptor_residues + 1}-{total_residues}\n"
+        "q\n"
+    )
     result = subprocess.run(
         [GMX, "make_ndx", "-f", "npt.gro", "-o", "index.ndx"],
         cwd=str(work),
@@ -78,22 +101,25 @@ def make_index(work: Path, receptor_residues: int, total_residues: int) -> tuple
     )
     if result.returncode != 0 or not (work / "index.ndx").is_file():
         raise SystemExit("gmx make_ndx failed:\n" + result.stdout[-2000:] + result.stderr[-2000:])
-    match_rec = re.search(r"group\s+(\d+)\s+Receptor", result.stdout)
-    match_lig = re.search(r"group\s+(\d+)\s+Ligand", result.stdout)
-    if match_rec and match_lig:
-        return int(match_rec.group(1)), int(match_lig.group(1))
-    # Parse the generated index file: gmx names the residue-range groups
-    # "r_1-<receptor>" and "r_<receptor+1>-<total>"; return their 0-based positions.
-    names: list[str] = []
-    for line in (work / "index.ndx").read_text(encoding="utf-8", errors="ignore").splitlines():
-        if line.startswith("[") and line.rstrip().endswith("]"):
-            names.append(line.strip()[1:-1].strip())
+
     receptor_name = f"r_1-{receptor_residues}"
     ligand_name = f"r_{receptor_residues + 1}-{total_residues}"
-    try:
+
+    # 1) make_ndx 交互输出里带组号（"19 r_1-64 : ..."），优先用它。
+    by_name = {name: int(number) for number, name in _GROUP_LINE.findall(result.stdout)}
+    if receptor_name in by_name and ligand_name in by_name:
+        return by_name[receptor_name], by_name[ligand_name]
+
+    # 2) 退一步读 index.ndx 的组顺序。
+    names = _index_group_names(work)
+    if receptor_name in names and ligand_name in names:
         return names.index(receptor_name), names.index(ligand_name)
-    except ValueError as exc:
-        raise SystemExit("cannot locate receptor/ligand index groups in index.ndx: " + str(names)) from exc
+
+    # 3) 两个 ri 组总是最后创建的两个，顺序即命令顺序。
+    if len(names) >= 2:
+        return len(names) - 2, len(names) - 1
+
+    raise SystemExit("cannot locate receptor/ligand index groups in index.ndx: " + str(names))
 
 
 #: 逐帧自由能表的列名。与前端 ``frontend/src/views/md/analysis.ts`` 的
@@ -267,7 +293,7 @@ def main() -> int:
     protein = pick_protein(files, input_dir)
     receptor_residues, total_residues = chain_residue_ranges(protein)
     progress(2, "short MD for MMPBSA")
-    run_pipeline(
+    pipeline = run_pipeline(
         protein,
         work,
         force_field=force_field,
@@ -282,7 +308,10 @@ def main() -> int:
     progress(78, "build index groups")
     rec_idx, lig_idx = make_index(work, receptor_residues, total_residues)
 
-    frames = max(1, nsteps // 500)
+    # 帧数公式必须和 gromacs_platform 的 metadata.frames 一致：nstxout-compressed
+    # = 500，第 0 帧也算一帧，所以是 floor(nsteps/500)+1（旧写法少算最后一帧，
+    # endframe 会把轨迹尾部丢掉）。
+    frames = nsteps // 500 + 1
     (work / "mmpbsa.in").write_text(
         "&general\n"
         f'  sys_name="Complex", startframe=1, endframe={frames}, interval=1, temperature={temperature}, verbose=2,\n'
@@ -312,7 +341,10 @@ def main() -> int:
         str(MPIRUN), "--allow-run-as-root", "-n", "1",
         str(AMBER_ENV / "bin" / "python"), str(AMBER_ENV / "bin" / "gmx_MMPBSA"),
         "-O", "-i", "mmpbsa.in", "-cs", "md.tpr", "-ci", "index.ndx",
-        "-cg", str(rec_idx), str(lig_idx), "-ct", "md.xtc", "-cp", "topol.top",
+        "-cg", str(rec_idx), str(lig_idx),
+        # 用去掉 PBC 跳变的轨迹：分子跨盒边界的「瞬移」会被 MM/GBSA 当成真实的
+        # 构象变化，直接污染 ΔG。run_pipeline 已经生成 md_pbc.xtc。
+        "-ct", Path(str(pipeline.get("trajectory_xtc") or pipeline.get("trajectory") or "md.xtc")).name, "-cp", "topol.top",
         "-o", "FINAL_RESULTS_MMPBSA.dat", "-eo", "FINAL_RESULTS_MMPBSA.csv", "-nogui",
     ]
     result = subprocess.run(command, cwd=str(work), env=env, text=True, capture_output=True, check=False)

@@ -34,6 +34,21 @@ from typing import Any
 
 GMX = os.environ.get("GMX_BIN", "gmx")
 
+# `gmx solvate -cs` 的预平衡水盒子必须和水模型匹配：TIP4P 是四位点水，
+# 用 spc216.gro（三位点）预填会得到没有虚拟位点坐标的「假 TIP4P」，pdb2gmx
+# 会报原子数不匹配或静默生成错误拓扑。未知水模型退回 spc216 保持旧行为。
+SOLVENT_BOXES = {
+    "tip3p": "spc216.gro",
+    "spc": "spc216.gro",
+    "spce": "spc216.gro",
+    "tip4p": "tip4p.gro",
+    "tip5p": "tip5p.gro",
+}
+
+
+def solvent_box(water_model: str) -> str:
+    return SOLVENT_BOXES.get(water_model.strip().lower(), "spc216.gro")
+
 _LIGAND_EXTS = (".sdf", ".mol", ".mol2", ".pdb")
 _PROTEIN_EXTS = (".pdb", ".cif")
 _CUSTOM_EXTS = (".zip", ".itp", ".gro", ".prm", ".rtp")
@@ -257,11 +272,13 @@ gen-seed = -1
 pcoupl = no
 """
     if kind == "npt":
+        # NPT 平衡用 C-rescale（随机重标定恒压器）：保证系综采样并避免
+        # Parrinello-Rahman 在平衡初期引起盒子振荡；生产段仍用 Parrinello-Rahman。
         return common + f"""tcoupl = V-rescale
 tc-grps = System
 tau-t = 0.1
 ref-t = {temperature}
-pcoupl = Parrinello-Rahman
+pcoupl = C-rescale
 pcoupltype = isotropic
 tau-p = 2.0
 ref-p = 1.0
@@ -390,7 +407,7 @@ def write_rmsf_csv(work: Path, out_csv: Path, topology: Path, trajectory_name: s
 
     不是逐帧量，所以它不能塞进 analysis.csv 的时间序列里——这一列过去一直
     是空的，页面上「RMSF」图恒为空白（``docs/26`` H-3）。这里单独出一张表：
-    ``residue_seq, residue_name, rmsf_nm``。
+    ``chain_id, residue_seq, residue_name, rmsf_nm``，带 ``chain_id`` 防止多链残基号碰撞。
     """
     try:
         run(
@@ -406,7 +423,7 @@ def write_rmsf_csv(work: Path, out_csv: Path, topology: Path, trajectory_name: s
     residues = backbone_residues(topology)
     with out_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["residue_seq", "residue_name", "rmsf_nm"])
+        writer.writerow(["chain_id", "residue_seq", "residue_name", "rmsf_nm"])
         for index, row in enumerate(rows, start=1):
             try:
                 position = int(round(float(row[0])))
@@ -416,8 +433,7 @@ def write_rmsf_csv(work: Path, out_csv: Path, topology: Path, trajectory_name: s
                 chain, residue_seq, residue_name = residues[position - 1]
             else:
                 chain, residue_seq, residue_name = "", str(position), ""
-            del chain  # 链信息不在表里：残基序号已经能唯一定位（单链 MD）
-            writer.writerow([residue_seq, residue_name, f"{row[1]:.4f}"])
+            writer.writerow([chain, residue_seq, residue_name, f"{row[1]:.4f}"])
     return True
 
 
@@ -638,7 +654,7 @@ def run_pipeline(
     progress(15, "editconf")
     run([GMX, "editconf", "-f", start_gro, "-o", "boxed.gro", "-c", "-d", str(box_distance), "-bt", "cubic"], work)
     progress(20, "solvate")
-    run([GMX, "solvate", "-cp", "boxed.gro", "-cs", "spc216.gro", "-o", "solvated.gro", "-p", "topol.top"], work)
+    run([GMX, "solvate", "-cp", "boxed.gro", "-cs", solvent_box(water_model), "-o", "solvated.gro", "-p", "topol.top"], work)
 
     (work / "ions.mdp").write_text(mdp_text("ions", 0, dt, temperature), encoding="utf-8")
     progress(28, "genion")
