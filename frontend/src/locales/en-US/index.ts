@@ -249,10 +249,11 @@ export default {
     title: 'Home',
     badge: 'AI-Powered Scientific Computing',
     hero: {
-      title: 'From target to lead compound, in one workspace',
+      title: 'From target to lead compound,\nin one workspace',
       description: 'Pocket identification, virtual screening, molecular docking, ADMET prediction — all computational steps orchestrated, executed, and traced on one platform',
       cta: 'Sign In',
       secondary: 'Browse Tools',
+      previewLabel: 'UI illustration',
     },
     values: {
       reproducible: {
@@ -2174,7 +2175,9 @@ export default {
       namePlaceholder: 'e.g. Large pocket fine sampling',
       nameRequired: 'Please enter a preset name',
       saved: 'Preset saved',
+      savedSessionOnly: 'Could not write to local storage. The preset is available only for this session.',
       deleted: 'Preset deleted',
+      deletedSessionOnly: 'Could not write to local storage. The preset was removed only for this session.',
       delete: 'Delete',
       builtInPresets: {
         quick: 'Quick exploration',
@@ -2746,7 +2749,7 @@ export default {
     },
     result: {
       title: 'Screening Results',
-      subtitle: 'Ranked table and funnel statistics; click a row to view the docking pose.',
+      subtitle: 'Ranked table and funnel statistics; use "View pose" on eligible rows to inspect docking poses.',
       loading: 'Loading screening results…',
       loadFailed: 'Failed to load screening results.',
       empty: 'No screening table found.',
@@ -2762,6 +2765,11 @@ export default {
       setName: 'Candidate set name',
       setNamePlaceholder: 'For example: STAT6 screening Top 10',
       saveScope: 'Will save {count} valid molecules (from {total} eligible rows).',
+      saveSelectedScope: 'Of the {total} selected rows, {count} are eligible and will be saved.',
+      zeroPassNotice: 'No eligible molecules passed screening. Candidate set saving and ADMET handoff are unavailable.',
+      poseAction: 'Docking pose',
+      viewPose: 'View pose',
+      poseNotExported: 'Pose not exported',
       saveButton: 'Save',
       saved: 'Saved {count} candidates to the candidate set',
       saveFailed: 'Could not save the candidate set. Please retry.',
@@ -2816,6 +2824,7 @@ export default {
       score: 'Docking score (kcal/mol)',
       rmsdLb: 'RMSD lower bound (Å)',
       rmsdUb: 'RMSD upper bound (Å)',
+      notProvided: 'Not provided',
       interactions: 'Interactions',
       interactionEmpty: 'No interactions recorded for this pose.',
       type: 'Type',
@@ -2825,8 +2834,8 @@ export default {
       viewer: 'Complex structure',
       noStructure: 'No structure file to display.',
       hints: {
-        score: 'Lower means tighter binding (kcal/mol)',
-        rmsd: 'Lower means closer to the crystal pose (Å)'
+        score: 'Within the same model and docking protocol, a lower score usually ranks higher; it does not replace measured binding affinity (kcal/mol)',
+        rmsd: 'Native Vina rmsd_lb/rmsd_ub: RMSD lower/upper bound relative to the best pose of this docking run (Å), not deviation from the crystal pose'
       },
       rank: 'Rank',
       ligandSmiles: 'Ligand SMILES',

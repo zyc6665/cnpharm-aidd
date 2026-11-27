@@ -1,6 +1,6 @@
-import { nextTick, ref } from 'vue'
+import { effectScope, nextTick, ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskLogs } from '@/api/tasks'
 import { openTaskEventStream } from '@/api/task-events'
 import type { Task, TaskLog } from '@/types/models'
@@ -95,6 +95,8 @@ describe('useTaskDetailLiveUpdates', () => {
     })
     mockLogs()
   })
+
+  afterEach(() => vi.useRealTimers())
 
   it('reports the backend total separately from the logs it keeps in memory', async () => {
     // 长任务动辄几百上千行，面板只保留最近 200 行；「共 N 条」必须说后端总量，
@@ -205,23 +207,91 @@ describe('useTaskDetailLiveUpdates', () => {
     expect(updates.logs.value).toEqual([])
   })
 
-  it('falls back to polling when the stream cannot be opened', async () => {
-    vi.mocked(openTaskEventStream).mockImplementation(() => ({ close: vi.fn(), available: false }))
-    const task = ref<Task | null>(buildTask('running', 10))
-    const fetchTaskDetail = vi.fn()
+  it.each(['no EventSource', 'SSE error'])('polls queued through success after %s and stops at terminal status', async (failure) => {
+    if (failure === 'no EventSource') {
+      vi.mocked(openTaskEventStream).mockReturnValue({ close: stream.close, available: false })
+    }
+    const task = ref<Task | null>(buildTask('queued'))
+    const fetchTaskDetail = vi.fn().mockResolvedValue(undefined)
+      .mockImplementationOnce(async () => {})
+      .mockImplementationOnce(async () => { task.value = buildTask('running', 10) })
+      .mockImplementationOnce(async () => { task.value = buildTask('success', 100) })
     const updates = useTaskDetailLiveUpdates({
       taskId: ref('task-1'),
       task,
       fetchTaskDetail,
       updateTaskProgress: vi.fn(),
-      intervalMs: 1000,
+      intervalMs: 2500,
     })
 
     await updates.start()
+    if (failure === 'SSE error') {
+      await vi.advanceTimersByTimeAsync(2500)
+      expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
+      handlers.onError?.(new Error('Disconnected') as never)
+    }
     expect(updates.streamConnected.value).toBe(false)
 
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(task.value?.status).toBe('running')
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(task.value?.status).toBe('success')
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(3)
+  })
+
+  it('skips polling while detail is in flight and clears the timer on task change and disposal', async () => {
+    vi.mocked(openTaskEventStream).mockReturnValue({ close: stream.close, available: false })
+    const scope = effectScope()
+    const taskId = ref('task-1')
+    const task = ref<Task | null>(buildTask('pending'))
+    let finishRequest!: () => void
+    const fetchTaskDetail = vi.fn().mockResolvedValue(undefined)
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishRequest = resolve }))
+    const updates = scope.run(() => useTaskDetailLiveUpdates({
+      taskId,
+      task,
+      fetchTaskDetail,
+      updateTaskProgress: vi.fn(),
+      intervalMs: 2500,
+    }))!
+
+    await updates.start()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
+    finishRequest()
+    await vi.advanceTimersByTimeAsync(2500)
     expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
+
+    taskId.value = 'task-2'
+    await nextTick()
+    expect(stream.close).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(1)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(3)
+    scope.stop()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps only the latest 500 SSE logs and counts all received logs', async () => {
+    const updates = useTaskDetailLiveUpdates({
+      taskId: ref('task-1'),
+      task: ref(buildTask('running')),
+      fetchTaskDetail: vi.fn(),
+      updateTaskProgress: vi.fn(),
+    })
+    await updates.start()
+    for (let index = 1; index <= 502; index++) {
+      handlers.onLog?.({
+        id: `log-${index}`, taskId: 'task-1', level: 'info', message: `line-${index}`,
+        timestamp: '2026-08-20T00:00:01Z',
+      } as never)
+    }
+
+    expect(updates.logs.value).toHaveLength(500)
+    expect(updates.logs.value[0]?.message).toBe('line-3')
+    expect(updates.logs.value[499]?.message).toBe('line-502')
+    expect(updates.logsTotal.value).toBe(502)
   })
 
   it('closes the previous stream and opens a new one when the task id changes', async () => {
@@ -260,5 +330,39 @@ describe('useTaskDetailLiveUpdates', () => {
     expect(updates.logs.value).toEqual([
       { id: 2, task_id: 'task-2', level: 'info', message: 'new', timestamp: '2026-08-20T00:00:01Z' },
     ])
+  })
+
+  it('deduplicates replayed historical SSE logs against REST logs without doubling logsTotal', async () => {
+    vi.mocked(getTaskLogs).mockResolvedValueOnce({
+      code: 200,
+      message: 'ok',
+      data: {
+        items: [
+          { id: 'db-10', task_id: 'task-1', level: 'info', message: 'step-10', timestamp: '2026-08-20T00:00:10Z' },
+        ],
+        total: 10,
+      },
+    } as never)
+
+    const updates = useTaskDetailLiveUpdates({
+      taskId: ref('task-1'),
+      task: ref(buildTask('running')),
+      fetchTaskDetail: vi.fn(),
+      updateTaskProgress: vi.fn(),
+    })
+    await updates.start()
+    await flushPromises()
+    expect(updates.logsTotal.value).toBe(10)
+
+    // Replay older historical log + already fetched REST log: neither should inflate logsTotal
+    handlers.onLog?.({ id: '1', taskId: 'task-1', level: 'info', message: 'step-1', timestamp: '2026-08-20T00:00:01Z' } as never)
+    handlers.onLog?.({ id: '10', taskId: 'task-1', level: 'info', message: 'step-10', timestamp: '2026-08-20T00:00:10Z' } as never)
+    expect(updates.logsTotal.value).toBe(10)
+    expect(updates.logs.value.map(item => item.message)).toEqual(['step-10'])
+
+    // Genuinely new log increments total to 11
+    handlers.onLog?.({ id: '11', taskId: 'task-1', level: 'info', message: 'step-11', timestamp: '2026-08-20T00:00:11Z' } as never)
+    expect(updates.logsTotal.value).toBe(11)
+    expect(updates.logs.value.map(item => item.message)).toEqual(['step-10', 'step-11'])
   })
 })

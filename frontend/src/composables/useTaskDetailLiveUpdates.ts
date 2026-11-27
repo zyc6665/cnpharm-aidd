@@ -2,7 +2,7 @@ import { computed, getCurrentScope, onScopeDispose, ref, watch, type Ref } from 
 import { getTaskLogs } from '@/api/tasks'
 import { openTaskEventStream, type TaskEventPayload, type TaskLogEventPayload } from '@/api/task-events'
 import type { Task, TaskLog, TaskStatus } from '@/types/models'
-import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus, terminalStatuses } from '@/domain/tasks'
+import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus, runningStatuses, terminalStatuses } from '@/domain/tasks'
 
 /** 每次拉取的日志条数（后端上限 200）。 */
 const LOG_PAGE_SIZE = 200
@@ -24,7 +24,7 @@ export interface TaskDetailLiveUpdatesOptions {
  * 任务详情页的实时更新（docs/10 API-08：实时进度走 SSE，禁止前端轮询 < 2s）。
  *
  * 正常情况下由 `GET /api/v1/tasks/{id}/events` 推送状态、进度与日志；只有在
- * 运行环境没有 `EventSource` 或连接失败时才退回 5s 轮询，且轮询仅在运行中启用。
+ * 运行环境没有 `EventSource` 或连接失败时才退回 5s 轮询，覆盖待调度、排队和运行状态。
  */
 export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) {
   const logs = ref<TaskLog[]>([])
@@ -34,6 +34,10 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   const intervalMs = options.intervalMs ?? 5000
   const timestamp = options.timestamp ?? (() => new Date().toISOString())
   const taskStatus = computed(() => normalizeTaskStatus(options.task.value?.status))
+  const shouldPoll = computed(() => !streamConnected.value && runningStatuses.includes(taskStatus.value))
+  const detailRequests = new Map<string, Promise<unknown>>()
+  const seenLogKeys = new Set<string>()
+  let latestRestLogMs = 0
   let refreshTimer: number | null = null
   let closeStream: (() => void) | null = null
   let logSequence = 0
@@ -53,7 +57,15 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
         return
       }
 
-      logs.value = mergeTaskLogs(extractTaskLogs(response.data), logs.value)
+      const fetched = extractTaskLogs(response.data)
+      for (const item of fetched) {
+        seenLogKeys.add(logContentKey(item))
+        const parsedMs = Date.parse(item.timestamp)
+        if (Number.isFinite(parsedMs) && parsedMs > latestRestLogMs) {
+          latestRestLogMs = parsedMs
+        }
+      }
+      logs.value = mergeTaskLogs(fetched, logs.value)
       // 后端总共写了多少行。面板只保留最近一段，界面上要能说清
       // 「共 N 条，这里显示最近 M 条」，否则用户会以为日志被截断了。
       const total = Number(response.data?.total ?? 0)
@@ -67,27 +79,50 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
     }
   }
 
+  async function fetchDetailOnce(taskId: string) {
+    const pending = detailRequests.get(taskId)
+    if (pending) return pending
+
+    const request = Promise.resolve(options.fetchTaskDetail())
+    detailRequests.set(taskId, request)
+    try {
+      return await request
+    } finally {
+      detailRequests.delete(taskId)
+    }
+  }
+
   async function refreshTaskAndLogs(taskId = options.taskId.value) {
-    await Promise.allSettled([options.fetchTaskDetail(), fetchLogs(taskId)])
+    await Promise.allSettled([fetchDetailOnce(taskId), fetchLogs(taskId)])
   }
 
   function stopRefresh() {
-    if (refreshTimer) {
+    if (refreshTimer !== null) {
       window.clearInterval(refreshTimer)
       refreshTimer = null
     }
   }
 
   function startRefresh() {
-    if (refreshTimer || streamConnected.value) {
-      return
-    }
+    if (!started || refreshTimer !== null || !shouldPoll.value) return
 
+    const taskId = options.taskId.value
     refreshTimer = window.setInterval(() => {
-      if (taskStatus.value === 'running') {
-        void options.fetchTaskDetail()
-      }
+      if (!shouldPoll.value || taskId !== options.taskId.value || detailRequests.has(taskId)) return
+      void fetchDetailOnce(taskId).catch(() => {
+        // Request errors are surfaced by the shared API layer.
+      })
     }, intervalMs)
+  }
+
+  function syncRefresh() {
+    if (shouldPoll.value) startRefresh()
+    else stopRefresh()
+  }
+
+  function markStreamConnected() {
+    streamConnected.value = true
+    stopRefresh()
   }
 
   function applyEventPayload(payload: TaskEventPayload, behavior: { refreshOnTerminal: boolean }) {
@@ -95,6 +130,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
       return
     }
 
+    markStreamConnected()
     updateProgress(payload)
 
     if (payload.terminal) {
@@ -118,20 +154,41 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
       return
     }
 
-    logSequence += 1
-    logs.value.push({
-      id: logSequence,
+    markStreamConnected()
+    const ts = payload.timestamp || timestamp()
+    const entry: TaskLog = {
+      id: logSequence + 1,
       task_id: payload.taskId,
       level: normalizeTaskLogLevel(payload.level),
       message: payload.message,
-      timestamp: payload.timestamp || timestamp(),
-    })
+      timestamp: ts,
+    }
+    const contentKey = logContentKey(entry)
+    // 后端每次建立 SSE 都会从历史起点重放日志：已见过或早于 REST 最新一批的历史日志不再重复计数或挤掉新日志。
+    if (seenLogKeys.has(contentKey)) {
+      return
+    }
+    seenLogKeys.add(contentKey)
+    const entryMs = Date.parse(entry.timestamp)
+    if (latestRestLogMs > 0 && Number.isFinite(entryMs) && entryMs < latestRestLogMs) {
+      return
+    }
+
+    logSequence += 1
+    entry.id = logSequence
+    logs.value.push(entry)
+    if (logs.value.length > LOG_MAX_ITEMS) {
+      logs.value = logs.value.slice(-LOG_MAX_ITEMS)
+    }
+    logsTotal.value += 1
   }
 
   function openCurrentTaskChannel() {
     const currentTaskId = options.taskId.value
     logs.value = []
     logsTotal.value = 0
+    seenLogKeys.clear()
+    latestRestLogMs = 0
     logSequence = 0
     void refreshTaskAndLogs(currentTaskId)
 
@@ -143,17 +200,16 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
       onDone: (payload) => applyEventPayload(payload, { refreshOnTerminal: true }),
       onError: () => {
         // 连接失败（代理不支持流式、网络抖动）时退回轮询，保证页面不僵死。
+        if (!started || currentTaskId !== options.taskId.value) return
         streamConnected.value = false
-        startRefresh()
+        syncRefresh()
       },
     })
 
     streamConnected.value = handle.available
     closeStream = handle.close
 
-    if (!handle.available && taskStatus.value === 'running') {
-      startRefresh()
-    }
+    syncRefresh()
   }
 
   async function start() {
@@ -186,12 +242,8 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   )
 
   watch(taskStatus, (status) => {
-    if (status === 'running') {
-      startRefresh()
-      return
-    }
-
-    stopRefresh()
+    if (!started) return
+    syncRefresh()
 
     if (terminalStatuses.includes(status)) {
       void fetchLogs()
@@ -234,4 +286,8 @@ function compareTaskLogOrder(left: TaskLog, right: TaskLog): number {
 
 function taskLogKey(log: TaskLog): string {
   return `${log.id}:${log.task_id}:${log.timestamp}:${log.message}`
+}
+
+function logContentKey(log: Pick<TaskLog, 'task_id' | 'timestamp' | 'message'>): string {
+  return `${log.task_id}:${log.timestamp}:${log.message}`
 }

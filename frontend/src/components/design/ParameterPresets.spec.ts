@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { message } from 'ant-design-vue'
 import type { ToolSchema } from '@/types/models'
 import ParameterPresets from './ParameterPresets.vue'
 
@@ -28,7 +29,7 @@ const stubs = {
   },
   ATag: {
     emits: ['close'],
-    template: '<span class="tag"><slot /><button class="tag-close" @click="$emit(\'close\')">x</button></span>',
+    template: '<span class="tag"><slot /><button class="tag-close" @click="$emit(\'close\', $event)">x</button></span>',
   },
   AModal: {
     props: ['open', 'title'],
@@ -76,7 +77,11 @@ function mountPresets(values: Record<string, number> = {}) {
 }
 
 describe('ParameterPresets', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+  afterEach(() => vi.restoreAllMocks())
 
   it('加载内置预设时只保留 schema 声明的参数', async () => {
     const wrapper = mountPresets()
@@ -97,6 +102,34 @@ describe('ParameterPresets', () => {
     expect(stored[0].name).toBe('我的预设')
     expect(stored[0].params).toEqual({ num_samples: 160, batch_size: 2 })
     expect(wrapper.text()).toContain('我的预设')
+    expect(message.success).toHaveBeenCalledWith('design.presets.saved')
+  })
+
+  it('保存写入失败时保留内存预设并提示仅当前会话有效', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage full') })
+    const wrapper = mountPresets({ num_samples: 160 })
+    await wrapper.get('[data-testid="parameter-preset-save"]').trigger('click')
+    await wrapper.get('input').setValue('临时预设')
+    await wrapper.get('.modal-ok').trigger('click')
+
+    expect(wrapper.text()).toContain('临时预设')
+    expect(localStorage.getItem('design:parameter-presets:molecule')).toBeNull()
+    expect(message.warning).toHaveBeenCalledWith('design.presets.savedSessionOnly')
+    expect(message.success).not.toHaveBeenCalled()
+  })
+
+  it('删除写入失败时仅移除内存预设并提示仅当前会话有效', async () => {
+    const key = 'design:parameter-presets:molecule'
+    const stored = JSON.stringify([{ id: 'p1', name: '已保存的预设', params: { num_samples: 50 } }])
+    localStorage.setItem(key, stored)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage full') })
+    const wrapper = mountPresets()
+    await wrapper.get('.tag-close').trigger('click')
+
+    expect(wrapper.find('[data-testid="parameter-preset-tag-p1"]').exists()).toBe(false)
+    expect(localStorage.getItem(key)).toBe(stored)
+    expect(message.warning).toHaveBeenCalledWith('design.presets.deletedSessionOnly')
+    expect(message.success).not.toHaveBeenCalled()
   })
 
   it('从 localStorage 恢复自定义预设，并在 storageKey 切换时同步刷新', async () => {

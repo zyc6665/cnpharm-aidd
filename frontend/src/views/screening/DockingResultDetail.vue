@@ -211,6 +211,8 @@ async function buildVinaFallbackCatalog(detail: ProjectResultDetail, seq: number
   const idIdx = headers.findIndex(h => h === 'molecule_id' || h === 'pose_id')
   const rankIdx = headers.indexOf('rank')
   const scoreIdx = headers.indexOf('docking_score')
+  const rmsdLbIdx = headers.indexOf('rmsd_lb')
+  const rmsdUbIdx = headers.indexOf('rmsd_ub')
   const smilesIdx = headers.indexOf('smiles')
   const entries: Array<{ pose: PoseMetadata; recordIndex: number; sourceOrder: number }> = []
   lines.forEach((line, sourceOrder) => {
@@ -222,9 +224,10 @@ async function buildVinaFallbackCatalog(detail: ProjectResultDetail, seq: number
       pose: {
         pose_id: molId || `pose-${rank}`,
         rank,
-        docking_score: scoreIdx >= 0 ? Number(cols[scoreIdx] ?? 0) : 0,
-        rmsd_lb: 0,
-        rmsd_ub: 0,
+        // 表格里没有该列时记为 NaN，展示层统一落成「未提供」，不再伪造 0。
+        docking_score: scoreIdx >= 0 ? parseMetricCell(cols[scoreIdx]) : Number.NaN,
+        rmsd_lb: rmsdLbIdx >= 0 ? parseMetricCell(cols[rmsdLbIdx]) : Number.NaN,
+        rmsd_ub: rmsdUbIdx >= 0 ? parseMetricCell(cols[rmsdUbIdx]) : Number.NaN,
         ligand_smiles: smilesIdx >= 0 ? cols[smilesIdx]?.trim() : undefined,
         interactions: [],
       },
@@ -399,14 +402,35 @@ onUnmounted(() => {
   revokeTaskBlobs()
 })
 
+/**
+ * 指标展示：空值 / 非有限数统一显示「未提供」，但合法的 0 必须保留。
+ * 后端元数据可能把缺失指标序列化为 null，前端类型又声明为 number，运行时两者都会出现。
+ */
+function formatMetric(value: unknown): string {
+  if (value === null || value === undefined) return t('screening.detail.notProvided')
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : t('screening.detail.notProvided')
+  }
+  const text = String(value).trim()
+  return text === '' ? t('screening.detail.notProvided') : text
+}
+
+/** CSV 兜底表里的数值列：空串/非法值视为缺失，而不是误报成 0。 */
+function parseMetricCell(value: string | undefined): number {
+  const text = (value ?? '').trim()
+  if (!text) return Number.NaN
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : Number.NaN
+}
+
 const poseSections = computed<DescriptionSection[]>(() => {
   const pose = poseMeta.value
   if (!pose) return []
   const fields: DescriptionSection['fields'] = [
     { key: 'rank', label: t('screening.detail.rank'), value: String(pose.rank) },
-    { key: 'score', label: t('screening.detail.score'), value: String(pose.docking_score), hint: t('screening.detail.hints.score') },
-    { key: 'rmsdLb', label: t('screening.detail.rmsdLb'), value: String(pose.rmsd_lb), hint: t('screening.detail.hints.rmsd') },
-    { key: 'rmsdUb', label: t('screening.detail.rmsdUb'), value: String(pose.rmsd_ub), hint: t('screening.detail.hints.rmsd') },
+    { key: 'score', label: t('screening.detail.score'), value: formatMetric(pose.docking_score), hint: t('screening.detail.hints.score') },
+    { key: 'rmsdLb', label: t('screening.detail.rmsdLb'), value: formatMetric(pose.rmsd_lb), hint: t('screening.detail.hints.rmsd') },
+    { key: 'rmsdUb', label: t('screening.detail.rmsdUb'), value: formatMetric(pose.rmsd_ub), hint: t('screening.detail.hints.rmsd') },
   ]
   if (pose.ligand_smiles) {
     fields.push({ key: 'ligandSmiles', label: t('screening.detail.ligandSmiles'), value: pose.ligand_smiles, mono: true, span: 4 })
@@ -515,6 +539,19 @@ const poseSections = computed<DescriptionSection[]>(() => {
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
+}
+
+/*
+ * AppDescriptionList 的 hint 默认是固定的 rgba(0,0,0,.45)，暗色主题下几乎不可读。
+ * 这里用主题变量覆盖成本页可读的灰阶，并改为独占一行，长文案有足够空间换行。
+ */
+:deep(.app-description-hint) {
+  display: block;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-secondary, #64748b);
+  white-space: normal;
 }
 
 .docking-detail__residue-btn {

@@ -6,7 +6,7 @@ import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import TaskContextBar from '@/components/tasks/TaskContextBar.vue'
 import FunnelChart from './FunnelChart.vue'
-import { countPasses, funnelFromRankedRows } from './funnel'
+import { countPasses, funnelFromRankedRows, isTruthyFlag } from './funnel'
 import type { FunnelStageKey } from './funnel'
 import { loadMoleculeTable } from '@/views/predict/molecule-table'
 import { downloadCsv } from '@/views/predict/csv-export'
@@ -36,21 +36,16 @@ const taskProjectId = ref('')
 const taskDetail = ref<Task | null>(null)
 
 function rowStableKey(record: CsvPreviewRow): string { return record.__rowKey ?? '' }
-function isPass(raw: string | undefined): boolean {
-  const value = (raw ?? '').trim().toLowerCase()
-  return value === 'true' || value === '1' || value === 'yes'
-}
-function validRows(input: CsvPreviewRow[]): CsvPreviewRow[] {
-  return input.filter(row => isValidHandoffSmiles(row.smiles ?? ''))
-}
-const selectedRows = computed(() => rows.value.filter(row => selectedRowKeys.value.includes(rowStableKey(row))))
-const fallbackRows = computed(() => {
-  const passed = validRows(rows.value.filter(row => isPass(row.passes)))
-  const eligible = passed.length ? passed : validRows(rows.value).filter(row => Number(row.rank) > 0).slice(0, 20)
+const passedRows = computed(() => rows.value.filter(row => isTruthyFlag(row.passes) && isValidHandoffSmiles(row.smiles ?? '')))
+const handoffRows = computed(() => {
+  const eligible = selectedRowKeys.value.length
+    ? passedRows.value.filter(row => selectedRowKeys.value.includes(rowStableKey(row)))
+    : passedRows.value
   return eligible.slice(0, MAX_SAVE_CANDIDATES)
 })
-const handoffRows = computed(() => (selectedRowKeys.value.length ? validRows(selectedRows.value) : fallbackRows.value).slice(0, MAX_SAVE_CANDIDATES))
-const rowsToSave = computed(() => handoffRows.value)
+const saveScopeText = computed(() => selectedRowKeys.value.length
+  ? t('screening.result.saveSelectedScope', { count: handoffRows.value.length, total: selectedRowKeys.value.length })
+  : t('screening.result.saveScope', { count: handoffRows.value.length, total: passedRows.value.length }))
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
   preserveSelectedRowKeys: true,
@@ -68,8 +63,8 @@ async function projectIdForTask(): Promise<string> {
   return taskProjectId.value = response.data.project_id ?? ''
 }
 async function handleSaveCandidates(): Promise<void> {
-  if (savingCandidates.value || !saveSetName.value.trim() || !rowsToSave.value.length) return
-  const snapshot = [...rowsToSave.value]
+  if (savingCandidates.value || !saveSetName.value.trim() || !handoffRows.value.length) return
+  const snapshot = [...handoffRows.value]
   const name = saveSetName.value.trim()
   const id = taskId.value
   const projectId = await projectIdForTask().catch(() => '')
@@ -156,16 +151,19 @@ function columnTitle(key: string): string {
   return suffix ? t(`screening.result.${suffix}`) : key
 }
 function isStageColumn(key: string): boolean { return ['stage_pharmacophore', 'stage_docking', 'stage_cutoff'].includes(key) }
-const tableColumns = computed(() => SCREENING_RANKED_COLUMNS.map(key => ({
-  title: columnTitle(key), dataIndex: key, key,
-  width: key === 'smiles' || key === 'error' ? 220 : 120,
-  align: NUMERIC_KEYS.includes(key) ? 'right' : 'left',
-  sorter: NUMERIC_KEYS.includes(key) ? (a: CsvPreviewRow, b: CsvPreviewRow) => {
-    const av = a[key]?.trim() ? Number(a[key]) : Number.NaN
-    const bv = b[key]?.trim() ? Number(b[key]) : Number.NaN
-    return (Number.isFinite(av) ? av : Infinity) - (Number.isFinite(bv) ? bv : Infinity)
-  } : undefined
-})))
+const tableColumns = computed(() => [
+  { title: t('screening.result.poseAction'), key: 'pose', width: 160 },
+  ...SCREENING_RANKED_COLUMNS.map(key => ({
+    title: columnTitle(key), dataIndex: key, key,
+    width: key === 'smiles' || key === 'error' ? 220 : 120,
+    align: NUMERIC_KEYS.includes(key) ? 'right' as const : 'left' as const,
+    sorter: NUMERIC_KEYS.includes(key) ? (a: CsvPreviewRow, b: CsvPreviewRow) => {
+      const av = a[key]?.trim() ? Number(a[key]) : Number.NaN
+      const bv = b[key]?.trim() ? Number(b[key]) : Number.NaN
+      return (Number.isFinite(av) ? av : Infinity) - (Number.isFinite(bv) ? bv : Infinity)
+    } : undefined
+  }))
+])
 const exportColumns = computed(() => SCREENING_RANKED_COLUMNS.map(key => ({ key, title: columnTitle(key) })))
 const funnelStages = computed(() => funnelFromRankedRows(rows.value))
 const keptCount = computed(() => countPasses(rows.value))
@@ -181,11 +179,11 @@ function validRank(record: CsvPreviewRow): boolean {
   const value = Number(record.rank)
   return Number.isInteger(value) && value > 0
 }
-function openPose(record: CsvPreviewRow): void {
-  if (validRank(record)) void router.push({ path: `/docking-results/pose-${Number(record.rank)}`, query: { task_id: taskId.value } })
+function canViewPose(record: CsvPreviewRow): boolean {
+  return validRank(record) && isTruthyFlag(record.passes)
 }
-function customRow(record: CsvPreviewRow) {
-  return { style: { cursor: validRank(record) ? 'pointer' : 'default' }, onClick: () => openPose(record) }
+function openPose(record: CsvPreviewRow): void {
+  if (canViewPose(record)) void router.push({ path: `/docking-results/pose-${Number(record.rank)}`, query: { task_id: taskId.value } })
 }
 function handleExport(): void { downloadCsv(`screening-${taskId.value}.csv`, exportColumns.value, rows.value) }
 let requestId = 0
@@ -210,7 +208,7 @@ watch(taskId, () => { void load() }, { immediate: true })
   <main class="screen-result" data-testid="screen-result-page">
     <AppPageHeader :title="t('screening.result.title')" :subtitle="t('screening.result.subtitle')">
       <template #actions><a-space>
-        <a-button :disabled="!rowsToSave.length" data-testid="screen-save-candidates" @click="openSaveModal">{{ selectedRowKeys.length ? t('screening.result.saveSelected', { count: rowsToSave.length }) : t('screening.result.saveCandidates') }}</a-button>
+        <a-button :disabled="!handoffRows.length" data-testid="screen-save-candidates" @click="openSaveModal">{{ selectedRowKeys.length ? t('screening.result.saveSelected', { count: handoffRows.length }) : t('screening.result.saveCandidates') }}</a-button>
         <a-button :disabled="!handoffRows.length" :loading="handoffBusy" data-testid="screen-send-admet" @click="sendToAdmet">{{ t('screening.result.sendAdmet', { count: handoffRows.length }) }}</a-button>
         <a-button :disabled="!rows.length" :loading="mdBusy" data-testid="screen-send-md" @click="sendToMd">{{ t('screening.result.useReceptorMd') }}</a-button>
         <a-button type="primary" :disabled="!rows.length" data-testid="screen-result-export" @click="handleExport">{{ t('screening.result.exportCsv') }}</a-button>
@@ -225,9 +223,22 @@ watch(taskId, () => { void load() }, { immediate: true })
         <a-col :xs="24" :lg="12"><a-card :title="t('screening.result.funnel')" data-testid="screen-result-funnel"><FunnelChart :stages="funnelStages" :labels="stageLabels" /></a-card></a-col>
         <a-col :xs="24" :lg="12"><a-card :title="t('screening.result.stats')"><a-statistic :title="t('screening.result.count')" :value="rows.length" /><a-statistic :title="t('screening.result.kept')" :value="keptCount" /><a-table :columns="[{ title: '', dataIndex: 'label', key: 'label' }, { title: t('screening.result.passed'), dataIndex: 'remaining', key: 'remaining', align: 'right' }, { title: t('screening.result.eliminated'), dataIndex: 'eliminated', key: 'eliminated', align: 'right' }]" :data-source="stageRows" :pagination="false" row-key="key" size="small" /></a-card></a-col>
       </a-row>
-      <a-card :title="t('screening.result.table')"><a-table :columns="tableColumns" :data-source="rows" :row-selection="rowSelection" :pagination="{ pageSize: 20, showSizeChanger: true }" :scroll="{ x: 'max-content' }" :row-key="rowStableKey" :custom-row="customRow" size="small" data-testid="screen-result-table"><template #bodyCell="{ column, record }"><template v-if="column.key === 'passes'"><a-tag :color="isPass(record.passes) ? 'green' : 'default'">{{ isPass(record.passes) ? t('screening.result.yes') : t('screening.result.no') }}</a-tag></template><template v-else-if="isStageColumn(column.key)"><a-tag :color="isPass(record[column.key]) ? 'green' : 'default'">{{ isPass(record[column.key]) ? t('screening.result.yes') : t('screening.result.no') }}</a-tag></template></template></a-table></a-card>
+      <a-alert v-if="rows.length && !passedRows.length" type="info" show-icon data-testid="screen-zero-pass-alert" :message="t('screening.result.zeroPassNotice')" />
+      <a-card :title="t('screening.result.table')">
+        <a-table :columns="tableColumns" :data-source="rows" :row-selection="rowSelection" :pagination="{ pageSize: 20, showSizeChanger: true }" :scroll="{ x: 'max-content' }" :row-key="rowStableKey" size="small" data-testid="screen-result-table">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'pose'">
+              <a-button v-if="canViewPose(record)" size="small" data-testid="screen-view-pose" @click="openPose(record)">{{ t('screening.result.viewPose') }}</a-button>
+              <span v-else>{{ t('screening.result.poseNotExported') }}</span>
+            </template>
+            <template v-else-if="column.key === 'passes' || isStageColumn(column.key)">
+              <a-tag :color="isTruthyFlag(record[column.key]) ? 'green' : 'default'">{{ isTruthyFlag(record[column.key]) ? t('screening.result.yes') : t('screening.result.no') }}</a-tag>
+            </template>
+          </template>
+        </a-table>
+      </a-card>
     </template>
-    <a-modal v-model:open="saveModalOpen" :title="t('screening.result.saveCandidates')" :confirm-loading="savingCandidates" :ok-text="t('screening.result.saveButton')" data-testid="screen-save-candidates-modal" @ok="handleSaveCandidates"><a-form layout="vertical"><a-form-item :label="t('screening.result.setName')" required><a-input v-model:value="saveSetName" :placeholder="t('screening.result.setNamePlaceholder')" /></a-form-item><p>{{ t('screening.result.saveScope', { count: rowsToSave.length, total: selectedRowKeys.length ? selectedRows.length : fallbackRows.length }) }}</p></a-form></a-modal>
+    <a-modal v-model:open="saveModalOpen" :title="t('screening.result.saveCandidates')" :confirm-loading="savingCandidates" :ok-text="t('screening.result.saveButton')" data-testid="screen-save-candidates-modal" @ok="handleSaveCandidates"><a-form layout="vertical"><a-form-item :label="t('screening.result.setName')" required><a-input v-model:value="saveSetName" :placeholder="t('screening.result.setNamePlaceholder')" /></a-form-item><p>{{ saveScopeText }}</p></a-form></a-modal>
   </main>
   <ResultDisclaimer />
 </template>
