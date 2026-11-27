@@ -33,13 +33,36 @@
         data-testid="pockets-multiple-selected"
       />
 
-      <p v-if="selectedPocket" class="pocket-summary" data-testid="pockets-selected-summary">
-        {{ t('targets.pockets.selectedBadge') }}：{{ t('targets.pockets.rank') }}
-        #{{ selectedPocket.rank ?? '-' }} ·
-        {{ t('targets.pockets.score') }} {{ formatPocketScore(selectedPocket.score) }} ·
-        {{ t('targets.pockets.center') }} {{ formatPocketCenter(selectedPocket.center) }} ·
-        {{ t('targets.pockets.volume') }} {{ formatPocketVolume(selectedPocket.volume) }}
-      </p>
+      <div v-if="selectedPocket" class="pocket-summary-bar" data-testid="pockets-selected-summary">
+        <p class="pocket-summary">
+          {{ t('targets.pockets.selectedBadge') }}：{{ t('targets.pockets.rank') }}
+          #{{ selectedPocket.rank ?? '-' }} ·
+          {{ t('targets.pockets.score') }} {{ formatPocketScore(selectedPocket.score) }} ·
+          {{ t('targets.pockets.center') }} {{ formatPocketCenter(selectedPocket.center) }} ·
+          {{ t('targets.pockets.volume') }} {{ formatPocketVolume(selectedPocket.volume) }}
+        </p>
+        <div class="pocket-summary-actions">
+          <a-button
+            size="small"
+            type="primary"
+            :loading="contextLoading"
+            :disabled="contextLoading || !contextReady"
+            data-testid="pockets-handoff-generation"
+            @click="goToGeneration(selectedPocket)"
+          >
+            {{ t('targets.pockets.useForGeneration') }}
+          </a-button>
+          <a-button
+            size="small"
+            :loading="contextLoading"
+            :disabled="contextLoading || !contextReady"
+            data-testid="pockets-handoff-screening"
+            @click="goToScreening(selectedPocket)"
+          >
+            {{ t('targets.pockets.useForScreening') }}
+          </a-button>
+        </div>
+      </div>
 
       <AppEmptyState
         v-if="pockets.length === 0"
@@ -104,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
@@ -112,6 +135,7 @@
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
+  import { getProtein, getStructure, getTarget } from '@/api/targets'
   import { useStructurePockets } from '@/composables/useStructurePockets'
   import {
     formatPocketCenter,
@@ -176,8 +200,69 @@
     }
   }
 
+  const contextLoading = ref(false)
+  const resolvedContext = ref<{ projectId: string; targetId: string; proteinId: string }>({
+    projectId: '',
+    targetId: '',
+    proteinId: ''
+  })
+  const contextReady = computed(() =>
+    Boolean(resolvedContext.value.projectId && resolvedContext.value.targetId && resolvedContext.value.proteinId)
+  )
+
+  async function resolvePocketContext(): Promise<void> {
+    if (!structureId.value) return
+    contextLoading.value = true
+    try {
+      const { data: structure } = await getStructure(structureId.value)
+      const proteinId = structure.protein_id ?? ''
+      if (!proteinId) return
+      resolvedContext.value.proteinId = proteinId
+      const { data: protein } = await getProtein(proteinId)
+      const targetId = protein.target_id ?? ''
+      if (!targetId) return
+      resolvedContext.value.targetId = targetId
+      const { data: target } = await getTarget(targetId)
+      resolvedContext.value.projectId = target.project_id ?? ''
+    } catch {
+      // 上下文反查失败不阻塞口袋表格与残基查看
+    } finally {
+      contextLoading.value = false
+    }
+  }
+
+  function buildPocketHandoffQuery(pocket: PocketSummary): Record<string, string> {
+    const query: Record<string, string> = {
+      structure_id: structureId.value,
+      pocket_id: pocket.id
+    }
+    if (resolvedContext.value.projectId) query.project_id = resolvedContext.value.projectId
+    if (resolvedContext.value.targetId) query.target_id = resolvedContext.value.targetId
+    if (resolvedContext.value.proteinId) query.protein_id = resolvedContext.value.proteinId
+    if (
+      pocket.center &&
+      Number.isFinite(pocket.center.x) &&
+      Number.isFinite(pocket.center.y) &&
+      Number.isFinite(pocket.center.z)
+    ) {
+      query.center_x = String(pocket.center.x)
+      query.center_y = String(pocket.center.y)
+      query.center_z = String(pocket.center.z)
+    }
+    return query
+  }
+
+  function goToGeneration(pocket: PocketSummary): void {
+    void router.push({ name: 'MoleculeGeneration', query: buildPocketHandoffQuery(pocket) })
+  }
+
+  function goToScreening(pocket: PocketSummary): void {
+    void router.push({ name: 'ScreenConfig', query: buildPocketHandoffQuery(pocket) })
+  }
+
   onMounted(() => {
     void load()
+    void resolvePocketContext()
   })
 </script>
 
@@ -204,11 +289,27 @@
     margin-bottom: @spacing-md;
   }
 
-  .pocket-summary {
+  .pocket-summary-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm @spacing-md;
     margin: 0 0 @spacing-sm;
+  }
+
+  .pocket-summary {
+    margin: 0;
     color: @text-secondary;
     font-family: @font-family-mono;
     font-size: @font-size-sm;
+  }
+
+  .pocket-summary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-xs;
   }
 
   .pocket-empty {

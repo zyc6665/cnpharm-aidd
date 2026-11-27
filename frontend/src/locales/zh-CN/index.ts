@@ -1163,7 +1163,9 @@ export default {
       modelChoiceAllScpdb: '全部 SCPDB',
       device: '计算设备',
       deviceAuto: '自动',
-      backToStructure: '返回结构详情'
+      backToStructure: '返回结构详情',
+      useForGeneration: '用于分子生成',
+      useForScreening: '用于虚拟筛选'
     },
     residues: {
       title: '口袋残基',
