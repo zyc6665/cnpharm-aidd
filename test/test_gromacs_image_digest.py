@@ -1,8 +1,7 @@
-"""GROMACS / gmx_MMPBSA 镜像 digest 守护（`docs/26` H-1 / H-3）。
+"""GROMACS / gmx_MMPBSA 镜像 digest 与契约守护（`docs/26` H-1/H-3 及 1.1.0 复合物 MD 扩展）。
 
-digest 同时出现在两个地方：迁移文件（`20261110_01`）与启动期种数据的 config 里。
-只改一处会得到「迁移改了、启动又覆盖回去」或反之——而两种错都不会报错，
-只会让线上继续跑旧脚本。这里把两处对齐关系钉成断言。
+digest 与输入/参数契约同时出现在迁移文件（`20261110_01` / `20261127_01`）与启动期
+种数据中，这里把两处对齐关系钉成断言。
 """
 
 from __future__ import annotations
@@ -28,10 +27,15 @@ def _spec_by_slug() -> dict:
 
 
 def test_seeded_configs_pin_the_rebuilt_digests() -> None:
-    module = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    mmpbsa_mod = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    gromacs_mod = _load_migration_module("20261127_01_gromacs_complex_interactions.py")
     specs = _spec_by_slug()
 
-    for slug, (_old, new_digest) in module.NEW_DIGESTS.items():
+    expected = {
+        "gmx-mmpbsa": mmpbsa_mod.NEW_DIGESTS["gmx-mmpbsa"][1],
+        "gromacs-md": gromacs_mod.NEW_DIGEST,
+    }
+    for slug, new_digest in expected.items():
         config = specs[slug].config
         assert config["image"].endswith(f"@{new_digest}"), f"{slug} 的 image 未指向新 digest"
         manifest = config["tool_package_manifest"]
@@ -45,13 +49,18 @@ def test_seeded_configs_pin_the_rebuilt_digests() -> None:
 
 
 def test_seeded_versions_match_the_migration_changelog() -> None:
-    module = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    mmpbsa_mod = _load_migration_module("20261110_01_gromacs_image_refresh.py")
+    gromacs_mod = _load_migration_module("20261127_01_gromacs_complex_interactions.py")
     specs = _spec_by_slug()
 
-    for slug in module.NEW_DIGESTS:
-        spec = specs[slug]
-        assert spec.version == module.NEW_VERSION
-        assert spec.changelog == module.NEW_CHANGELOG
+    assert specs["gmx-mmpbsa"].version == mmpbsa_mod.NEW_VERSION
+    assert specs["gmx-mmpbsa"].changelog == mmpbsa_mod.NEW_CHANGELOG
+    assert specs["gromacs-md"].version == gromacs_mod.NEW_VERSION
+    assert specs["gromacs-md"].changelog == gromacs_mod.NEW_CHANGELOG
+    manifest = specs["gromacs-md"].config["tool_package_manifest"]
+    assert manifest["artifacts"]["inputs"] == gromacs_mod.NEW_INPUTS
+    assert manifest["parameters_schema"] == gromacs_mod.NEW_SCHEMA
+    assert specs["gromacs-md"].config["parameters_schema"] == gromacs_mod.NEW_SCHEMA
 
 
 def test_gromacs_and_mmpbsa_point_at_different_images() -> None:

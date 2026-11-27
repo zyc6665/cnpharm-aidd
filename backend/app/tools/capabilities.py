@@ -580,6 +580,7 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         stage="gromacs-md",
         inputs=(
             CapabilityInput("protein_structure@1", "protein_pdb"),
+            CapabilityInput("ligand_structure@1", "ligand_sdf", required=False),
         ),
         outputs=(
             CapabilityOutput(
