@@ -60,18 +60,24 @@ export interface SubmitMdTaskInput {
   params: MdSubmitParams
   /** 已准备好的蛋白结构文件 id（来自 structure 的 file 列表）。 */
   complexFileId: string
+  /** 可选小分子配体文件 id（SDF/MOL/MOL2/PDB），传入时运行复合物 MD 与相互作用分析。 */
+  ligandFileId?: string | null
   name?: string
 }
 
 /** 提交 MD 任务，返回新任务 id。 */
 export async function submitMdTask(input: SubmitMdTaskInput): Promise<string> {
+  const standardInputUploads: Record<string, string> = {
+    protein_pdb: input.complexFileId,
+    ...(input.ligandFileId ? { ligand_sdf: input.ligandFileId } : {})
+  }
   const response = await createTask({
     name: input.name,
     project_id: input.projectId,
     tool_id: input.toolId,
     tool_version_id: input.toolVersionId,
     params: { ...input.params },
-    standard_input_uploads: { protein_pdb: input.complexFileId }
+    standard_input_uploads: standardInputUploads
   })
   return response.data.id
 }

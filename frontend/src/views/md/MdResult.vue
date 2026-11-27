@@ -63,6 +63,8 @@
             <a-button block :disabled="!analysisFile" data-testid="md-download-analysis" @click="downloadRole('analysis_csv')">{{ t('md.result.downloadAnalysis') }}</a-button>
             <a-button block :disabled="!topologyFile" data-testid="md-download-topology" @click="downloadRole('topology_pdb')">{{ t('md.result.downloadTopology') }}</a-button>
             <a-button block :disabled="!metadataFile" @click="downloadRole('metadata_json')">{{ t('md.result.downloadMetadata') }}</a-button>
+            <a-button v-if="contactsFile" block data-testid="md-download-contacts" @click="downloadRole('contacts_csv')">{{ t('md.result.downloadContacts') }}</a-button>
+            <a-button v-if="interactionsFile" block data-testid="md-download-interactions" @click="downloadRole('interactions_json')">{{ t('md.result.downloadInteractions') }}</a-button>
           </a-space>
           <a-alert type="warning" show-icon class="md-result__notice" :message="t('md.result.trajectoryNotice')" />
         </a-card></a-col>
@@ -74,6 +76,54 @@
           <p class="md-result__viewer-note">{{ t('md.result.staticPreviewNote') }}</p>
         </a-card></a-col>
       </a-row>
+
+      <a-card
+        v-if="contactsFile || interactionsFile || contactRows.length"
+        :bordered="false"
+        :title="t('md.result.interactionsTitle')"
+        class="md-result__interactions"
+        data-testid="md-interactions-card"
+      >
+        <div v-if="interactionsSummary" class="md-result__interaction-tags">
+          <a-tag v-if="interactionsSummary.mode" color="blue">
+            {{ t('md.result.interactionsSummaryMode', { mode: interactionsSummary.mode }) }}
+          </a-tag>
+          <a-tag v-if="interactionsSummary.engine" color="green">
+            {{ t('md.result.interactionsSummaryEngine', { engine: interactionsSummary.engine }) }}
+          </a-tag>
+          <a-tag color="purple">
+            {{ t('md.result.interactionsSummaryTotal', { count: interactionsSummary.summary?.total_interactions ?? contactRows.length }) }}
+          </a-tag>
+          <a-tag v-if="interactionsSummary.summary?.residue_count != null">
+            {{ t('md.result.interactionsSummaryResidues', { count: interactionsSummary.summary.residue_count }) }}
+          </a-tag>
+        </div>
+
+        <a-alert
+          v-if="interactionsSummary?.warnings?.length"
+          type="info"
+          show-icon
+          class="md-result__notice"
+          :message="interactionsSummary.warnings.join('; ')"
+        />
+
+        <div v-if="interactionTimelineOption" class="md-result__timeline">
+          <h4 class="md-result__subchart-title">{{ t('md.result.interactionsTimeline') }}</h4>
+          <md-echart :option="interactionTimelineOption" />
+        </div>
+
+        <a-table
+          v-if="contactRows.length"
+          :data-source="contactRows"
+          :columns="contactColumns"
+          :row-key="contactRowKey"
+          :pagination="{ pageSize: 10, hideOnSinglePage: true }"
+          size="small"
+          class="md-result__contacts-table"
+          data-testid="md-contacts-table"
+        />
+        <a-empty v-else :description="t('md.result.interactionsEmpty')" />
+      </a-card>
     </template>
   </div>
   <ResultDisclaimer />
@@ -96,10 +146,10 @@
   import { getTaskDetail } from '@/api/tasks'
   import { openTaskEventStream } from '@/api/task-events'
   import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
-  import { buildAnalysisRows, buildRmsfRows, downsampleSeries, findOutputByStandardType } from './analysis'
+  import { buildAnalysisRows, buildContactRows, buildRmsfRows, downsampleSeries, findOutputByStandardType } from './analysis'
   import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
   import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
-  import type { MdAnalysisRow, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole, RmsfRow } from '@/types/md'
+  import type { MdAnalysisRow, MdContactRow, MdInteractionSummary, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole, RmsfRow } from '@/types/md'
   import type { Task } from '@/types/models'
   import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
@@ -112,6 +162,8 @@
   const artifact = ref<TypedArtifact | null>(null)
   const analysisRows = ref<MdAnalysisRow[]>([])
   const rmsfRows = ref<RmsfRow[]>([])
+  const contactRows = ref<MdContactRow[]>([])
+  const interactionsSummary = ref<MdInteractionSummary | null>(null)
   const metadata = ref<MdTrajectoryMetadata>({})
   const analysisLoadErrors = ref<string[]>([])
   const loading = ref(false)
@@ -126,9 +178,75 @@
   function roleFile(role: MdTrajectoryRole): ArtifactVersionFile | null { return files.value.find(file => file.role === role) ?? null }
   const analysisFile = computed(() => roleFile('analysis_csv'))
   const rmsfFile = computed(() => roleFile('rmsf_csv'))
+  const contactsFile = computed(() => roleFile('contacts_csv'))
+  const interactionsFile = computed(() => roleFile('interactions_json'))
   const metadataFile = computed(() => roleFile('metadata_json'))
   const topologyFile = computed(() => roleFile('topology_pdb'))
   const trajectoryFile = computed(() => roleFile('trajectory_dcd'))
+
+  const contactColumns = computed(() => [
+    {
+      title: t('md.result.interactionsColumns.residue'),
+      key: 'residue',
+      customRender: ({ record }: { record: MdContactRow }) => {
+        const chainPrefix = record.residue_chain ? `${record.residue_chain}:` : ''
+        return `${chainPrefix}${record.residue_name}${record.residue_seq}${record.residue_icode}`
+      }
+    },
+    { title: t('md.result.interactionsColumns.interactionType'), dataIndex: 'interaction_type', key: 'interaction_type' },
+    {
+      title: t('md.result.interactionsColumns.occupancy'),
+      dataIndex: 'occupancy',
+      key: 'occupancy',
+      customRender: ({ record }: { record: MdContactRow }) =>
+        record.occupancy == null ? '-' : `${(record.occupancy * 100).toFixed(1)}%`
+    },
+    {
+      title: t('md.result.interactionsColumns.frames'),
+      key: 'frames',
+      customRender: ({ record }: { record: MdContactRow }) =>
+        record.contact_frames != null && record.total_frames != null
+          ? `${record.contact_frames} / ${record.total_frames}`
+          : '-'
+    },
+    {
+      title: t('md.result.interactionsColumns.minDistance'),
+      dataIndex: 'min_distance_nm',
+      key: 'min_distance_nm',
+      customRender: ({ record }: { record: MdContactRow }) =>
+        record.min_distance_nm == null ? '-' : record.min_distance_nm.toFixed(3)
+    },
+    {
+      title: t('md.result.interactionsColumns.meanDistance'),
+      dataIndex: 'mean_distance_nm',
+      key: 'mean_distance_nm',
+      customRender: ({ record }: { record: MdContactRow }) =>
+        record.mean_distance_nm == null ? '-' : record.mean_distance_nm.toFixed(3)
+    }
+  ])
+
+  function contactRowKey(row: MdContactRow): string {
+    return `${row.residue_chain}:${row.residue_seq}${row.residue_icode}:${row.residue_name}:${row.interaction_type}`
+  }
+
+  const interactionTimelineOption = computed<EChartsOption | null>(() => {
+    const timeline = interactionsSummary.value?.timeline ?? []
+    if (!timeline.length) return null
+    return {
+      grid: { left: 48, right: 16, top: 24, bottom: 36 },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'value', name: t('md.result.chartXAxis'), nameLocation: 'middle', nameGap: 24 },
+      yAxis: { type: 'value', name: 'Contacts', minInterval: 1 },
+      series: [
+        {
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          data: timeline.map((pt) => [pt.time_ps, pt.total_contacts])
+        }
+      ]
+    }
+  })
   const status = computed(() => result.value?.status ?? task.value?.status ?? '')
   const isRunning = computed(() => ['running', 'pending', 'queued'].includes(status.value))
   const statusColor = computed(() => ({ success: 'green', running: 'blue', pending: 'blue', queued: 'blue', failure: 'red', canceled: 'orange' } as Record<string, string>)[status.value] ?? 'default')
@@ -163,7 +281,7 @@
   const temperatureOption = computed(() => buildChartOption('temperature_k', 'T (K)'))
 
   async function loadAnalysisAndMetadata(sequence: number): Promise<void> {
-    analysisRows.value = []; rmsfRows.value = []; metadata.value = {}; analysisLoadErrors.value = []
+    analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []
     const errors: string[] = []
     if (analysisFile.value) {
       try { const text = await fetchProtectedFileText(analysisFile.value.download_url); if (!disposed && sequence === requestSequence) analysisRows.value = buildAnalysisRows(parseCsv(text)) }
@@ -172,6 +290,14 @@
     if (rmsfFile.value) {
       try { const text = await fetchProtectedFileText(rmsfFile.value.download_url); if (!disposed && sequence === requestSequence) rmsfRows.value = buildRmsfRows(parseCsv(text)) }
       catch { errors.push('rmsf_csv') }
+    }
+    if (contactsFile.value) {
+      try { const text = await fetchProtectedFileText(contactsFile.value.download_url); if (!disposed && sequence === requestSequence) contactRows.value = buildContactRows(parseCsv(text)) }
+      catch { errors.push('contacts_csv') }
+    }
+    if (interactionsFile.value) {
+      try { const text = await fetchProtectedFileText(interactionsFile.value.download_url); const parsed = JSON.parse(text) as MdInteractionSummary; if (!disposed && sequence === requestSequence) interactionsSummary.value = parsed }
+      catch { errors.push('interactions_json') }
     }
     if (metadataFile.value) {
       try { const text = await fetchProtectedFileText(metadataFile.value.download_url); const parsed = JSON.parse(text) as MdTrajectoryMetadata; if (!disposed && sequence === requestSequence) metadata.value = parsed }
@@ -202,7 +328,7 @@
       const nextArtifact = output ? await getArtifactDetail(output.id) : null
       if (disposed || sequence !== requestSequence) return
       const nextId = nextArtifact?.id ?? null
-      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; metadata.value = {}; analysisLoadErrors.value = []; artifactIdLoaded = nextId }
+      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; artifactIdLoaded = nextId }
       artifact.value = nextArtifact
       if (nextArtifact) await loadAnalysisAndMetadata(sequence)
       if (disposed || sequence !== requestSequence) return
@@ -216,7 +342,7 @@
     try { await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined }) }
     catch (cause) { message.error(cause instanceof Error ? cause.message : String(cause)) }
   }
-  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactIdLoaded = null; analysisRows.value = []; rmsfRows.value = []; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
+  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactIdLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
   onMounted(() => { disposed = false })
   onBeforeUnmount(() => { disposed = true; requestSequence += 1; stopStream() })
   const overviewSections = computed<DescriptionSection[]>(() => [{ key: 'overview', fields: [
@@ -239,4 +365,9 @@
   .md-result__notice { margin-top: @spacing-md; }
   .md-result__viewer { height: 360px; border: 1px solid @border-color; border-radius: @border-radius-md; overflow: hidden; }
   .md-result__viewer-note { margin: @spacing-xs 0 0; color: @text-color-light-secondary; font-size: @font-size-xs; }
+  .md-result__interactions { margin-top: @spacing-md; border-radius: @border-radius-lg; }
+  .md-result__interaction-tags { display: flex; flex-wrap: wrap; gap: @spacing-xs; margin-bottom: @spacing-sm; }
+  .md-result__timeline { margin: @spacing-sm 0 @spacing-md; }
+  .md-result__subchart-title { margin: 0 0 @spacing-xs; font-size: @font-size-sm; font-weight: 600; }
+  .md-result__contacts-table { margin-top: @spacing-sm; }
 </style>

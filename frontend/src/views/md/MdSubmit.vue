@@ -82,6 +82,35 @@
           </div>
           <p class="md-submit__hint">{{ t('md.submit.selectHint') }}</p>
 
+          <a-form-item :label="t('md.submit.ligandUploadLabel')">
+            <div class="md-submit__ligand-row">
+              <a-upload
+                :before-upload="handleLigandBeforeUpload"
+                :show-upload-list="false"
+                accept=".sdf,.mol,.mol2,.pdb"
+                :disabled="submitting || uploadingLigand"
+              >
+                <a-button :loading="uploadingLigand" :disabled="submitting" data-testid="md-ligand-upload-btn">
+                  {{ t('md.submit.ligandUploadButton') }}
+                </a-button>
+              </a-upload>
+              <a-tag v-if="ligandFileId" color="blue" data-testid="md-ligand-tag">
+                {{ t('md.submit.ligandUploadedTag', { name: ligandFilename }) }}
+              </a-tag>
+              <a-button
+                v-if="ligandFileId"
+                type="link"
+                size="small"
+                :disabled="submitting"
+                @click="clearLigand"
+                data-testid="md-ligand-clear-btn"
+              >
+                {{ t('md.submit.ligandClear') }}
+              </a-button>
+            </div>
+            <p class="md-submit__hint md-submit__ligand-hint">{{ t('md.submit.ligandUploadHint') }}</p>
+          </a-form-item>
+
           <a-divider orientation="left">{{ t('md.submit.paramsTitle') }}</a-divider>
 
           <ModelParameterForm
@@ -125,6 +154,7 @@
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import { listProjects } from '@/api/projects'
+  import { uploadFile } from '@/api/files'
   import { getProtein, getStructure, getTarget, listStructures, listTargets } from '@/api/targets'
   import { findToolBySlug, MD_TOOL_SLUG, resolveToolVersionId, submitMdTask } from '@/api/md'
   import ModelSelect from '@/components/design/ModelSelect.vue'
@@ -164,6 +194,9 @@
   const loadingProteins = ref(false)
   const loadingStructures = ref(false)
   const submitting = ref(false)
+  const uploadingLigand = ref(false)
+  const ligandFileId = ref<string | null>(null)
+  const ligandFilename = ref('')
 
   // 同类 MD 模型可自由选择；默认 gromacs；参数 schema 随模型切换。
   const {
@@ -382,11 +415,32 @@
 
   watch(() => [route.query.project_id, route.query.target_id, route.query.protein_id, route.query.structure_id], () => void applyQueryPrefill())
 
+  function clearLigand(): void {
+    ligandFileId.value = null
+    ligandFilename.value = ''
+  }
+
+  async function handleLigandBeforeUpload(file: File): Promise<boolean> {
+    uploadingLigand.value = true
+    try {
+      const response = await uploadFile(file)
+      ligandFileId.value = response.data.id
+      ligandFilename.value = file.name
+      message.success(t('md.submit.ligandUploadSuccess'))
+    } catch (error) {
+      message.error(errorMessage(error, t('md.submit.ligandUploadFailed')))
+    } finally {
+      uploadingLigand.value = false
+    }
+    return false
+  }
+
   function resetForm(): void {
     prefillSequence.invalidate()
     form.targetId = undefined
     form.proteinId = undefined
     form.structureId = undefined
+    clearLigand()
     params.value = buildDefaultValues(selectedOption.value?.parameterSchema ?? null)
     targets.value = []
     proteins.value = []
@@ -431,6 +485,7 @@
         toolVersionId,
         params: snapshot.params,
         complexFileId: snapshot.complexFileId,
+        ligandFileId: ligandFileId.value,
         name: snapshot.name
       })
       message.success(t('md.submit.submitSuccess'))
@@ -494,6 +549,17 @@
     margin: 0 0 @spacing-md;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
+  }
+
+  .md-submit__ligand-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: @spacing-sm;
+  }
+
+  .md-submit__ligand-hint {
+    margin: @spacing-xs 0 0;
   }
 
   .md-submit__estimate {
