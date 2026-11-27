@@ -34,6 +34,7 @@
           :scene="previewScene"
           variant="compact"
           :mode="previewViewerMode"
+          :voxel-grid="previewVoxelGrid"
           :allow-native-fullscreen="false"
         />
       </div>
@@ -109,6 +110,7 @@
 import { computed, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CheckCircleOutlined, InboxOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import { buildPocketBoxVoxelGrid } from '@/domain/pockets/pocket-preview'
 import type { VisualizationScene } from '@/domain/tasks'
 import type { AxisVector } from '@/types/targets'
 
@@ -166,6 +168,19 @@ const previewViewerMode = computed(() => {
   if (hasLigand && !hasReceptor) return 'molecule'
   if (hasPocket) return 'pocket'
   return 'protein'
+})
+
+const previewVoxelGrid = computed(() => {
+  if (!props.pocketCenter) return null
+  const box = props.pocketBoxSize
+  const bx = box?.x
+  const by = box?.y
+  const bz = box?.z
+  const safeBox =
+    typeof bx === 'number' && bx > 0 && typeof by === 'number' && by > 0 && typeof bz === 'number' && bz > 0
+      ? { x: Math.max(bx, 8), y: Math.max(by, 8), z: Math.max(bz, 8) }
+      : { x: 20, y: 20, z: 20 }
+  return buildPocketBoxVoxelGrid(props.pocketCenter, safeBox)
 })
 
 const previewModeBadge = computed(() => {

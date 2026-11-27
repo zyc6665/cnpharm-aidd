@@ -65,6 +65,16 @@ export interface DesignTaskSubmission {
   standardInputUploads?: Record<string, string>
 }
 
+/** 蛋白结构下钻选择结果（即使暂未预测口袋，也可叠加参考配体或中心坐标）。 */
+export interface DesignStructureSelection {
+  projectId: string
+  targetId: string
+  proteinId: string
+  structureId: string
+  structureFileId: string | null
+  structureUrn?: string | null
+}
+
 /** 口袋选择的完整下钻链路结果。 */
 export interface DesignPocketSelection {
   projectId: string

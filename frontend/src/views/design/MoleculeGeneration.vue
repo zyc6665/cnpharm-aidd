@@ -30,68 +30,93 @@
                 {{ t('design.molecule.loadSample') }}
               </a-button>
             </div>
-            <a-radio-group
-              v-model:value="sourceMode"
-              button-style="solid"
-              class="source-mode"
-              data-testid="molecule-source-mode"
-            >
-              <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
-              <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
-            </a-radio-group>
 
-            <div v-if="sourceMode === 'project'" class="source-body">
-              <PocketPicker v-model="pocketSelection" :default-project-id="defaultProjectId" />
-            </div>
+            <div class="input-stack">
+              <!-- 1. 统一归档项目 -->
+              <div class="source-field">
+                <span class="source-label">{{ t('design.molecule.project') }}</span>
+                <a-select
+                  v-model:value="uploadProjectId"
+                  class="source-control"
+                  show-search
+                  option-filter-prop="label"
+                  :options="projectOptions"
+                  :placeholder="t('design.molecule.projectPlaceholder')"
+                  data-testid="molecule-upload-project"
+                />
+              </div>
 
-        <div v-else class="source-body source-body--fields" data-testid="molecule-upload-source">
-          <div class="source-field">
-            <span class="source-label">{{ t('design.molecule.project') }}</span>
-            <a-select
-              v-model:value="uploadProjectId"
-              class="source-control"
-              show-search
-              option-filter-prop="label"
-              :options="projectOptions"
-              :placeholder="t('design.molecule.projectPlaceholder')"
-              data-testid="molecule-upload-project"
-            />
-          </div>
-          <div class="source-field">
-            <span class="source-label">{{ t('design.molecule.structureFile') }}</span>
-            <div class="source-upload">
-              <a-upload
-                :show-upload-list="false"
-                :before-upload="handleStructureFile"
-                accept=".pdb,.cif,.ent"
-                data-testid="molecule-upload-structure"
-              >
-                <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
-              </a-upload>
-              <span v-if="structureFile" class="source-file" data-testid="molecule-upload-structure-name">
-                {{ structureFile.name }}
-              </span>
-              <span v-else class="source-hint">{{ t('design.molecule.structureFileHint') }}</span>
+              <!-- 2. 蛋白结构来源（从项目结构选 / 本地上传） -->
+              <div class="input-block">
+                <div class="input-block__header">
+                  <span class="source-label">{{ t('design.molecule.receptorSource') }}</span>
+                  <a-radio-group
+                    v-model:value="sourceMode"
+                    size="small"
+                    button-style="solid"
+                    :disabled="submitting"
+                    data-testid="molecule-source-mode"
+                  >
+                    <a-radio-button value="project">{{ t('design.molecule.sourceProject') }}</a-radio-button>
+                    <a-radio-button value="upload">{{ t('design.molecule.sourceUpload') }}</a-radio-button>
+                  </a-radio-group>
+                </div>
+
+                <div v-if="sourceMode === 'project'" class="source-body">
+                  <PocketPicker
+                    v-model="pocketSelection"
+                    :default-project-id="defaultProjectId"
+                    :project-id="uploadProjectId"
+                    hide-project-select
+                    :hide-pocket-select="activePocketMode !== 'project'"
+                    @structure-change="handleProjectStructureChange"
+                  />
+                </div>
+
+                <div v-else class="source-body" data-testid="molecule-upload-source">
+                  <div class="source-field">
+                    <div class="source-upload">
+                      <a-upload
+                        :show-upload-list="false"
+                        :before-upload="handleStructureFile"
+                        accept=".pdb,.cif,.ent"
+                        data-testid="molecule-upload-structure"
+                      >
+                        <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
+                      </a-upload>
+                      <span v-if="structureFile" class="source-file" data-testid="molecule-upload-structure-name">
+                        {{ structureFile.name }}
+                      </span>
+                      <span v-else class="source-hint">{{ t('design.molecule.structureFileHint') }}</span>
+                    </div>
+                    <div v-if="detectedHetatm" class="hetatm-banner" data-testid="molecule-hetatm-banner">
+                      <span class="hetatm-banner__text">
+                        {{ t('design.molecule.hetatmDetected', { count: detectedHetatm.pointCount }) }}
+                      </span>
+                      <a-button
+                        type="link"
+                        size="small"
+                        data-testid="molecule-use-hetatm-center"
+                        @click="applyDetectedHetatmCenter"
+                      >
+                        {{ t('design.molecule.useHetatmCenter') }}
+                      </a-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 口袋定位方式（与蛋白来源完全解耦，可任意组合） -->
+              <div class="input-block">
+                <PocketCoordinatePanel
+                  ref="pocketPanelRef"
+                  v-model="pocketDefineMode"
+                  :allow-project-mode="sourceMode === 'project'"
+                  :disabled="submitting"
+                  @change="handlePocketStateChange"
+                />
+              </div>
             </div>
-          </div>
-          <div class="source-field">
-            <span class="source-label">{{ t('design.molecule.pocketFile') }}</span>
-            <div class="source-upload">
-              <a-upload
-                :show-upload-list="false"
-                :before-upload="handlePocketFile"
-                accept=".pdb"
-                data-testid="molecule-upload-pocket"
-              >
-                <a-button size="small">{{ t('design.molecule.chooseFile') }}</a-button>
-              </a-upload>
-              <span v-if="pocketFile" class="source-file" data-testid="molecule-upload-pocket-name">
-                {{ pocketFile.name }}
-              </span>
-              <span class="source-hint">{{ t('design.molecule.pocketFileHint') }}</span>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section v-if="supportsGenerationMode" class="design-section mode-section" data-testid="molecule-generation-modes">
@@ -143,13 +168,13 @@
           </span>
         </div>
         <MoleculeInlineFragmentCard
-          v-if="fragmentMolecule && !fragmentParsing && (generationMode === 'fragment' || generationMode === 'dock')"
+          v-if="fragmentMolecule && !fragmentParsing && generationMode === 'fragment'"
           class="fragment-inline-card"
           :filename="fragmentFile?.name || fragmentMolecule.name"
           :atoms="fragmentMolecule.atoms"
           :bonds="fragmentMolecule.bonds"
           :selected-indices="activeSketchSelection"
-          :mode="generationMode === 'dock' ? 'dock' : 'fragment'"
+          mode="fragment"
           :disabled="submitting"
           @open-sketch="sketchModalOpen = true"
         />
@@ -161,33 +186,6 @@
           :message="t(fragmentIssue)"
           data-testid="molecule-fragment-required"
         />
-        <div v-if="generationMode === 'fragment' && schema?.properties?.molecule_size" class="fragment-presets" data-testid="molecule-size-presets">
-          <span>{{ t('design.molecule.moleculeSize') }}</span>
-          <a-button
-            v-for="preset in moleculeSizePresets"
-            :key="preset.id"
-            size="small"
-            :disabled="submitting"
-            :type="(form.params.molecule_size ?? '') === preset.value ? 'primary' : 'default'"
-            :data-testid="`molecule-size-${preset.id}`"
-            @click="form.params.molecule_size = preset.value"
-          >
-            {{ t(`design.molecule.sizePreset.${preset.id}`) }}
-          </a-button>
-        </div>
-        <div v-if="generationMode === 'dock' && schema?.properties?.atoms_to_dock" class="source-field fragment-dock-field">
-          <label class="source-label" for="atoms-to-dock">{{ t('design.molecule.atomsToDock') }}</label>
-          <a-input
-            id="atoms-to-dock"
-            v-model:value="atomsToDock"
-            :disabled="submitting"
-            :status="atomsInvalid ? 'error' : undefined"
-            aria-describedby="atoms-to-dock-hint"
-            placeholder="0 1 2"
-            data-testid="molecule-atoms-to-dock"
-          />
-          <span id="atoms-to-dock-hint" class="source-hint">{{ t(atomsInvalid ? 'design.molecule.atomsToDockInvalid' : 'design.molecule.atomsToDockHint') }}</span>
-        </div>
       </section>
 
       <a-alert
@@ -201,7 +199,7 @@
         v-else-if="hasSelection && !hasCenter"
         type="warning"
         show-icon
-        :message="t('design.molecule.pocketMissingCenter')"
+        :message="pocketCenterMissingMessage"
         class="pocket-alert"
       />
 
@@ -226,6 +224,29 @@
           <a-button size="small" :disabled="submitting" data-testid="molecule-reset-params" @click="resetParams">
             {{ t('design.molecule.resetParams') }}
           </a-button>
+        </div>
+        <div
+          v-if="schema?.properties?.molecule_size"
+          class="param-size-presets"
+          data-testid="molecule-size-presets"
+        >
+          <div class="param-size-presets__row">
+            <span class="source-label">{{ t('design.molecule.moleculeSize') }}</span>
+            <div class="param-size-presets__buttons">
+              <a-button
+                v-for="preset in moleculeSizePresets"
+                :key="preset.id"
+                size="small"
+                :disabled="submitting"
+                :type="(form.params.molecule_size ?? '') === preset.value ? 'primary' : 'default'"
+                :data-testid="`molecule-size-${preset.id}`"
+                @click="form.params.molecule_size = preset.value"
+              >
+                {{ t(`design.molecule.sizePreset.${preset.id}`) }}
+              </a-button>
+            </div>
+          </div>
+          <span class="source-hint">{{ t('design.molecule.moleculeSizeHint') }}</span>
         </div>
         <ParameterPresets
           v-if="selectedOption?.parameterSchema"
@@ -285,11 +306,11 @@
     </a-spin>
   </main>
   <FragmentSketchModal
-    v-if="generationMode === 'fragment' || generationMode === 'dock'"
+    v-if="generationMode === 'fragment'"
     v-model:open="sketchModalOpen"
     :molecule="fragmentMolecule"
     :selected-indices="activeSketchSelection"
-    :mode="generationMode === 'dock' ? 'dock' : 'fragment'"
+    mode="fragment"
     @confirm="handleSketchConfirm"
   />
   <TaskProgressCard
@@ -308,6 +329,10 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import PocketPicker from './components/PocketPicker.vue'
+  import PocketCoordinatePanel, {
+    type PocketCoordinateState,
+    type PocketDefineMode
+  } from '@/components/design/PocketCoordinatePanel.vue'
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import ParameterPresets from '@/components/design/ParameterPresets.vue'
@@ -321,13 +346,13 @@
   import { uploadProjectArtifact } from '@/api/artifacts'
   import { uploadFile } from '@/api/files'
   import { listProjects } from '@/api/projects'
-  import { parsePocketGeometry } from '@/domain/pockets/pocket-geometry'
   import {
-    formatAtomIndices,
-    parseAtomIndices,
-    parseFragmentMolecule,
-    type FragmentMolecule
-  } from '@/domain/molecules/fragment-graph'
+    extractProteinHetatmPocketGeometry,
+    parsePocketGeometry,
+    type PocketGeometry
+  } from '@/domain/pockets/pocket-geometry'
+  import { type FragmentMolecule } from '@/domain/molecules/fragment-graph'
+  import { parseAndNormalizeLigandUpload } from '@/domain/molecules/ligand-upload'
   import { createSampleDesignFiles } from '@/domain/molecules/sample-inputs'
   import type { VisualizationScene } from '@/domain/tasks'
   import {
@@ -336,7 +361,11 @@
     validateParameters,
     type ParameterValues
   } from '@/domain/tools/parameterSchema'
-  import type { DesignPocketSelection, ResolvedDesignTool } from '@/types/design'
+  import type {
+    DesignPocketSelection,
+    DesignStructureSelection,
+    ResolvedDesignTool
+  } from '@/types/design'
   import type { ResearchProject } from '@/types/projects'
   import type { ToolSchema } from '@/types/models'
   import type { ParameterFieldOverride } from '@/components/design/ModelParameterForm.vue'
@@ -360,65 +389,153 @@
   const resolvedTool = ref<ResolvedDesignTool | null>(null)
   const toolError = ref(false)
   const pocketSelection = ref<DesignPocketSelection | null>(null)
+  const projectStructure = ref<DesignStructureSelection | null>(null)
 
   /**
-   * 输入来源：项目里挑口袋，或者直接上传「结构 + 口袋文件」。
-   *
-   * 分子生成的核心输入只有两样：受体结构、口袋中心与半径。前者可以来自项目里的
-   * 准备产物，也可以是用户手上的一个 PDB；后者在项目模式下由口袋记录给出，
-   * 上传模式下从口袋文件里算（`pocket0.pdb` 的 UNL 点最准）。
+   * 输入模型：
+   * 1. 归档项目统一选定；
+   * 2. 蛋白结构来源（项目结构 / 本地上传）与口袋定位方式（项目已有口袋 / 参考配体 / 中心坐标 / 口袋文件）正交解耦，
+   *    因此选了项目里的蛋白质后，依然可以直接上传参考配体或输入中心坐标。
    */
   const sourceMode = ref<'project' | 'upload'>('project')
+  const pocketPanelRef = ref<InstanceType<typeof PocketCoordinatePanel> | null>(null)
+  const pocketDefineMode = ref<PocketDefineMode>('project')
+  const pocketPanelState = ref<PocketCoordinateState>({
+    mode: 'project',
+    center: null,
+    boxSize: null,
+    label: '-',
+    parsing: false,
+    hasAnyInput: false,
+    refLigandFile: null,
+    refLigandUpload: null,
+    pocketFile: null
+  })
+  const activePocketMode = computed<PocketDefineMode>(() =>
+    sourceMode.value === 'upload' && pocketDefineMode.value === 'project'
+      ? 'ref_ligand'
+      : pocketDefineMode.value
+  )
+
+  const activeProjectStructure = computed<DesignStructureSelection | null>(() => {
+    if (projectStructure.value) return projectStructure.value
+    if (!pocketSelection.value) return null
+    return {
+      projectId: pocketSelection.value.projectId,
+      targetId: pocketSelection.value.targetId,
+      proteinId: pocketSelection.value.proteinId,
+      structureId: pocketSelection.value.structureId,
+      structureFileId: pocketSelection.value.structureFileId,
+      structureUrn: pocketSelection.value.structureUrn
+    }
+  })
+
   const projects = ref<ResearchProject[]>([])
   const uploadProjectId = ref<string>('')
+  const activeProjectId = computed(() =>
+    uploadProjectId.value || activeProjectStructure.value?.projectId || ''
+  )
   const structureFile = ref<File | null>(null)
-  const pocketFile = ref<File | null>(null)
-  const uploadCenter = ref<{ x: number; y: number; z: number } | null>(null)
-  const uploadBoxSize = ref<{ x: number; y: number; z: number } | null>(null)
-  const pocketParsing = ref(false)
-  const pocketSequence = useRequestSequence()
-  let parsedPocketFile: File | null = null
+  const detectedHetatm = ref<PocketGeometry | null>(null)
+  const hetatmCoordsApplied = ref(false)
+  const structureSequence = useRequestSequence()
+  let parsedStructureFile: File | null = null
+
+  const pocketParsing = computed(() => pocketPanelState.value.parsing)
+  const refLigandUpload = computed(() => pocketPanelState.value.refLigandUpload)
 
   const uploadStructureUrl = ref<string | null>(null)
   const uploadLigandUrl = ref<string | null>(null)
+  const uploadRefLigandUrl = ref<string | null>(null)
+
+  function revokeObjectUrl(urlRef: { value: string | null }): void {
+    if (urlRef.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(urlRef.value)
+    }
+    urlRef.value = null
+  }
 
   function revokeUploadUrl(): void {
-    if (uploadStructureUrl.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(uploadStructureUrl.value)
-    }
-    uploadStructureUrl.value = null
+    revokeObjectUrl(uploadStructureUrl)
   }
 
   function revokeLigandUrl(): void {
-    if (uploadLigandUrl.value && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(uploadLigandUrl.value)
+    revokeObjectUrl(uploadLigandUrl)
+  }
+
+  function revokeRefLigandUrl(): void {
+    revokeObjectUrl(uploadRefLigandUrl)
+  }
+
+  function handlePocketStateChange(state: PocketCoordinateState): void {
+    pocketPanelState.value = state
+    if (!state.center || state.mode !== 'coords') {
+      hetatmCoordsApplied.value = false
     }
-    uploadLigandUrl.value = null
+  }
+
+  function handleProjectStructureChange(value: DesignStructureSelection | null): void {
+    projectStructure.value = value
+  }
+
+  watch(sourceMode, (mode, prevMode) => {
+    if (mode === 'upload' && pocketDefineMode.value === 'project') {
+      pocketDefineMode.value = 'ref_ligand'
+    } else if (mode === 'project' && prevMode === 'upload') {
+      detectedHetatm.value = null
+      hetatmCoordsApplied.value = false
+      pocketPanelRef.value?.clearCoordinates()
+      if (pocketSelection.value) {
+        pocketDefineMode.value = 'project'
+      }
+    }
+  }, { flush: 'sync' })
+
+  watch(pocketSelection, sel => {
+    if (!sel) return
+    if (sel.projectId && !uploadProjectId.value) uploadProjectId.value = sel.projectId
+    pocketDefineMode.value = 'project'
+  }, { flush: 'sync' })
+
+  function applyDetectedHetatmCenter(): void {
+    if (!detectedHetatm.value) return
+    pocketPanelRef.value?.setCoordinates(detectedHetatm.value.center)
+    hetatmCoordsApplied.value = true
+    message.success(t('design.molecule.hetatmApplied'))
   }
 
   const projectOptions = computed(() =>
     projects.value.map((project) => ({ label: project.name, value: project.id }))
   )
 
-  /** 上传模式下「用户已经选了东西」——用来决定要不要显示提示与摘要。 */
+  /** 用户已选择了部分输入时显示摘要与针对性提示。 */
   const hasSelection = computed(() =>
-    sourceMode.value === 'project'
-      ? Boolean(pocketSelection.value)
-      : Boolean(structureFile.value || pocketFile.value)
+    Boolean(
+      pocketSelection.value ||
+        activeProjectStructure.value?.structureFileId ||
+        structureFile.value ||
+        pocketPanelState.value.hasAnyInput
+    )
   )
 
-  /** 受体结构是否就位：项目模式看口袋附件，上传模式看用户是否选了文件。 */
+  /** 受体结构是否就位：项目模式看结构附件，上传模式看用户是否选了文件。 */
   const structureReady = computed(() =>
     sourceMode.value === 'project'
-      ? Boolean(pocketSelection.value?.structureFileId)
+      ? Boolean(activeProjectStructure.value?.structureFileId)
       : Boolean(structureFile.value)
   )
 
   const pocketLabelText = computed(() =>
-    sourceMode.value === 'project'
+    activePocketMode.value === 'project'
       ? pocketSelection.value?.pocketLabel || '-'
-      : pocketFile.value?.name || '-'
+      : pocketPanelState.value.label
   )
+
+  const pocketCenterMissingMessage = computed(() => {
+    if (activePocketMode.value === 'ref_ligand') return t('design.molecule.missingRefLigand')
+    if (activePocketMode.value === 'coords') return t('design.molecule.missingCoords')
+    return t('design.molecule.pocketMissingCenter')
+  })
 
   // 同类分子生成模型可自由选择；默认 pocket2mol；参数 schema 随模型切换。
   const {
@@ -432,8 +549,7 @@
   const form = reactive<{ params: ParameterValues }>({ params: {} })
   const modeTitles = {
     denovo: 'generationModeDenovo',
-    fragment: 'generationModeFragment',
-    dock: 'generationModeDock'
+    fragment: 'generationModeFragment'
   } as const
   type GenerationMode = keyof typeof modeTitles
   const schema = computed(() => selectedOption.value?.parameterSchema ?? null)
@@ -456,22 +572,10 @@
   const fragmentCount = ref<number | null>(null)
   const fragmentParsing = ref(false)
   const fragmentError = ref('')
-  const atomsToDock = ref('')
   const fragmentSequence = useRequestSequence()
   const needsLigandFile = computed(() => supportsGenerationMode.value && generationMode.value !== 'denovo')
   const fragmentIssue = computed(() => fragmentError.value || (!fragmentFile.value ? 'design.molecule.fragmentRequired' : ''))
-  const atomsInvalid = computed(() => {
-    const value = atomsToDock.value.trim()
-    if (!value || generationMode.value !== 'dock') return false
-    return !parseAtomIndices(value, fragmentCount.value).valid
-  })
-  const activeSketchSelection = computed<number[]>(() => {
-    if (generationMode.value === 'dock') {
-      const parsed = parseAtomIndices(atomsToDock.value, fragmentCount.value)
-      return parsed.valid ? parsed.indices : []
-    }
-    return fragmentSelectedIndices.value
-  })
+  const activeSketchSelection = computed<number[]>(() => fragmentSelectedIndices.value)
   const moleculeSizePresets = [
     { id: 'auto', value: '' },
     { id: 'small', value: 'uniform_12_20' },
@@ -491,7 +595,6 @@
     fragmentCount.value = null
     fragmentParsing.value = false
     fragmentError.value = ''
-    atomsToDock.value = ''
   }
 
   function resetGeneration(): void {
@@ -507,10 +610,7 @@
     }
     fragmentSubsetCropped.value = false
     if (originalFragmentUpload.value) fragmentUpload.value = originalFragmentUpload.value
-    if (mode === 'fragment') {
-      atomsToDock.value = ''
-      fragmentSelectedIndices.value = fragmentMolecule.value ? fragmentMolecule.value.atoms.map(atom => atom.index) : []
-    }
+    fragmentSelectedIndices.value = fragmentMolecule.value ? fragmentMolecule.value.atoms.map(atom => atom.index) : []
   }, { flush: 'sync' })
 
   async function handleFragmentFile(file: File): Promise<false> {
@@ -518,62 +618,21 @@
     const seq = fragmentSequence.next()
     fragmentFile.value = file
     fragmentParsing.value = true
-    const extension = file.name.split('.').pop()?.toLowerCase()
     try {
       const text = await file.text()
       if (!fragmentSequence.isCurrent(seq)) return false
-      const lines = text.split(/\r?\n/)
-      let resolvedUpload: File | null = null
-      if (extension === 'pdb') {
-        const count = lines.filter(line => /^(ATOM|HETATM)/.test(line)).length
-        if (count > 0) {
-          fragmentCount.value = count
-          resolvedUpload = file
-        } else {
-          fragmentError.value = 'design.molecule.fragmentUnreadable'
-        }
-      } else if (extension === 'mol2') {
-        const hasTripos = /@<TRIPOS>MOLECULE/i.test(text)
-        const atomIndex = lines.findIndex(line => line.trim().toUpperCase() === '@<TRIPOS>ATOM')
-        const nextSection = atomIndex >= 0
-          ? lines.slice(atomIndex + 1).findIndex(line => line.trim().startsWith('@<TRIPOS>'))
-          : -1
-        if (atomIndex >= 0) {
-          const slice = nextSection >= 0
-            ? lines.slice(atomIndex + 1, atomIndex + 1 + nextSection)
-            : lines.slice(atomIndex + 1)
-          const count = slice.filter(line => line.trim().length > 0).length
-          if (count > 0) fragmentCount.value = count
-        }
-        if (hasTripos) {
-          resolvedUpload = file
-        } else {
-          fragmentError.value = 'design.molecule.fragmentUnreadable'
-        }
-      } else {
-        const countsLine = lines[3] ?? ''
-        const count = /V2000\s*$/.test(countsLine) ? Number(countsLine.slice(0, 3)) : 0
-        if (Number.isInteger(count) && count > 0) fragmentCount.value = count
-        if (extension === 'sdf' && lines.some(line => line.trim() === '$$$$')) {
-          resolvedUpload = file
-        } else if (extension === 'mol' && /V(?:2000|3000)\s*$/.test(countsLine) && /(?:^|\n)M  END\s*$/.test(text)) {
-          // Wrap the MOL block as a single SD record without changing bonds or atom order.
-          resolvedUpload = new File([`${text.trimEnd()}\n$$$$\n`], file.name.replace(/\.mol$/i, '.sdf'), {
-            type: 'chemical/x-mdl-sdfile'
-          })
-        } else {
-          fragmentError.value = 'design.molecule.fragmentUnreadable'
-        }
+      const prepared = await parseAndNormalizeLigandUpload(file, text, { convertNonSdfToSdf: false })
+      if (!fragmentSequence.isCurrent(seq)) return false
+      if (!prepared) {
+        fragmentError.value = 'design.molecule.fragmentUnreadable'
+        return false
       }
-      if (resolvedUpload) {
-        originalFragmentUpload.value = resolvedUpload
-        fragmentUpload.value = resolvedUpload
-        const parsed = parseFragmentMolecule(text, file.name)
-        fragmentMolecule.value = parsed
-        if (parsed) {
-          if (fragmentCount.value === null) fragmentCount.value = parsed.atoms.length
-          fragmentSelectedIndices.value = parsed.atoms.map(atom => atom.index)
-        }
+      fragmentCount.value = prepared.atomCount
+      originalFragmentUpload.value = prepared.uploadFile
+      fragmentUpload.value = prepared.uploadFile
+      fragmentMolecule.value = prepared.molecule
+      if (prepared.molecule) {
+        fragmentSelectedIndices.value = prepared.molecule.atoms.map(atom => atom.index)
       }
     } catch {
       if (fragmentSequence.isCurrent(seq)) fragmentError.value = 'design.molecule.fragmentUnreadable'
@@ -584,10 +643,6 @@
   }
 
   function handleSketchConfirm(payload: { selectedIndices: number[]; exportedFile: File | null }): void {
-    if (generationMode.value === 'dock') {
-      atomsToDock.value = formatAtomIndices(payload.selectedIndices)
-      return
-    }
     fragmentSelectedIndices.value = [...payload.selectedIndices]
     if (payload.exportedFile) {
       fragmentUpload.value = payload.exportedFile
@@ -600,18 +655,15 @@
 
   const effectiveParams = computed<ParameterValues>(() => ({
     ...form.params,
-    ...(supportsGenerationMode.value ? { generation_mode: generationMode.value } : {}),
-    ...(generationMode.value === 'dock' && schema.value?.properties?.atoms_to_dock
-      ? { atoms_to_dock: atomsToDock.value.trim() }
-      : {})
+    ...(supportsGenerationMode.value ? { generation_mode: generationMode.value } : {})
   }))
   const parameterErrors = computed(() => validateParameters(schema.value, effectiveParams.value))
 
   /** 提交成功后保留在当前页展示实时进度，而不是直接把用户踢到结果页。 */
   const submittedTaskId = ref<string | null>(null)
 
-  /** 常用参数展开、其余收进「高级参数」；键名不存在时分组自然为空。 */
-  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'n_samples', 'n_steps', 'molecule_size']
+  /** 高频核心参数直接展示，采样超参统一收进「高级参数」。 */
+  const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'n_samples']
 
   const PARAM_STORAGE_PREFIX = 'design:molecule-params:'
   const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
@@ -730,18 +782,32 @@
       ? {
           generation_mode: { hidden: true },
           atoms_to_dock: { hidden: true },
-          ...(generationMode.value === 'dock' ? { molecule_size: { hidden: true } } : {})
+          molecule_size: { hidden: true }
         }
       : {})
   }))
 
   const activeCenter = computed(() =>
-    sourceMode.value === 'project' ? pocketSelection.value?.center ?? null : uploadCenter.value
+    activePocketMode.value === 'project'
+      ? pocketSelection.value?.center ?? null
+      : pocketPanelState.value.center
   )
 
   const activeBoxSize = computed(() =>
-    sourceMode.value === 'project' ? pocketSelection.value?.boxSize ?? null : uploadBoxSize.value
+    activePocketMode.value === 'project'
+      ? pocketSelection.value?.boxSize ?? null
+      : pocketPanelState.value.boxSize
   )
+
+  const supportsRefLigandSlot = computed(() => {
+    const slots = resolvedTool.value?.tool.contract?.artifacts?.inputs
+    return Array.isArray(slots) && slots.some(slot => slot?.name === 'ref_ligand')
+  })
+
+  const supportsPocketSlot = computed(() => {
+    const slots = resolvedTool.value?.tool.contract?.artifacts?.inputs
+    return Array.isArray(slots) && slots.some(slot => slot?.name === 'pocket')
+  })
 
   const hasCenter = computed(() => {
     const center = activeCenter.value
@@ -760,11 +826,11 @@
     () =>
       Boolean(
         resolvedTool.value &&
-          (sourceMode.value !== 'upload' || uploadProjectId.value) &&
+          activeProjectId.value &&
           !resolving.value &&
           !pocketParsing.value &&
+          !fragmentParsing.value &&
           (!needsLigandFile.value || Boolean(fragmentUpload.value)) &&
-          !atomsInvalid.value &&
           structureReady.value &&
           hasCenter.value &&
           parameterErrors.value.length === 0
@@ -798,43 +864,39 @@
   }
 
   /** a-upload 的 before-upload 返回 false 就只拿文件、不发请求。 */
-  function handleStructureFile(file: File): boolean {
+  async function handleStructureFile(file: File): Promise<false> {
+    const seq = structureSequence.next()
     structureFile.value = file
-    return false
-  }
-
-  async function handlePocketFile(file: File): Promise<boolean> {
-    const seq = pocketSequence.next()
-    pocketFile.value = file
-    parsedPocketFile = file
-    pocketParsing.value = true
-    uploadCenter.value = null
-    uploadBoxSize.value = null
+    parsedStructureFile = file
+    detectedHetatm.value = null
+    if (hetatmCoordsApplied.value) {
+      hetatmCoordsApplied.value = false
+      pocketPanelRef.value?.clearCoordinates()
+    }
+    const lower = file.name.toLowerCase()
+    if (!lower.endsWith('.pdb') && !lower.endsWith('.ent')) return false
     try {
-      const geometry = parsePocketGeometry(await file.text())
-      if (!pocketSequence.isCurrent(seq) || parsedPocketFile !== file || pocketFile.value !== file) return false
-      if (!geometry) throw new Error('invalid geometry')
-      uploadCenter.value = geometry.center
-      uploadBoxSize.value = geometry.boxSize
+      const text = await file.text()
+      if (!structureSequence.isCurrent(seq) || parsedStructureFile !== file || structureFile.value !== file) {
+        return false
+      }
+      detectedHetatm.value = extractProteinHetatmPocketGeometry(text)
     } catch {
-      if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) message.warning(t('design.molecule.pocketFileUnreadable'))
-    } finally {
-      if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) pocketParsing.value = false
+      // 共晶配体嗅探失败不影响蛋白上传本身。
     }
     return false
   }
 
   function validate(): string | null {
     if (needsLigandFile.value && !fragmentUpload.value) return t(fragmentIssue.value || 'design.molecule.fragmentRequired')
-    if (atomsInvalid.value) return t('design.molecule.atomsToDockInvalid')
+    if (!activeProjectId.value) {
+      return t('design.molecule.needProject')
+    }
     if (!structureReady.value) {
       return t('design.molecule.pocketMissingFile')
     }
-    if (sourceMode.value === 'upload' && !uploadProjectId.value) {
-      return t('design.molecule.needProject')
-    }
     if (!hasCenter.value) {
-      return t('design.molecule.pocketMissingCenter')
+      return pocketCenterMissingMessage.value
     }
     if (parameterErrors.value.length > 0) return t('design.molecule.invalidNum')
     return null
@@ -864,7 +926,14 @@
   }
 
   async function handleSubmit(): Promise<void> {
-    if (submitting.value || resolving.value || pocketParsing.value || fragmentParsing.value) return
+    if (
+      submitting.value ||
+      resolving.value ||
+      pocketParsing.value ||
+      fragmentParsing.value
+    ) {
+      return
+    }
     if (!resolvedTool.value) {
       message.warning(t('design.molecule.selectPocketFirst'))
       return
@@ -876,7 +945,7 @@
     }
 
     const center = activeCenter.value
-    const projectId = sourceMode.value === 'upload' ? uploadProjectId.value : pocketSelection.value?.projectId ?? ''
+    const projectId = activeProjectId.value
     const snapshot = {
       projectId,
       toolId: resolvedTool.value.tool.id,
@@ -888,8 +957,17 @@
         center_z: toNumber(center?.z, 0)
       },
       structureFile: sourceMode.value === 'upload' ? structureFile.value : null,
-      proteinFileId: pocketSelection.value?.structureFileId ?? '',
+      proteinFileId:
+        pocketSelection.value?.structureFileId ?? activeProjectStructure.value?.structureFileId ?? '',
       fragmentFile: needsLigandFile.value ? fragmentUpload.value : null,
+      refLigandFile:
+        activePocketMode.value === 'ref_ligand' && supportsRefLigandSlot.value
+          ? refLigandUpload.value
+          : null,
+      pocketFile:
+        activePocketMode.value === 'pocket_file' && supportsPocketSlot.value
+          ? pocketPanelState.value.pocketFile
+          : null,
       name: t('design.molecule.taskName')
     }
 
@@ -897,16 +975,20 @@
     try {
       let proteinPdbFileId = snapshot.proteinFileId
       const fragmentFileId = snapshot.fragmentFile ? (await uploadFile(snapshot.fragmentFile)).data.id : ''
+      const refLigandFileId = snapshot.refLigandFile ? (await uploadFile(snapshot.refLigandFile)).data.id : ''
+      const pocketFileId = snapshot.pocketFile ? (await uploadFile(snapshot.pocketFile)).data.id : ''
       if (snapshot.structureFile) {
         proteinPdbFileId = (await uploadFile(snapshot.structureFile)).data.id
         if (snapshot.projectId) {
-          void uploadProjectArtifact(snapshot.projectId, {
-            file: snapshot.structureFile,
-            artifact_type: 'protein_structure',
-            semantic_type: 'protein_structure',
-            standard_type: 'protein_structure',
-            standard_version: 1,
-          }).catch(() => {
+          void Promise.resolve(
+            uploadProjectArtifact(snapshot.projectId, {
+              file: snapshot.structureFile,
+              artifact_type: 'protein_structure',
+              semantic_type: 'protein_structure',
+              standard_type: 'protein_structure',
+              standard_version: 1,
+            })
+          ).catch(() => {
             message.warning(t('design.molecule.archiveStructureFailed'))
           })
         }
@@ -919,10 +1001,19 @@
         params: snapshot.params,
         standardInputUploads: { protein_pdb: proteinPdbFileId }
       }
-      const response = await submitDesignTask(fragmentFileId ? {
-        ...taskInput,
-        standardInputUploads: { ...taskInput.standardInputUploads, fragment_sdf: fragmentFileId }
-      } : taskInput)
+      const response = await submitDesignTask(
+        fragmentFileId || refLigandFileId || pocketFileId
+          ? {
+              ...taskInput,
+              standardInputUploads: {
+                ...taskInput.standardInputUploads,
+                ...(pocketFileId ? { pocket: pocketFileId } : {}),
+                ...(fragmentFileId ? { fragment_sdf: fragmentFileId } : {}),
+                ...(refLigandFileId ? { ref_ligand: refLigandFileId } : {})
+              }
+            }
+          : taskInput
+      )
       persistParams()
       submittedTaskId.value = response.data.id
       message.success(t('design.molecule.submittedStay'))
@@ -963,14 +1054,22 @@
       }
     }
     sourceMode.value = 'upload'
+    pocketDefineMode.value = 'pocket_file'
     if (!uploadProjectId.value) {
-      uploadProjectId.value = projectOptions.value[0]?.value ?? pocketSelection.value?.projectId ?? ''
+      uploadProjectId.value = projectOptions.value[0]?.value ?? activeProjectStructure.value?.projectId ?? ''
     }
     structureFile.value = receptorFile
-    pocketFile.value = sample.pocketFile
-    parsedPocketFile = sample.pocketFile
-    uploadCenter.value = sample.pocketCenter
-    uploadBoxSize.value = sample.pocketBoxSize
+    detectedHetatm.value = null
+    const parsedSampleGeometry = sample.pocketCenter
+      ? { center: sample.pocketCenter, boxSize: sample.pocketBoxSize }
+      : parsePocketGeometry(await sample.pocketFile.text())
+    if (parsedSampleGeometry) {
+      pocketPanelRef.value?.setPocketFileState(
+        sample.pocketFile,
+        parsedSampleGeometry.center,
+        parsedSampleGeometry.boxSize
+      )
+    }
     if (needsLigandFile.value) {
       await handleFragmentFile(sample.ligandFile)
     }
@@ -991,9 +1090,17 @@
     }
   })
 
+  watch(refLigandUpload, file => {
+    revokeRefLigandUrl()
+    if (file && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      uploadRefLigandUrl.value = URL.createObjectURL(file)
+    }
+  })
+
   onBeforeUnmount(() => {
     revokeUploadUrl()
     revokeLigandUrl()
+    revokeRefLigandUrl()
   })
 
   const contextPreviewScene = computed<VisualizationScene | null>(() => {
@@ -1002,9 +1109,9 @@
     // Build receptor entry when available
     let receptorEntry: VisualizationScene['entries'][number] | null = null
     if (sourceMode.value === 'project') {
-      const fileId = pocketSelection.value?.structureFileId
+      const fileId = activeProjectStructure.value?.structureFileId
       if (fileId) {
-        const urn = (pocketSelection.value?.structureUrn ?? '').toLowerCase()
+        const urn = (activeProjectStructure.value?.structureUrn ?? '').toLowerCase()
         const isCif = urn.endsWith('.cif') || urn.endsWith('.mmcif')
         receptorEntry = {
           key: `context-pocket-${fileId}`,
@@ -1032,9 +1139,15 @@
 
     if (receptorEntry) entries.push(receptorEntry)
 
-    // Build ligand entry when fragment uploaded
-    if (needsLigandFile.value && fragmentUpload.value && uploadLigandUrl.value) {
-      const lower = fragmentUpload.value.name.toLowerCase()
+    const previewLigand =
+      needsLigandFile.value && fragmentUpload.value && uploadLigandUrl.value
+        ? { file: fragmentUpload.value, url: uploadLigandUrl.value }
+        : activePocketMode.value === 'ref_ligand' && refLigandUpload.value && uploadRefLigandUrl.value
+          ? { file: refLigandUpload.value, url: uploadRefLigandUrl.value }
+          : null
+
+    if (previewLigand) {
+      const lower = previewLigand.file.name.toLowerCase()
       let format: 'pdb' | 'sdf' | 'mol2' = 'sdf'
       let extension = '.sdf'
       if (lower.endsWith('.pdb')) {
@@ -1044,16 +1157,15 @@
         format = 'mol2'
         extension = '.mol2'
       }
-      const ligandEntry = {
-        key: `context-ligand-${fragmentUpload.value.name}`,
-        url: uploadLigandUrl.value,
-        label: fragmentUpload.value.name,
+      entries.push({
+        key: `context-ligand-${previewLigand.file.name}`,
+        url: previewLigand.url,
+        label: previewLigand.file.name,
         source: 'input' as const,
         role: 'ligand' as const,
         format,
         extension
-      }
-      entries.push(ligandEntry)
+      })
     }
 
     if (entries.length === 0) return null
@@ -1082,12 +1194,6 @@
   const contextFragmentSummary = computed(() => {
     if (!needsLigandFile.value || !fragmentFile.value) return undefined
     const total = fragmentCount.value ?? fragmentMolecule.value?.atoms.length ?? 0
-    if (generationMode.value === 'dock') {
-      const selected = activeSketchSelection.value.length
-      return selected > 0
-        ? t('design.molecule.dockSummary', { selected, total })
-        : t('design.molecule.dockWholeSummary', { total })
-    }
     const selected = fragmentSelectedIndices.value.length || total
     return t('design.molecule.keptSummary', { selected, total })
   })
@@ -1103,16 +1209,16 @@
       id: 'input',
       title: t('design.molecule.context.stepInput'),
       done: Boolean(
+        activeProjectId.value &&
         structureReady.value &&
-        hasCenter.value &&
-        (sourceMode.value !== 'upload' || uploadProjectId.value)
+        hasCenter.value
       ),
       detail: hasCenter.value ? pocketLabelText.value : undefined
     },
     {
       id: 'fragment-params',
       title: t('design.molecule.context.stepFragmentParams'),
-      done: (!needsLigandFile.value || Boolean(fragmentUpload.value)) && !atomsInvalid.value && parameterErrors.value.length === 0
+      done: (!needsLigandFile.value || Boolean(fragmentUpload.value)) && parameterErrors.value.length === 0
     }
   ])
 
@@ -1121,19 +1227,16 @@
     if (!resolvedTool.value) {
       items.push({ id: 'tool', label: t('design.molecule.toolMissing'), targetTestId: 'molecule-section-model' })
     }
-    if (sourceMode.value === 'upload' && !uploadProjectId.value) {
+    if (!activeProjectId.value) {
       items.push({ id: 'project', label: t('design.molecule.needProject'), targetTestId: 'molecule-section-input' })
     }
     if (!structureReady.value) {
       items.push({ id: 'structure', label: t('design.molecule.pocketMissingFile'), targetTestId: 'molecule-section-input' })
     } else if (!hasCenter.value) {
-      items.push({ id: 'center', label: t('design.molecule.pocketMissingCenter'), targetTestId: 'molecule-section-input' })
+      items.push({ id: 'center', label: pocketCenterMissingMessage.value, targetTestId: 'molecule-section-input' })
     }
     if (needsLigandFile.value && !fragmentUpload.value) {
       items.push({ id: 'fragment', label: t(fragmentIssue.value || 'design.molecule.fragmentRequired'), targetTestId: 'molecule-fragment-section' })
-    }
-    if (atomsInvalid.value) {
-      items.push({ id: 'atoms', label: t('design.molecule.atomsToDockInvalid'), targetTestId: 'molecule-fragment-section' })
     }
     if (parameterErrors.value.length > 0) {
       items.push({ id: 'params', label: t('design.molecule.invalidNum'), targetTestId: 'molecule-section-params' })
@@ -1389,6 +1492,71 @@
 
   .number-input {
     width: 100%;
+  }
+
+  .input-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .input-block {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid @border-color;
+  }
+
+  .input-block__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .custom-pocket-panel {
+    margin-top: 2px;
+    padding: 14px;
+    border: 1px dashed @border-color;
+    border-radius: @border-radius-md;
+    background: @bg-elevated;
+  }
+
+  .hetatm-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    padding: 4px 10px;
+    border-radius: @border-radius-sm;
+    background: @accent-color-light;
+    font-size: @font-size-xs;
+    color: @text-secondary;
+  }
+
+  .param-size-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .param-size-presets__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .param-size-presets__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .param-hint {
