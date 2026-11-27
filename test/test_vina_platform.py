@@ -112,19 +112,70 @@ def test_blind_docking_fallback_is_gone():
     assert "center = docking_center" in source
 
 
+def test_missing_pocket_with_staged_protein_and_ligand_fails_without_fallback(tmp_path: Path):
+    """回归 P0：只有 protein_pdb + ligand_sdf 而无 pocket 时，pick_input 与 resolve_docking_center 必须失败。"""
+    input_dir = tmp_path / "input"
+    (input_dir / "protein_pdb").mkdir(parents=True)
+    (input_dir / "ligand_sdf").mkdir(parents=True)
+    protein = _receptor_pdb(input_dir / "protein_pdb" / "receptor.pdb")
+    ligand = input_dir / "ligand_sdf" / "lib.sdf"
+    ligand.write_text("M  END\n$$$$\n", encoding="utf-8")
+
+    files = {"protein_pdb": str(protein), "ligand_sdf": str(ligand)}
+    pocket = vina.pick_input(
+        files, input_dir, ("pocket",), (".pdb", ".mol2", ".sdf"), allow_fallback=False
+    )
+    assert pocket is None
+    with pytest.raises(SystemExit):
+        vina.resolve_docking_center({}, pocket, receptor_pdb=protein)
+
+
+def test_explicit_center_outside_receptor_bounds_fails(tmp_path: Path):
+    protein = _receptor_pdb(tmp_path / "protein.pdb")
+    with pytest.raises(SystemExit, match="outside receptor bounds"):
+        vina.resolve_docking_center(
+            {"center_x": 12.0, "center_y": 12.0, "center_z": 1000.0},
+            None,
+            receptor_pdb=protein,
+            box_size=22.0,
+        )
+    assert vina.resolve_docking_center(
+        {"center_x": 12.0, "center_y": 12.0, "center_z": 12.0},
+        None,
+        receptor_pdb=protein,
+        box_size=22.0,
+    ) == [12.0, 12.0, 12.0]
+
+
 # ---------------------------------------------------------------- 受体清理
 
 
 def test_strip_receptor_heterogens_removes_water_and_cocrystal_ligand(tmp_path: Path):
     source = _receptor_pdb(tmp_path / "protein.pdb")
-    cleaned_path = vina.strip_receptor_heterogens(source, tmp_path / "clean.pdb")
+    # 补充常见辅因子 HEM / ATP 以及带编号金属离子 ZN2，确认保留并记录被删 LIG。
+    extra = [
+        _pdb_line("HETATM", 8, "ZN", "ZN2", "A", 202, 14.5, 14.5, 14.5),
+        _pdb_line("HETATM", 9, "FE", "HEM", "A", 401, 12.0, 12.0, 12.0),
+        _pdb_line("HETATM", 10, "PG", "ATP", "A", 402, 12.5, 12.5, 12.5),
+    ]
+    lines = source.read_text(encoding="utf-8").splitlines()
+    source.write_text("\n".join(lines[:-2] + extra + lines[-2:]) + "\n", encoding="utf-8")
+
+    removed: list[str] = []
+    cleaned_path = vina.strip_receptor_heterogens(
+        source, tmp_path / "clean.pdb", removed_out=removed
+    )
     cleaned = cleaned_path.read_text(encoding="utf-8")
 
     assert "ATOM  " in cleaned
     assert "HOH" not in cleaned
     assert "LIG" not in cleaned
-    # 金属离子与聚合物型修饰残基保留
+    assert removed == ["LIG:A:301"]
+    # 金属离子、常见辅因子与聚合物型修饰残基保留
     assert " ZN " in cleaned
+    assert "ZN2" in cleaned
+    assert "HEM" in cleaned
+    assert "ATP" in cleaned
     assert "MSE" in cleaned
     # 坐标列没被破坏：CA 仍在原位置
     assert "10.000" in cleaned
@@ -137,9 +188,6 @@ def test_strip_receptor_heterogens_passes_through_non_pdb(tmp_path: Path):
 
 
 # ---------------------------------------------------------------- 构象优化
-
-
-rdkit = pytest.importorskip("rdkit")
 
 
 def _embedded_ethanol():
@@ -160,6 +208,7 @@ def _mmff_energy(mol) -> float:
 
 
 def test_optimize_geometry_lowers_mmff_energy():
+    pytest.importorskip("rdkit")
     mol = _embedded_ethanol()
     before = _mmff_energy(mol)
 
@@ -169,6 +218,7 @@ def test_optimize_geometry_lowers_mmff_energy():
 
 
 def test_optimize_geometry_falls_back_to_uff(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("rdkit")
     from rdkit.Chem import AllChem
 
     mol = _embedded_ethanol()
@@ -186,6 +236,7 @@ def test_optimize_geometry_falls_back_to_uff(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_ensure_3d_returns_optimized_conformer():
+    pytest.importorskip("rdkit")
     from rdkit import Chem
 
     mol = Chem.MolFromSmiles("c1ccccc1O")
@@ -199,3 +250,12 @@ def test_ensure_3d_returns_optimized_conformer():
 
     assert AllChem.EmbedMolecule(fresh, randomSeed=42) == 0
     assert _mmff_energy(prepared) <= _mmff_energy(fresh) + 1e-3
+
+
+def test_ensure_3d_optimizes_existing_3d_conformer():
+    pytest.importorskip("rdkit")
+    mol = _embedded_ethanol()
+    before = _mmff_energy(mol)
+    prepared = vina.ensure_3d(mol, seed=42)
+    assert prepared is not None
+    assert _mmff_energy(prepared) <= before + 1e-6
