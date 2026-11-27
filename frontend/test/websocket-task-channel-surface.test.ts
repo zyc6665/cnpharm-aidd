@@ -43,7 +43,7 @@ test('SSE 不可用时才回退轮询，且间隔不小于 2 秒', () => {
   // docs/10 API-08：禁止前端轮询间隔 < 2s。
   assert.equal(liveUpdatesSource.includes('intervalMs ?? 5000'), true)
   assert.equal(liveUpdatesSource.includes('streamConnected'), true)
-  assert.equal(liveUpdatesSource.includes("taskStatus.value === 'running'"), true)
+  assert.equal(liveUpdatesSource.includes('runningStatuses.includes(taskStatus.value)'), true)
 })
 
 test('任务列表页不应建立自研 WebSocket 连接', () => {

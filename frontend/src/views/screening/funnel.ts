@@ -13,7 +13,7 @@ export interface FunnelStage {
   remaining: number
 }
 
-function isTruthyFlag(raw: string | undefined): boolean {
+export function isTruthyFlag(raw: string | undefined): boolean {
   const value = (raw ?? '').trim().toLowerCase()
   return value === 'true' || value === '1' || value === 'yes' || value === 't'
 }

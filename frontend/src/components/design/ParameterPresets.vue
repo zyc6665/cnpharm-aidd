@@ -172,12 +172,14 @@ function readCustomPresets(): StoredPreset[] {
   }
 }
 
-function persistCustomPresets(): void {
-  if (typeof localStorage === 'undefined') return
+function persistCustomPresets(): boolean {
+  if (typeof localStorage === 'undefined') return false
   try {
     localStorage.setItem(props.storageKey, JSON.stringify(customPresets.value))
+    return true
   } catch {
-    // 存储不可用（隐私模式 / 配额满）时预设仍在当前会话生效，不阻断流程。
+    // 存储不可用时保留内存中的修改，不阻断流程。
+    return false
   }
 }
 
@@ -222,15 +224,15 @@ function saveCurrent(): void {
     params: filterToSchema(props.values),
   }
   customPresets.value = [...customPresets.value, preset]
-  persistCustomPresets()
   saveModalOpen.value = false
-  message.success(t('design.presets.saved'))
+  if (persistCustomPresets()) message.success(t('design.presets.saved'))
+  else message.warning(t('design.presets.savedSessionOnly'))
 }
 
 function removePreset(id: string): void {
   customPresets.value = customPresets.value.filter(preset => preset.id !== id)
-  persistCustomPresets()
-  message.success(t('design.presets.deleted'))
+  if (persistCustomPresets()) message.success(t('design.presets.deleted'))
+  else message.warning(t('design.presets.deletedSessionOnly'))
 }
 </script>
 

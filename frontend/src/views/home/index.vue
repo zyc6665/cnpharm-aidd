@@ -21,6 +21,7 @@
 
       <!-- 产品预览面板（真实组件渲染，非 CSS mockup） -->
       <div class="hero-preview">
+        <span class="preview-label">{{ t('home.hero.previewLabel') }}</span>
         <div class="preview-window">
           <div class="preview-chrome">
             <div class="chrome-dots"><span></span><span></span><span></span></div>
@@ -234,7 +235,14 @@ const values = [
   letter-spacing: -0.03em;
   color: @text-primary;
   margin: 0 0 @spacing-md;
+  /* 词条里用换行做了语义断行，避免窄屏把「先导化合物」拆开 */
+  white-space: pre-line;
   text-wrap: balance;
+
+  @media (max-width: @screen-sm) {
+    font-size: clamp(1.75rem, 8vw, 2.25rem);
+    line-height: 1.25;
+  }
 }
 
 .hero-subtitle {
@@ -276,7 +284,22 @@ const values = [
 
   @media (max-width: @screen-md) {
     flex-direction: column;
+    align-items: stretch;
   }
+}
+
+.preview-label {
+  position: absolute;
+  top: -28px;
+  right: 4px;
+  padding: 2px 10px;
+  border: 1px dashed @border-color;
+  border-radius: @border-radius-round;
+  background: @bg-elevated;
+  color: @text-secondary;
+  font-size: @font-size-xs;
+  line-height: 18px;
+  pointer-events: none;
 }
 
 .preview-window {
@@ -286,6 +309,11 @@ const values = [
   border: 1px solid @border-color;
   box-shadow: @shadow-xl;
   background: @bg-surface;
+
+  @media (max-width: @screen-md) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
 }
 
 .preview-window-offset {

@@ -248,10 +248,11 @@ export default {
     title: '首页',
     badge: 'AI 驱动的科学计算平台',
     hero: {
-      title: '从靶点到先导化合物，一个工作台完成',
+      title: '从靶点到先导化合物，\n一个工作台完成',
       description: '口袋识别、虚拟筛选、分子对接、ADMET 预测——所有计算环节在同一平台上编排、执行、追溯',
       cta: '立即登录',
       secondary: '浏览工具',
+      previewLabel: '界面示意',
     },
     values: {
       reproducible: {
@@ -2161,7 +2162,9 @@ export default {
       namePlaceholder: '例如：大口袋精细采样',
       nameRequired: '请填写预设名称',
       saved: '参数预设已保存',
+      savedSessionOnly: '无法写入本地存储，预设仅在当前会话有效。',
       deleted: '参数预设已删除',
+      deletedSessionOnly: '无法写入本地存储，删除仅在当前会话有效。',
       delete: '删除',
       builtInPresets: {
         quick: '快速探索',
@@ -2730,7 +2733,7 @@ export default {
     },
     result: {
       title: '筛选结果',
-      subtitle: '排序表与漏斗统计，点击行查看对接姿势详情。',
+      subtitle: '排序表与漏斗统计；可通过「查看姿势」查看入选分子的对接详情。',
       loading: '正在加载筛选结果…',
       loadFailed: '加载筛选结果失败。',
       empty: '没有找到筛选结果表。',
@@ -2746,6 +2749,11 @@ export default {
       setName: '候选集名称',
       setNamePlaceholder: '例如：STAT6 虚拟筛选 Top10',
       saveScope: '将保存 {count} 个有效分子（候选范围共 {total} 个）。',
+      saveSelectedScope: '已勾选 {total} 条，将保存其中符合条件的 {count} 条。',
+      zeroPassNotice: '没有通过筛选且可用于流转的分子，无法保存候选集或送往 ADMET。',
+      poseAction: '对接姿势',
+      viewPose: '查看姿势',
+      poseNotExported: '未导出姿势',
       saveButton: '保存',
       saved: '已保存 {count} 个候选分子到候选集',
       saveFailed: '保存候选集失败，请重试',
@@ -2801,6 +2809,7 @@ export default {
       score: '对接分数 (kcal/mol)',
       rmsdLb: 'RMSD 下界 (Å)',
       rmsdUb: 'RMSD 上界 (Å)',
+      notProvided: '未提供',
       interactions: '相互作用',
       interactionEmpty: '该姿势没有记录相互作用。',
       type: '类型',
@@ -2810,8 +2819,8 @@ export default {
       viewer: '复合物结构',
       noStructure: '缺少可展示的结构文件。',
       hints: {
-        score: '越低结合越牢（kcal/mol）',
-        rmsd: '越低越接近晶体构象（Å）'
+        score: '同一模型与对接协议下分值越低，通常排名越靠前；不能替代实验测定的结合亲和力（kcal/mol）',
+        rmsd: 'Vina 原生 rmsd_lb/rmsd_ub：相对本次对接最优姿势的 RMSD 下界/上界（Å），不是与晶体构象的偏差'
       },
       rank: '排名',
       ligandSmiles: '配体 SMILES',
