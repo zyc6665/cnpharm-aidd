@@ -434,4 +434,77 @@ describe('ScreenConfig input sources', () => {
     }))
     expect(pushMock).toHaveBeenCalledWith('/tasks/task-1/results')
   })
+
+  it('uploads pocket artifact in pocket_file mode and blocks partial docking for V3000 or multi-record SDFs', async () => {
+    mockModelState.selectedSlugRef!.value = 'lddm-pocket-ligand-generation'
+    mockModelState.selectedOptionRef!.value = {
+      slug: 'lddm-pocket-ligand-generation',
+      name: 'LDDM 口袋条件分子生成',
+      isDefault: false,
+      inputFields: ['protein_pdb', 'fragment_sdf'],
+      inputSlots: ['protein_pdb', 'pocket', 'fragment_sdf', 'ref_ligand'],
+      parameterSchema: {
+        type: 'object',
+        properties: {
+          generation_mode: { type: 'string', enum: ['denovo', 'fragment', 'dock'], default: 'denovo' },
+          n_samples: { type: 'integer', default: 10 }
+        }
+      }
+    }
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const makeTextFile = (name: string, text: string) => {
+      const file = new File([text], name)
+      Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue(text) })
+      return file
+    }
+
+    const receptorUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-config-receptor-upload')!
+    const ligandUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-dock-ligand-upload')!
+    const receptorFile = makeTextFile('receptor.pdb', 'ATOM      1  CA  GLY A   1      1.000  2.000  3.000  1.00  0.00           C\nEND\n')
+    await (receptorUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(receptorFile)
+
+    // Multi-record SDF should be rejected for single-ligand LDDM docking
+    const multiSdf = makeTextFile('multi.sdf', 'mol1\n$$$$\nmol2\n$$$$\n')
+    await (ligandUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(multiSdf)
+    await flushPromises()
+    expect(wrapper.text()).toContain('screening.config.dockLigandSingleOnly')
+    expect(wrapper.find('[data-testid="screen-config-submit"]').attributes('disabled')).toBeDefined()
+
+    // V3000 SDF keeps atomCount null: full docking allowed, partial atoms_to_dock rejected
+    const v3000Sdf = makeTextFile('v3000.sdf', 'V3000\n  test\n\n  0  0  0     0  0            999 V3000\nM  V30 BEGIN CTAB\nM  END\n$$$$\n')
+    await (ligandUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(v3000Sdf)
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'PocketCoordinatePanel' }).vm.$emit('update:modelValue', 'pocket_file')
+    await flushPromises()
+    const pocketUpload = wrapper.findAllComponents(AUploadStub).find(w => w.attributes('data-testid') === 'screen-dock-pocket-upload')!
+    const pocketFile = makeTextFile('pocket0.pdb', 'HETATM    1  C1  UNL A   1       4.000   5.000   6.000  1.00  0.00           C\nEND\n')
+    await (pocketUpload.props('beforeUpload') as (f: File) => Promise<boolean>)(pocketFile)
+    await flushPromises()
+
+    // Non-empty atoms_to_dock on V3000 cannot be range-checked -> blocked
+    const atomsInput = wrapper.find('[data-testid="screen-dock-atoms-input"]')
+    await atomsInput.setValue('999')
+    await flushPromises()
+    expect(wrapper.text()).toContain('design.molecule.atomsToDockUnverifiable')
+    expect(wrapper.find('[data-testid="screen-config-submit"]').attributes('disabled')).toBeDefined()
+
+    // Clear atoms_to_dock -> full-ligand dock submits with uploads.pocket
+    await atomsInput.setValue('')
+    await flushPromises()
+    await wrapper.find('[data-testid="screen-config-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(3)
+    expect(submitToolTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      standardInputUploads: {
+        protein_pdb: 'file-uploaded',
+        fragment_sdf: 'file-uploaded',
+        pocket: 'file-uploaded'
+      }
+    }))
+  })
 })

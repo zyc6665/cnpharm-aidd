@@ -437,6 +437,7 @@
   )
   const structureFile = ref<File | null>(null)
   const detectedHetatm = ref<PocketGeometry | null>(null)
+  const hetatmCoordsApplied = ref(false)
   const structureSequence = useRequestSequence()
   let parsedStructureFile: File | null = null
 
@@ -468,15 +469,25 @@
 
   function handlePocketStateChange(state: PocketCoordinateState): void {
     pocketPanelState.value = state
+    if (!state.center || state.mode !== 'coords') {
+      hetatmCoordsApplied.value = false
+    }
   }
 
   function handleProjectStructureChange(value: DesignStructureSelection | null): void {
     projectStructure.value = value
   }
 
-  watch(sourceMode, mode => {
+  watch(sourceMode, (mode, prevMode) => {
     if (mode === 'upload' && pocketDefineMode.value === 'project') {
       pocketDefineMode.value = 'ref_ligand'
+    } else if (mode === 'project' && prevMode === 'upload') {
+      detectedHetatm.value = null
+      hetatmCoordsApplied.value = false
+      pocketPanelRef.value?.clearCoordinates()
+      if (pocketSelection.value) {
+        pocketDefineMode.value = 'project'
+      }
     }
   }, { flush: 'sync' })
 
@@ -489,6 +500,7 @@
   function applyDetectedHetatmCenter(): void {
     if (!detectedHetatm.value) return
     pocketPanelRef.value?.setCoordinates(detectedHetatm.value.center)
+    hetatmCoordsApplied.value = true
     message.success(t('design.molecule.hetatmApplied'))
   }
 
@@ -792,6 +804,11 @@
     return Array.isArray(slots) && slots.some(slot => slot?.name === 'ref_ligand')
   })
 
+  const supportsPocketSlot = computed(() => {
+    const slots = resolvedTool.value?.tool.contract?.artifacts?.inputs
+    return Array.isArray(slots) && slots.some(slot => slot?.name === 'pocket')
+  })
+
   const hasCenter = computed(() => {
     const center = activeCenter.value
     return Boolean(
@@ -852,6 +869,10 @@
     structureFile.value = file
     parsedStructureFile = file
     detectedHetatm.value = null
+    if (hetatmCoordsApplied.value) {
+      hetatmCoordsApplied.value = false
+      pocketPanelRef.value?.clearCoordinates()
+    }
     const lower = file.name.toLowerCase()
     if (!lower.endsWith('.pdb') && !lower.endsWith('.ent')) return false
     try {
@@ -943,6 +964,10 @@
         activePocketMode.value === 'ref_ligand' && supportsRefLigandSlot.value
           ? refLigandUpload.value
           : null,
+      pocketFile:
+        activePocketMode.value === 'pocket_file' && supportsPocketSlot.value
+          ? pocketPanelState.value.pocketFile
+          : null,
       name: t('design.molecule.taskName')
     }
 
@@ -951,6 +976,7 @@
       let proteinPdbFileId = snapshot.proteinFileId
       const fragmentFileId = snapshot.fragmentFile ? (await uploadFile(snapshot.fragmentFile)).data.id : ''
       const refLigandFileId = snapshot.refLigandFile ? (await uploadFile(snapshot.refLigandFile)).data.id : ''
+      const pocketFileId = snapshot.pocketFile ? (await uploadFile(snapshot.pocketFile)).data.id : ''
       if (snapshot.structureFile) {
         proteinPdbFileId = (await uploadFile(snapshot.structureFile)).data.id
         if (snapshot.projectId) {
@@ -976,11 +1002,12 @@
         standardInputUploads: { protein_pdb: proteinPdbFileId }
       }
       const response = await submitDesignTask(
-        fragmentFileId || refLigandFileId
+        fragmentFileId || refLigandFileId || pocketFileId
           ? {
               ...taskInput,
               standardInputUploads: {
                 ...taskInput.standardInputUploads,
+                ...(pocketFileId ? { pocket: pocketFileId } : {}),
                 ...(fragmentFileId ? { fragment_sdf: fragmentFileId } : {}),
                 ...(refLigandFileId ? { ref_ligand: refLigandFileId } : {})
               }

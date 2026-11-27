@@ -478,4 +478,60 @@ describe('MoleculeGeneration', () => {
       })
     )
   })
+
+  it('clears upload-derived center coords on switching back to project mode and uploads pocket slot when supported', async () => {
+    mocks.resolve.mockImplementation(async slug => ({
+      tool: {
+        id: slug,
+        contract: { artifacts: { inputs: [{ name: 'protein_pdb' }, { name: 'pocket' }] } }
+      },
+      version: { id: `${slug}-v1` }
+    }))
+
+    await selectModel(LDDM)
+    await get('molecule-source-mode').get('button[value="upload"]').trigger('click')
+    const complexPdb = structureFile(
+      'complex.pdb',
+      [
+        'HETATM    1  C1  LIG A 201      10.000  20.000  30.000  1.00  0.00           C',
+        'HETATM    2  N1  LIG A 201      14.000  24.000  34.000  1.00  0.00           N',
+        'END'
+      ].join('\n')
+    )
+    await chooseUpload('molecule-upload-structure', complexPdb)
+    await get('molecule-use-hetatm-center').trigger('click')
+    await flushPromises()
+
+    expect((get('molecule-center-x').element as HTMLInputElement).value).toBe('12')
+
+    // Switching back to project restores selected project pocket and clears upload-derived center
+    await get('molecule-source-mode').get('button[value="project"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find(byId('molecule-hetatm-banner')).exists()).toBe(false)
+    await get('molecule-pocket-mode-coords').trigger('click')
+    await flushPromises()
+    expect((get('molecule-center-x').element as HTMLInputElement).value).toBe('')
+
+    // Unreadable ref ligand does not keep phantom filename selected
+    await get('molecule-pocket-mode-ligand').trigger('click')
+    await chooseUpload('molecule-upload-ref-ligand', structureFile('broken.sdf', 'not-a-ligand'))
+    expect(wrapper.find(byId('molecule-upload-ref-ligand-name')).exists()).toBe(false)
+
+    // Pocket PDB mode uploads the pocket file to uploads.pocket when tool contract declares pocket
+    await get('molecule-pocket-mode-file').trigger('click')
+    const pocketFile = structureFile(
+      'pocket0.pdb',
+      'HETATM    1  C1  UNL A   1       3.000   4.000   5.000  1.00  0.00           C\nEND\n'
+    )
+    await chooseUpload('molecule-upload-pocket', pocketFile)
+    await submit().trigger('click')
+    await flushPromises()
+
+    expect(mocks.upload).toHaveBeenCalledExactlyOnceWith(pocketFile)
+    expect(mocks.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        standardInputUploads: { protein_pdb: 'protein', pocket: 'ligand' }
+      })
+    )
+  })
 })

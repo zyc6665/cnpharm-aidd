@@ -28,6 +28,9 @@ export interface PocketGeometry {
 interface RawAtom {
   record: string
   residueName: string
+  chainId: string
+  resSeq: string
+  iCode: string
   atomName: string
   element: string
   x: number
@@ -36,13 +39,36 @@ interface RawAtom {
 }
 
 const POCKET_MARKERS = new Set(['UNL', 'UNK'])
-const SOLVENT_RESIDUES = new Set(['HOH', 'WAT', 'DOD', 'TIP', 'TP3'])
+const SOLVENT_RESIDUES = new Set(['HOH', 'WAT', 'DOD', 'TIP', 'TP3', 'SOL'])
+const NON_LIGAND_HETATM_RESIDUES = new Set([
+  'HOH', 'WAT', 'DOD', 'TIP', 'TP3', 'SOL',
+  'GOL', 'EDO', 'PEG', 'PGE', 'PG4', '1PE', '2PE', 'P6G', 'MPD', 'DMS', 'DMSO',
+  'ACT', 'ACY', 'FMT', 'CIT', 'TAR', 'TLA', 'MLI', 'BCT', 'SCN', 'AZI',
+  'TRS', 'MES', 'EPE', 'HEPES', 'BME', 'DTT', 'IMD', 'EOH', 'IPA',
+  'SO4', 'PO4', 'PI', 'NO3', 'CO3', 'NH4', 'SUC',
+  'NA', 'K', 'CL', 'BR', 'IOD', 'F', 'ZN', 'MG', 'CA', 'MN', 'FE', 'CU', 'NI', 'CO', 'CD', 'HG', 'PT', 'AU', 'AG', 'AL', 'UNX'
+])
+const COFACTOR_RESIDUES = new Set([
+  'NAD', 'NAP', 'NDP', 'NAI', 'NAH', 'NHD', 'FAD', 'FMN', 'HEM', 'HEC', 'HEA',
+  'COA', 'ACO', 'SAM', 'SAH', 'ATP', 'ADP', 'AMP', 'GTP', 'GDP', 'GMP',
+  'ANP', 'ACP', 'PLP', 'TPP', 'BTN', 'THP', 'UDP', 'UTP', 'CDP', 'CTP'
+])
+
+function isHydrogenAtom(atom: RawAtom): boolean {
+  if (atom.element) {
+    return atom.element === 'H' || atom.element === 'D'
+  }
+  return atom.atomName.replace(/^\d+/, '').startsWith('H')
+}
 
 function parseAtoms(pdbText: string): RawAtom[] {
   const atoms: RawAtom[] = []
   for (const line of pdbText.split(/\r?\n/)) {
     const record = line.slice(0, 6).trim()
+    if (record === 'ENDMDL') break
     if (record !== 'ATOM' && record !== 'HETATM') continue
+    const altLoc = line[16] ?? ' '
+    if (altLoc !== ' ' && altLoc !== 'A' && altLoc !== '1') continue
     const x = Number.parseFloat(line.slice(30, 38))
     const y = Number.parseFloat(line.slice(38, 46))
     const z = Number.parseFloat(line.slice(46, 54))
@@ -50,6 +76,9 @@ function parseAtoms(pdbText: string): RawAtom[] {
     atoms.push({
       record,
       residueName: line.slice(17, 20).trim().toUpperCase(),
+      chainId: line.slice(21, 22).trim().toUpperCase(),
+      resSeq: line.slice(22, 26).trim(),
+      iCode: line.slice(26, 27).trim().toUpperCase(),
       atomName: line.slice(12, 16).trim().toUpperCase(),
       element: line.slice(76, 78).trim().toUpperCase(),
       x,
@@ -98,14 +127,37 @@ export function parsePocketGeometry(pdbText: string): PocketGeometry | null {
 }
 
 export function extractProteinHetatmPocketGeometry(pdbText: string): PocketGeometry | null {
-  const heavyHetatm = parseAtoms(pdbText).filter((atom) => {
-    if (atom.record !== 'HETATM') return false
-    if (SOLVENT_RESIDUES.has(atom.residueName)) return false
-    if (atom.element === 'H' || atom.atomName.startsWith('H')) return false
-    return true
-  })
-  if (heavyHetatm.length < 2) return null
-  return geometryOf(heavyHetatm, 'hetatm')
+  const groups = new Map<string, { isCofactor: boolean; atoms: RawAtom[] }>()
+  for (const atom of parseAtoms(pdbText)) {
+    if (atom.record !== 'HETATM') continue
+    if (isHydrogenAtom(atom)) continue
+    if (SOLVENT_RESIDUES.has(atom.residueName) || NON_LIGAND_HETATM_RESIDUES.has(atom.residueName)) {
+      continue
+    }
+    const key = `${atom.residueName}|${atom.chainId}|${atom.resSeq}|${atom.iCode}`
+    const existing = groups.get(key)
+    if (existing) {
+      existing.atoms.push(atom)
+    } else {
+      groups.set(key, {
+        isCofactor: COFACTOR_RESIDUES.has(atom.residueName),
+        atoms: [atom]
+      })
+    }
+  }
+
+  const candidates = [...groups.values()].filter((group) => group.atoms.length >= 2)
+  if (candidates.length === 0) return null
+
+  const nonCofactors = candidates.filter((group) => !group.isCofactor)
+  const pool = nonCofactors.length > 0 ? nonCofactors : candidates
+  let best = pool[0]!
+  for (const candidate of pool.slice(1)) {
+    if (candidate.atoms.length > best.atoms.length) {
+      best = candidate
+    }
+  }
+  return geometryOf(best.atoms, 'hetatm')
 }
 
 export function parseReferenceLigandGeometry(rawText: string, filename: string): PocketGeometry | null {

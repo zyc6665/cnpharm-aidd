@@ -230,8 +230,19 @@ onMounted(() => { applyQueryHandoff(); void loadProjects() })
 const receptorFile = ref<File | null>(null)
 const receptorName = ref('')
 const detectedHetatm = ref<PocketGeometry | null>(null)
+const dockHetatmCoordsApplied = ref(false)
 const receptorSequence = useRequestSequence()
 let parsedReceptorFile: File | null = null
+
+watch(receptorSource, (mode, prevMode) => {
+  if (mode === 'project' && prevMode === 'upload') {
+    detectedHetatm.value = null
+    if (dockHetatmCoordsApplied.value) {
+      dockHetatmCoordsApplied.value = false
+      dockPocketPanelRef.value?.clearCoordinates()
+    }
+  }
+}, { flush: 'sync' })
 
 const ligandFiles = ref<File[]>([])
 const ligandFormat = ref<'' | 'sdf' | 'csv'>('')
@@ -286,8 +297,17 @@ const dockPocketTestIds: PocketTestIds = {
 const dockAtomsParsed = computed(() =>
   parseAtomIndices(dockAtomsToDock.value.trim(), dockLigandAtomCount.value)
 )
+const dockAtomsUnverifiable = computed(() =>
+  Boolean(dockAtomsToDock.value.trim()) && dockLigandAtomCount.value === null
+)
 const dockAtomsInvalid = computed(() =>
-  Boolean(dockAtomsToDock.value.trim()) && !dockAtomsParsed.value.valid
+  Boolean(dockAtomsToDock.value.trim()) &&
+  (!dockAtomsParsed.value.valid || dockAtomsUnverifiable.value)
+)
+const dockAtomsErrorKey = computed(() =>
+  dockAtomsUnverifiable.value
+    ? 'design.molecule.atomsToDockUnverifiable'
+    : 'design.molecule.atomsToDockInvalid'
 )
 const dockActiveCenter = computed(() => dockPocketState.value.center)
 const dockCenterReady = computed(() => Boolean(dockActiveCenter.value))
@@ -337,7 +357,7 @@ const canSubmit = computed(() => {
       : Boolean(receptorFile.value)
   if (!receptorReady) return false
   if (isLddmDock.value) {
-    if (dockLigandParsing.value || dockPocketState.value.parsing) return false
+    if (dockLigandParsing.value || dockPocketState.value.parsing || dockLigandError.value) return false
     const hasDockLigand = Boolean(dockLigandUpload.value || preuploadedLigandFileId.value)
     return (
       hasDockLigand &&
@@ -362,6 +382,10 @@ async function handleReceptorUpload(file: File): Promise<boolean> {
   receptorName.value = file.name
   parsedReceptorFile = file
   detectedHetatm.value = null
+  if (dockHetatmCoordsApplied.value) {
+    dockHetatmCoordsApplied.value = false
+    dockPocketPanelRef.value?.clearCoordinates()
+  }
   const lower = file.name.toLowerCase()
   if (!lower.endsWith('.pdb') && !lower.endsWith('.ent')) return false
   try {
@@ -398,6 +422,14 @@ async function handleDockLigandUpload(file: File): Promise<boolean> {
     if (!dockLigandSequence.isCurrent(seq) || parsedDockLigandFile !== file || dockLigandFile.value !== file) {
       return false
     }
+    const lowerName = file.name.toLowerCase()
+    if (lowerName.endsWith('.sdf') || lowerName.endsWith('.sd')) {
+      const records = text.split(/^\s*\$\$\$\$\s*$/m).filter(segment => segment.trim().length > 0)
+      if (records.length > 1) {
+        dockLigandError.value = t('screening.config.dockLigandSingleOnly')
+        return false
+      }
+    }
     const prepared = await parseAndNormalizeLigandUpload(file, text, { convertNonSdfToSdf: false })
     if (!dockLigandSequence.isCurrent(seq) || parsedDockLigandFile !== file || dockLigandFile.value !== file) {
       return false
@@ -428,10 +460,14 @@ function handleDockSketchConfirm(payload: { selectedIndices: number[]; exportedF
 
 function handleDockPocketStateChange(state: PocketCoordinateState): void {
   dockPocketState.value = state
+  if (!state.center || state.mode !== 'coords') {
+    dockHetatmCoordsApplied.value = false
+  }
 }
 
-function applyCenterToCoords(center: { x: number; y: number; z: number }, noticeKey: string): void {
+function applyCenterToCoords(center: { x: number; y: number; z: number }, noticeKey: string, fromHetatm = false): void {
   dockPocketPanelRef.value?.setCoordinates(center)
+  dockHetatmCoordsApplied.value = fromHetatm
   message.success(t(noticeKey))
 }
 
@@ -538,7 +574,7 @@ async function handleSubmit(): Promise<void> {
       return
     }
     if (dockAtomsInvalid.value) {
-      formError.value = t('design.molecule.atomsToDockInvalid')
+      formError.value = t(dockAtomsErrorKey.value)
       return
     }
     if (!dockActiveCenter.value) {
@@ -551,7 +587,9 @@ async function handleSubmit(): Promise<void> {
     }
 
     const center = dockActiveCenter.value
-    const supportsRefLigand = Boolean(selectedOption?.value?.inputSlots?.includes('ref_ligand'))
+    const inputSlots = selectedOption?.value?.inputSlots ?? []
+    const supportsRefLigand = inputSlots.includes('ref_ligand')
+    const supportsPocket = inputSlots.includes('pocket')
     const trimmedAtoms = dockAtomsToDock.value.trim()
     submitting.value = true
     try {
@@ -566,6 +604,10 @@ async function handleSubmit(): Promise<void> {
       const refLigandUpload = dockPocketState.value.refLigandUpload
       if (dockPocketState.value.mode === 'ref_ligand' && refLigandUpload && supportsRefLigand) {
         uploads.ref_ligand = (await uploadFile(refLigandUpload)).data.id
+      }
+      const dockPocketFile = dockPocketState.value.pocketFile
+      if (dockPocketState.value.mode === 'pocket_file' && dockPocketFile && supportsPocket) {
+        uploads.pocket = (await uploadFile(dockPocketFile)).data.id
       }
 
       const task = await submitToolTask({
@@ -720,7 +762,7 @@ const paramFields = computed(() => [
                 type="link"
                 size="small"
                 data-testid="screen-dock-use-hetatm"
-                @click="applyCenterToCoords(detectedHetatm.center, 'design.molecule.hetatmApplied')"
+                @click="applyCenterToCoords(detectedHetatm.center, 'design.molecule.hetatmApplied', true)"
               >
                 {{ t('design.molecule.useHetatmCenter') }}
               </a-button>
@@ -907,7 +949,7 @@ const paramFields = computed(() => [
                 data-testid="screen-dock-atoms-input"
               />
               <span class="screen-config__hint">
-                {{ t(dockAtomsInvalid ? 'design.molecule.atomsToDockInvalid' : 'design.molecule.atomsToDockHint') }}
+                {{ t(dockAtomsInvalid ? dockAtomsErrorKey : 'design.molecule.atomsToDockHint') }}
               </span>
             </div>
           </a-form-item>

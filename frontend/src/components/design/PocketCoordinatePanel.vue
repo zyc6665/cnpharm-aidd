@@ -364,6 +364,7 @@ async function handleRefLigandFile(file: File): Promise<boolean> {
     refLigandUpload.value = prepared.uploadFile
   } catch {
     if (refLigandSequence.isCurrent(seq) && parsedRefLigandFile === file) {
+      refLigandFile.value = null
       message.warning(t('design.molecule.refLigandUnreadable'))
     }
   } finally {
@@ -391,6 +392,7 @@ async function handlePocketFile(file: File): Promise<boolean> {
     pocketBoxSize.value = geometry.boxSize
   } catch {
     if (pocketSequence.isCurrent(seq) && parsedPocketFile === file) {
+      pocketFile.value = null
       message.warning(t('design.molecule.pocketFileUnreadable'))
     }
   } finally {
@@ -401,7 +403,7 @@ async function handlePocketFile(file: File): Promise<boolean> {
   return false
 }
 
-defineExpose({ setCoordinates, setPocketFileState })
+defineExpose({ setCoordinates, clearCoordinates: clearManualCenter, setPocketFileState })
 </script>
 
 <style scoped lang="less">

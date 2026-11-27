@@ -40,6 +40,49 @@ describe('pocket-geometry', () => {
     })
   })
 
+  it('selects the largest non-cofactor ligand residue instead of averaging additives, metals, or cofactors', () => {
+    const pdb = [
+      'HETATM    1  C1  IRE A 201      10.000  20.000  30.000  1.00  0.00           C',
+      'HETATM    2  N1  IRE A 201      14.000  24.000  36.000  1.00  0.00           N',
+      'HETATM    3  C2  IRE A 201      12.000  22.000  33.000  1.00  0.00           C',
+      // Alternate conformer B should be skipped so weights aren't doubled on conformer A
+      'HETATM    4  C2 BIRE A 201      99.000  99.000  99.000  0.50  0.00           C',
+      // Crystallization buffer / additive
+      'HETATM    5  C1  GOL A 301      60.000  60.000  60.000  1.00  0.00           C',
+      'HETATM    6  O1  GOL A 301      62.000  62.000  62.000  1.00  0.00           O',
+      // Cofactor larger than ligand: should not override drug ligand
+      'HETATM    7  PA  NAD A 501      80.000  80.000  80.000  1.00  0.00           P',
+      'HETATM    8  O1A NAD A 501      82.000  82.000  82.000  1.00  0.00           O',
+      'HETATM    9  O2A NAD A 501      84.000  84.000  84.000  1.00  0.00           O',
+      'HETATM   10  PN  NAD A 501      86.000  86.000  86.000  1.00  0.00           P',
+      'END'
+    ].join('\n')
+    const geometry = extractProteinHetatmPocketGeometry(pdb)
+    expect(geometry).toEqual({
+      center: { x: 12, y: 22, z: 33 },
+      boxSize: { x: 4, y: 4, z: 6 },
+      pointCount: 3,
+      source: 'hetatm'
+    })
+  })
+
+  it('does not average multiple chains of the same ligand and keeps HG heavy atoms while dropping H atoms', () => {
+    const pdb = [
+      'HETATM    1  C1  LIG A 201       0.000   0.000   0.000  1.00  0.00           C',
+      'HETATM    2  HG1 LIG A 201       4.000   4.000   4.000  1.00  0.00          HG',
+      'HETATM    3  C1  LIG B 201     100.000 100.000 100.000  1.00  0.00           C',
+      'HETATM    4  O1  LIG B 201     102.000 102.000 102.000  1.00  0.00           O',
+      'END'
+    ].join('\n')
+    const geometry = extractProteinHetatmPocketGeometry(pdb)
+    expect(geometry).toEqual({
+      center: { x: 2, y: 2, z: 2 },
+      boxSize: { x: 4, y: 4, z: 4 },
+      pointCount: 2,
+      source: 'hetatm'
+    })
+  })
+
   it('returns null when PDB only has solvent or a single isolated HETATM ion', () => {
     const pdb = [
       'HETATM    1 ZN   ZN  A 401      10.000  10.000  10.000  1.00  0.00          ZN',

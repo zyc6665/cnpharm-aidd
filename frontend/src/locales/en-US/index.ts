@@ -2103,6 +2103,7 @@ export default {
       atomsToDock: 'Atoms to dock',
       atomsToDockHint: 'Use zero-based indices separated by commas or spaces. Leave blank to dock the whole ligand.',
       atomsToDockInvalid: 'Use non-negative integer indices within the displayed range, separated by commas or spaces.',
+      atomsToDockUnverifiable: 'Atom count could not be parsed for this ligand format, so partial-dock indices cannot be validated. Use V2000 SDF/MOL/MOL2/PDB or leave blank for full docking.',
       modeDescription: {
         denovo: 'Generate candidate molecules from scratch in the pocket.',
         fragment: 'Grow or link molecules starting from the uploaded fragment.',
@@ -2678,6 +2679,7 @@ export default {
       dockLigandTitle: 'Ligand to dock (3D structure)',
       dockLigandHint: 'Upload a single 3D ligand (.sdf / .mol / .mol2 / .pdb). Optionally pick specific atoms in the sketcher for partial docking, or leave empty for full docking.',
       dockLigandUnreadable: 'Could not read this ligand file. Upload a valid 3D SDF, MOL, MOL2, or PDB.',
+      dockLigandSingleOnly: 'LDDM docking supports one 3D ligand per run. Upload a file containing a single molecule.',
       dockUseLigandCenter: 'Use ligand centroid as center',
       dockLigandCenterApplied: 'Pocket center populated from ligand centroid',
       dockSummaryTitle: 'LDDM docking summary',

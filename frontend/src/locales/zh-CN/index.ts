@@ -2090,6 +2090,7 @@ export default {
       atomsToDock: '局部对接原子索引',
       atomsToDockHint: '索引从 0 开始，用逗号或空格分隔；留空表示对接整个配体。',
       atomsToDockInvalid: '请输入显示范围内的非负整数索引，用逗号或空格分隔。',
+      atomsToDockUnverifiable: '当前配体格式暂无法解析总原子数，无法校验局部对接索引；请改用 V2000 SDF/MOL/MOL2/PDB 或留空执行全配体对接。',
       modeDescription: {
         denovo: '在口袋中从头生成候选分子。',
         fragment: '以已上传片段为起点扩展或连接分子。',
@@ -2662,6 +2663,7 @@ export default {
       dockLigandTitle: '待对接配体（3D 结构）',
       dockLigandHint: '上传单个 3D 配体（.sdf / .mol / .mol2 / .pdb）；可通过下方画板框选部分原子做局部重对接，留空则全配体对接。',
       dockLigandUnreadable: '未能识别该配体文件，请确认是有效的 3D SDF / MOL / MOL2 / PDB。',
+      dockLigandSingleOnly: 'LDDM 对接每次仅支持单个三维配体，请上传只包含 1 个分子的文件。',
       dockUseLigandCenter: '以当前配体质心作为口袋中心',
       dockLigandCenterApplied: '已根据待对接配体坐标填入中心',
       dockSummaryTitle: 'LDDM 口袋对接配置摘要',
