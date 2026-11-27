@@ -230,6 +230,17 @@ async def test_first_retry_sets_retry_of_to_lineage_origin(
     )
     assert response.status_code == 200
 
+    # 重试接口必须回完整任务对象（以前只回 message，data 是 None，前端拿不到
+    # id/status，详情页随即 404）。关联关系也要在：tool_slug 来自 Task.tool，
+    # inputs.params 来自 Task.inputs。
+    payload = response.json()["data"]
+    assert payload is not None
+    assert payload["id"] == task_id
+    assert payload["status"] == "queued"
+    assert payload["retry_count"] == 1
+    assert payload["tool_slug"] == "retry-of-tool"
+    assert payload["inputs"]["params"] == {"seed": 1}
+
     await db_session.refresh(task)
     assert task.retry_of == task_id
     assert task.retry_count == 1

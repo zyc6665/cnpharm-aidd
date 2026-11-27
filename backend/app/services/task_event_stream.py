@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.common.task_status import task_status_to_api
@@ -148,12 +148,28 @@ async def load_new_logs(
     *,
     task_id: str,
     after: datetime,
+    after_id: Optional[str] = None,
     limit: int = 20,
 ) -> list[TaskLog]:
+    """按 ``(timestamp, id)`` 复合游标读取增量日志。
+
+    为什么不能只用 ``timestamp > after``：日志表的时间戳精度有限，同一次
+    tick 里批量写入的日志很容易共享同一个 ``timestamp``（worker 一次 flush
+    写几十行）。单列游标下这批记录只有前 ``limit`` 条会被读到，游标推进到
+    这个时间戳之后，**同一时间戳剩下的日志就永远读不到了**（跨 tick 也补不
+    回来，因为条件已经是严格大于）。``id`` 参与游标后，同一时间戳内部按主键
+    有序推进，不会漏也不会重复。
+    """
+    condition = TaskLog.timestamp > after
+    if after_id is not None:
+        condition = or_(
+            TaskLog.timestamp > after,
+            and_(TaskLog.timestamp == after, TaskLog.id > after_id),
+        )
     result = await db.execute(
         select(TaskLog)
-        .where(TaskLog.task_id == task_id, TaskLog.timestamp > after)
-        .order_by(TaskLog.timestamp.asc())
+        .where(TaskLog.task_id == task_id, condition)
+        .order_by(TaskLog.timestamp.asc(), TaskLog.id.asc())
         .limit(limit)
     )
     return list(result.scalars().all())
@@ -190,6 +206,7 @@ async def stream_task_events(
     sequence = 0
     state = initial
     last_log_at = datetime.min
+    last_log_id: Optional[str] = None
     loop = asyncio.get_running_loop()
     started = loop.time()
 
@@ -231,9 +248,15 @@ async def stream_task_events(
                     idle_seconds += wait_seconds
 
                 if include_logs:
-                    for log in await load_new_logs(db, task_id=task_id, after=last_log_at):
+                    for log in await load_new_logs(
+                        db,
+                        task_id=task_id,
+                        after=last_log_at,
+                        after_id=last_log_id,
+                    ):
                         sequence += 1
                         last_log_at = log.timestamp or last_log_at
+                        last_log_id = log.id
                         yield format_sse(EVENT_LOG, serialize_log(log), event_id=str(sequence))
 
                 if state.terminal:

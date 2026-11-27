@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta
 from typing import AsyncIterator
 
 import pytest
@@ -24,12 +25,14 @@ from app.services.task_event_hub import TaskEventHub
 from app.services.task_event_stream import (
     EVENT_DONE,
     EVENT_HEARTBEAT,
+    EVENT_LOG,
     EVENT_PROGRESS,
     EVENT_SNAPSHOT,
     EVENT_STATUS,
     TaskEventState,
     describe_delta,
     format_sse,
+    load_new_logs,
     load_state,
     stream_task_events,
 )
@@ -525,3 +528,109 @@ async def test_sse_endpoint_rejects_invalid_query_token(
         response = await client.get(f"/api/v1/tasks/{task.id}/events?token=not-a-token")
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------- 日志游标
+
+
+async def _seed_logs(db: AsyncSession, task: Task, *, count: int, stamp: datetime) -> list[TaskLog]:
+    logs = [
+        TaskLog(task_id=task.id, timestamp=stamp, level="INFO", message=f"line-{index}")
+        for index in range(count)
+    ]
+    db.add_all(logs)
+    await db.commit()
+    return logs
+
+
+@pytest.mark.asyncio
+async def test_load_new_logs_keyset_reads_past_one_shared_timestamp(
+    db_session: AsyncSession,
+) -> None:
+    """同一个 timestamp 超过 limit 条时，后续页必须把剩下的读全。
+
+    回归背景：游标只用 ``timestamp > after`` 时，首页取 20 条后游标推进到该
+    时间戳，剩余同时间戳日志会被永久跳过（跨 tick 也补不回来）——一次 flush
+    写几十行日志的生产路径就会静默丢日志。
+    """
+    user = await _make_user(db_session, email="log-cursor@example.com")
+    task = await _make_task(db_session, user)
+    stamp = datetime(2026, 1, 2, 3, 4, 5)
+    await _seed_logs(db_session, task, count=25, stamp=stamp)
+
+    first_page = await load_new_logs(
+        db_session, task_id=task.id, after=stamp - timedelta(seconds=1), limit=20
+    )
+    assert len(first_page) == 20
+
+    second_page = await load_new_logs(
+        db_session,
+        task_id=task.id,
+        after=first_page[-1].timestamp,
+        after_id=first_page[-1].id,
+        limit=20,
+    )
+    assert len(second_page) == 5
+
+    messages = [log.message for log in first_page + second_page]
+    assert len(messages) == 25
+    assert len(set(messages)) == 25
+    assert set(messages) == {f"line-{index}" for index in range(25)}
+
+
+@pytest.mark.asyncio
+async def test_load_new_logs_without_id_keeps_legacy_behaviour(
+    db_session: AsyncSession,
+) -> None:
+    """``after_id=None`` 等价于旧的单列游标：首轮从 datetime.min 开始读。"""
+    user = await _make_user(db_session, email="log-legacy@example.com")
+    task = await _make_task(db_session, user)
+    stamp = datetime(2026, 1, 2, 3, 4, 5)
+    await _seed_logs(db_session, task, count=3, stamp=stamp)
+
+    rows = await load_new_logs(db_session, task_id=task.id, after=datetime.min)
+    # 同时间戳内按 id 定序（确定的全序，不是插入顺序），只要一条不漏即可。
+    assert len(rows) == 3
+    assert {log.message for log in rows} == {"line-0", "line-1", "line-2"}
+    assert [(log.timestamp, log.id) for log in rows] == sorted(
+        (log.timestamp, log.id) for log in rows
+    )
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_all_logs_sharing_one_timestamp(
+    session_factory: async_sessionmaker[AsyncSession],
+    db_session: AsyncSession,
+) -> None:
+    """端到端：一次 flush 写的 25 条同时间戳日志，SSE 必须一条不漏地下发。"""
+    user = await _make_user(db_session, email="log-stream@example.com")
+    task = await _make_task(db_session, user)
+    await _seed_logs(db_session, task, count=25, stamp=datetime(2026, 1, 2, 3, 4, 5))
+
+    generator = stream_task_events(
+        session_factory=session_factory,
+        task_id=task.id,
+        initial=await load_state(db_session, task.id),
+        poll_interval_seconds=0.01,
+        heartbeat_seconds=30.0,
+        max_duration_seconds=10.0,
+        hub=TaskEventHub(),
+    )
+
+    frames: list[str] = []
+
+    async def _run() -> None:
+        async for frame in generator:
+            if f"event: {EVENT_LOG}\n" in frame:
+                frames.append(frame)
+                if len(frames) >= 25:
+                    return
+
+    await asyncio.wait_for(_run(), timeout=5.0)
+
+    messages = []
+    for frame in frames:
+        data = "".join(line[6:] for line in frame.splitlines() if line.startswith("data: "))
+        messages.append(json.loads(data)["message"])
+    assert len(messages) == 25
+    assert set(messages) == {f"line-{index}" for index in range(25)}

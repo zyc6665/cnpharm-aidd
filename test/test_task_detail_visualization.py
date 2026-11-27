@@ -553,6 +553,14 @@ async def test_cancel_task_without_celery_task_id_succeeds(test_client):
 
     assert response.status_code == 200
 
+    # 取消接口回完整任务对象：前端列表要就地更新成 canceled，详情页要能继续
+    # 渲染。只回 message（data=None）会让详情页立刻 404。
+    payload = response.json()["data"]
+    assert payload is not None
+    assert payload["id"] == seeded["task_id"]
+    assert payload["status"] == "canceled"
+    assert payload["inputs"]["params"] is not None
+
     async with session_factory() as session:
         result = await session.execute(select(Task).where(Task.id == seeded["task_id"]))
         canceled_task = result.scalar_one()

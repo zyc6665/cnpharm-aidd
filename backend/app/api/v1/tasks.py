@@ -535,13 +535,14 @@ async def stream_task_events(
     )
 
 
-@router.get("/{task_id}", response_model=dict)
-async def get_task(
-    task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """获取任务详情"""
+async def _load_task_with_relations(db: AsyncSession, task_id: str) -> Task:
+    """按详情页口径重新加载任务及其关联。
+
+    `cancel` / `retry` 在事务提交（重试还要再分发一次）之后要返回**完整的任务
+    详情**：只回一句 message 会让前端的列表行和详情页拿到 `data: null`，
+    表现为「取消成功但详情 404 / 列表报错」。所以统一走这里重新查一遍，
+    关联关系和 `get_task` 保持一致。
+    """
     result = await db.execute(
         select(Task)
         .options(
@@ -553,12 +554,17 @@ async def get_task(
         .where(Task.id == task_id)
     )
     task = result.scalar_one_or_none()
-
-    if not task:
+    if task is None:
         raise NotFoundException("任务不存在")
+    return task
 
-    await _ensure_task_read_access(db, task=task, current_user=current_user)
 
+async def _serialize_task_detail(db: AsyncSession, task: Task, task_id: str) -> dict:
+    """把任务序列化成详情页契约（`get_task` / `cancel` / `retry` 共用）。
+
+    抽出来是为了让三个接口的返回结构不可能漂移：取消和重试之后前端拿到的
+    必须是和 `GET /tasks/{id}` 一模一样的对象。
+    """
     input_file_ids = task.inputs.file_ids if task.inputs and task.inputs.file_ids else []
     output_file_ids = []
     if task.outputs:
@@ -622,7 +628,19 @@ async def get_task(
         "output_files": await _load_files(db, output_file_ids),
     }
 
-    return success_response(data=task_data)
+    return task_data
+
+
+@router.get("/{task_id}", response_model=dict)
+async def get_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取任务详情"""
+    task = await _load_task_with_relations(db, task_id)
+    await _ensure_task_read_access(db, task=task, current_user=current_user)
+    return success_response(data=await _serialize_task_detail(db, task, task_id))
 
 
 @router.post("", response_model=dict)
@@ -727,7 +745,14 @@ async def cancel_task(
     )
     await db.commit()
 
-    return success_response(message="任务已取消")
+    # 取消成功后把**完整**任务对象回给前端：列表行要就地更新状态，详情页要
+    # 立即显示 CANCELED。只回 message 会让 data 为 None，前端拿不到 id/status。
+    refreshed = await _load_task_with_relations(db, task_id)
+
+    return success_response(
+        data=await _serialize_task_detail(db, refreshed, task_id),
+        message="任务已取消",
+    )
 
 
 @router.post("/{task_id}/retry", response_model=dict)
@@ -815,7 +840,14 @@ async def retry_task(
         failure_detail="任务重新分发失败",
     )
 
-    return success_response(message="任务已重新提交")
+    # `dispatch_tool_task` 会写回 `dispatch` / `status` / `resource_wait` 等字段，
+    # 必须在它之后再查一次，否则返回的是重试前的旧快照（前端会继续显示失败态）。
+    refreshed = await _load_task_with_relations(db, task_id)
+
+    return success_response(
+        data=await _serialize_task_detail(db, refreshed, task_id),
+        message="任务已重新提交",
+    )
 
 
 @router.get("/{task_id}/pockets", response_model=dict)
