@@ -359,6 +359,18 @@ def _load_head_models() -> dict[str, dict]:
         model["version"] = gromacs_image_mod.NEW_VERSION
         model["changelog"] = gromacs_image_mod.NEW_CHANGELOG
 
+    # GROMACS 1.1.0：蛋白-小分子复合物 MD（可选 ligand_sdf 输入）与 ProLIF/MDTraj 相互作用分析。
+    gromacs_v11_mod = _load_migration_module("20261127_01_gromacs_complex_interactions.py")
+    gromacs_md = models[gromacs_v11_mod.SLUG]
+    gromacs_md["config"] = _apply_manifest_overrides(
+        gromacs_md["config"],
+        inputs=gromacs_v11_mod.NEW_INPUTS,
+        image_digest=gromacs_v11_mod.NEW_DIGEST,
+        parameters_schema=gromacs_v11_mod.NEW_SCHEMA,
+    )
+    gromacs_md["version"] = gromacs_v11_mod.NEW_VERSION
+    gromacs_md["changelog"] = gromacs_v11_mod.NEW_CHANGELOG
+
     # Vina 1.1.0：真实筛选漏斗参数 + CSV/SDF 双配体输入 + 工具版本原地升级。
     # 必须在上面单工具工厂循环之后折叠，否则 models 里还没有 Vina。
     vina_v11_mod = _load_migration_module("20261106_01_vina_funnel_tool.py")

@@ -163,3 +163,14 @@ def test_standard_role_registry_validates_roles_per_artifact_type():
 
     with pytest.raises(StandardArtifactRegistryError, match="Unknown file role"):
         validate_standard_artifact_roles("binding_pocket@1", ["receptor_pdbqt"])
+
+
+def test_md_trajectory_declares_optional_interaction_roles():
+    spec = get_standard_artifact_spec("md_trajectory@1")
+    roles = {role.role: role for role in spec.file_roles}
+
+    assert roles["rmsf_csv"].required is False
+    assert roles["contacts_csv"].required is False
+    assert "csv" in roles["contacts_csv"].allowed_formats
+    assert roles["interactions_json"].required is False
+    assert "json" in roles["interactions_json"].allowed_formats
