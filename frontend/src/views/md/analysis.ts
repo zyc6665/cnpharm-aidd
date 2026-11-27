@@ -8,7 +8,7 @@
  */
 
 import type { ResultOutputArtifact } from '@/types/compounds'
-import type { FreeEnergyRow, MdAnalysisRow, RmsfRow } from '@/types/md'
+import type { FreeEnergyRow, MdAnalysisRow, MdContactRow, RmsfRow } from '@/types/md'
 
 /** 把任意输入转成有限数字；无法转换返回 null（不把 0 当缺失）。 */
 export function toFiniteNumber(value: unknown): number | null {
@@ -152,6 +152,29 @@ export function buildRmsfRows(raw: Array<Record<string, unknown>>): RmsfRow[] {
       residue_seq: residue,
       residue_name: name === '' ? null : name,
       rmsf_nm: toFiniteNumber(item.rmsf_nm ?? item.rmsf)
+    })
+  }
+  return rows
+}
+
+/** 从 papaparse 的原始行构造蛋白-配体相互作用汇总行（`contacts_csv`）。 */
+export function buildContactRows(raw: Array<Record<string, unknown>>): MdContactRow[] {
+  const rows: MdContactRow[] = []
+  for (const item of raw) {
+    const residueSeq = toFiniteNumber(item.residue_seq)
+    const interactionType = typeof item.interaction_type === 'string' ? item.interaction_type.trim() : ''
+    if (residueSeq === null || !interactionType) continue
+    rows.push({
+      residue_chain: typeof item.residue_chain === 'string' ? item.residue_chain.trim() : '',
+      residue_seq: residueSeq,
+      residue_icode: typeof item.residue_icode === 'string' ? item.residue_icode.trim() : '',
+      residue_name: typeof item.residue_name === 'string' ? item.residue_name.trim() : '',
+      interaction_type: interactionType,
+      occupancy: toFiniteNumber(item.occupancy),
+      contact_frames: toFiniteNumber(item.contact_frames),
+      total_frames: toFiniteNumber(item.total_frames),
+      min_distance_nm: toFiniteNumber(item.min_distance_nm),
+      mean_distance_nm: toFiniteNumber(item.mean_distance_nm)
     })
   }
   return rows

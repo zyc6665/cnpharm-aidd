@@ -18,14 +18,21 @@ export interface MdSubmitParams {
   box_distance: number
   water_model: string
   device: 'auto' | 'cpu' | 'gpu'
+  force_field?: MdForceField
+  ligand_resname?: string
+  charge_method?: 'bcc' | 'gas'
+  net_charge?: number
+  analysis_stride?: number
 }
 
-/** P-27 `md_trajectory@1` 产物的 file role（`rmsf_csv` 自 v1.1 起由真镜像产出）。 */
+/** P-27 `md_trajectory@1` 产物的 file role（`rmsf_csv` 自 v1.1、`contacts_csv` / `interactions_json` 自 v1.1.0 起产出）。 */
 export type MdTrajectoryRole =
   | 'topology_pdb'
   | 'trajectory_dcd'
   | 'analysis_csv'
   | 'rmsf_csv'
+  | 'contacts_csv'
+  | 'interactions_json'
   | 'metadata_json'
 
 export const MD_TRAJECTORY_ROLES: readonly MdTrajectoryRole[] = [
@@ -33,6 +40,8 @@ export const MD_TRAJECTORY_ROLES: readonly MdTrajectoryRole[] = [
   'trajectory_dcd',
   'analysis_csv',
   'rmsf_csv',
+  'contacts_csv',
+  'interactions_json',
   'metadata_json'
 ]
 
@@ -59,12 +68,59 @@ export interface RmsfRow {
   rmsf_nm: number | null
 }
 
-/** P-27 metadata_json 期望字段（全部可选，缺失时页面降级显示）。 */export interface MdTrajectoryMetadata {
+/** P-27 `contacts_csv` 相互作用汇总行契约（与 interactions_analysis.py 对齐）。 */
+export interface MdContactRow {
+  residue_chain: string
+  residue_seq: number
+  residue_icode: string
+  residue_name: string
+  interaction_type: string
+  occupancy: number | null
+  contact_frames: number | null
+  total_frames: number | null
+  min_distance_nm: number | null
+  mean_distance_nm: number | null
+}
+
+export interface MdInteractionTimelineRow {
+  frame: number
+  time_ps: number
+  total_contacts: number
+  hbond_count?: number
+  hydrophobic_count?: number
+  salt_bridge_count?: number
+  other_count?: number
+}
+
+export interface MdInteractionSummary {
+  schema_version?: string
+  mode?: string
+  engine?: string
+  ligand_resname?: string
+  stride?: number
+  total_frames?: number
+  summary?: {
+    total_interactions?: number
+    residue_count?: number
+    by_type?: Record<string, number>
+    max_occupancy?: number | null
+  }
+  timeline?: MdInteractionTimelineRow[]
+  warnings?: string[]
+}
+
+/** P-27 metadata_json 期望字段（全部可选，缺失时页面降级显示）。 */
+export interface MdTrajectoryMetadata {
   total_frames?: number
   duration_ns?: number
   force_field?: string
   temperature_k?: number
   timestep_ps?: number
+  complex_mode?: boolean
+  ligand_mode?: string
+  ligand_resname?: string | null
+  interaction_mode?: string
+  interaction_engine?: string
   [key: string]: unknown
 }
 
