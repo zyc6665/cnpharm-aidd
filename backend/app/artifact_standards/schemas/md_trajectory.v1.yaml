@@ -22,6 +22,16 @@ file_roles:
     allowed_formats: [csv]
     content_types: [text/csv]
     recommended_name: rmsf.csv
+  - role: contacts_csv
+    required: false
+    allowed_formats: [csv]
+    content_types: [text/csv]
+    recommended_name: contacts.csv
+  - role: interactions_json
+    required: false
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: interactions.json
   - role: metadata_json
     required: true
     allowed_formats: [json]
