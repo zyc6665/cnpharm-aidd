@@ -1,8 +1,31 @@
+FROM condaforge/mambaforge:24.1.2-0 AS env_builder
+
+# Build an offline-self-contained Python 3.11 + AmberTools + acpype + RDKit +
+# MDAnalysis + ProLIF + MDTraj environment for protein-ligand complex MD.
+# Keep prefix /opt/md-env identical in Stage 2 so conda script shebangs stay valid.
+RUN mamba create -y -p /opt/md-env \
+        -c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge \
+        --override-channels \
+        python=3.11 \
+        ambertools \
+        acpype \
+        rdkit \
+        "mdtraj==1.10.3" \
+        "mdanalysis>=2.8" \
+        "prolif>=2.1" \
+        networkx \
+        pandas \
+        scipy \
+        numpy \
+        "minio==7.2.20" \
+    && mamba clean -afy
+
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tini python3 python3-pip libgomp1 \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates tini libgomp1 libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
 # GROMACS 2024.1 CUDA build（由 4090 现有 /data/gromacs 运行时裁剪而来）。
@@ -14,23 +37,33 @@ COPY top /opt/gromacs/share/gromacs/top
 COPY cuda/libcufft.so.10 /usr/lib/x86_64-linux-gnu/libcufft.so.10
 COPY cuda/libcufftw.so.10 /usr/lib/x86_64-linux-gnu/libcufftw.so.10
 
+COPY --from=env_builder /opt/md-env /opt/md-env
+
+# Provide /opt/conda and /opt/amber/anaconda3 layout aliases for resolve_amber_env().
+RUN ln -sfn /opt/md-env /opt/conda \
+    && mkdir -p /opt/amber/anaconda3/envs \
+    && ln -sfn /opt/md-env /opt/amber/anaconda3/envs/AmberTools \
+    && ln -sfn /opt/md-env/bin /opt/amber/anaconda3/bin \
+    && ln -sfn /opt/md-env/lib /opt/amber/anaconda3/lib
+
 ENV GMXDATA=/opt/gromacs/share/gromacs \
-    LD_LIBRARY_PATH=/opt/gromacs/lib \
-    PATH=/opt/gromacs/bin:$PATH \
+    AMBERHOME=/opt/md-env \
+    LD_LIBRARY_PATH=/opt/gromacs/lib:/opt/md-env/lib \
+    PATH=/opt/md-env/bin:/opt/gromacs/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
-
-RUN pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple minio==7.2.10 mdtraj==1.10.3
 
 COPY platform_adaptor /opt/aidd/platform_adaptor
 COPY gromacs_platform.py /opt/aidd/gromacs/gromacs_platform.py
 COPY mmpbsa_platform.py /opt/aidd/gromacs/mmpbsa_platform.py
+COPY interactions_analysis.py /opt/aidd/gromacs/interactions_analysis.py
+COPY ligand_parameterizer.py /opt/aidd/gromacs/ligand_parameterizer.py
 RUN chmod +x /opt/aidd/platform_adaptor/*.sh /opt/aidd/gromacs/*.py
 
 ENV PLATFORM_ADAPTOR_ROOT=/opt/aidd/platform_adaptor \
     DRP_MODEL_ENTRY=/opt/aidd/gromacs/gromacs_platform.py \
-    MODEL_PYTHON=/usr/bin/python3 \
-    PLATFORM_PYTHON=/usr/bin/python3
+    MODEL_PYTHON=/opt/md-env/bin/python \
+    PLATFORM_PYTHON=/opt/md-env/bin/python
 
 # 兼容存量 DB entrypoint（/opt/sciminer/...）：新镜像提供同名符号链接
 RUN ln -sfn /opt/aidd /opt/sciminer
