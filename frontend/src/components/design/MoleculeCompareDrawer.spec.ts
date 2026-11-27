@@ -21,7 +21,6 @@ const molecules: CompareMolecule[] = [
     index: 1,
     smiles: 'CCO',
     sequence: '',
-    rating: 4,
     violations: 0,
     favorite: true,
     metrics: [
@@ -34,7 +33,6 @@ const molecules: CompareMolecule[] = [
     index: 2,
     smiles: 'CCN',
     sequence: '',
-    rating: null,
     violations: 1,
     metrics: [{ key: 'mw', label: 'mw', value: '45.08', tone: 'good' }],
   },
@@ -46,7 +44,7 @@ const stubs = {
     template: '<div v-if="open" class="a-drawer" :data-title="title"><slot /></div>',
   },
   'a-button': { template: '<button><slot /></button>' },
-  'a-rate': { props: ['value', 'disabled'], template: '<span class="a-rate" :data-value="value" />' },
+  'a-tag': { template: '<span><slot /></span>' },
   Smiles2DCell: { props: ['smiles'], template: '<div class="smiles-stub" :data-smiles="smiles" />' },
 }
 
@@ -94,10 +92,9 @@ describe('MoleculeCompareDrawer', () => {
       'CCO',
       'CCN',
     ])
-    expect(wrapper.findAll('[data-testid="molecule-compare-rating"] a-rate, [data-testid="molecule-compare-rating"] .a-rate')).toHaveLength(1)
     expect(
       wrapper.findAll('[data-testid="molecule-compare-violations"]').map(cell => cell.text())
-    ).toEqual(['0', '1'])
+    ).toEqual([t('design.results.ro5PassBadge'), t('design.results.ro5ViolationsBadge', { count: 1 })])
     expect(wrapper.findAll('[data-testid="molecule-compare-favorite"]')).toHaveLength(1)
   })
 

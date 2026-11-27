@@ -50,11 +50,13 @@
   import { useI18n } from 'vue-i18n'
   import { ArrowRightOutlined, FolderOpenOutlined } from '@ant-design/icons-vue'
   import { useActiveProject } from '@/composables/useActiveProject'
+  import { useUserStore } from '@/stores/user'
 
   const props = withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 
   const route = useRoute()
   const { t } = useI18n()
+  const userStore = useUserStore()
   const { loading, activeProjectId, projectOptions, ensureProjects, switchProject } = useActiveProject()
 
   const selectedId = ref<string>(activeProjectId.value)
@@ -80,13 +82,13 @@
   }
 
   onMounted(() => {
-    if (!props.collapsed) void ensureProjects()
+    if (!props.collapsed && userStore.isLoggedIn) void ensureProjects()
   })
 
   watch(
-    () => props.collapsed,
-    collapsedState => {
-      if (!collapsedState) void ensureProjects()
+    () => [props.collapsed, userStore.isLoggedIn] as const,
+    ([collapsedState, isLoggedIn]) => {
+      if (!collapsedState && isLoggedIn) void ensureProjects()
     }
   )
 

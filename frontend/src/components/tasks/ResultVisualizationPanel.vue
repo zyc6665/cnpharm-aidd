@@ -289,7 +289,7 @@ const panelDescription = computed(() => {
   margin: 0 0 6px;
   font-size: 17px;
   font-weight: 600;
-  color: #1f2937;
+  color: @text-primary;
 }
 
 .panel-header p {
@@ -343,7 +343,7 @@ const panelDescription = computed(() => {
 
 .visualization-result-item--active {
   border-color: #2563eb;
-  background: #eef6ff;
+  background: var(--theme-primary-soft, rgba(59, 130, 246, 0.14));
 }
 
 .visualization-result-item__index {

@@ -15,6 +15,7 @@ import type { ProjectResultDetail, ResultOutputArtifact } from '@/types/compound
 import type { Task } from '@/types/models'
 import type { PoseInteraction, PoseMetadata, PosesMetadata } from '@/types/screening'
 import type { VisualizationScene, VisualizationSceneEntry } from '@/domain/tasks'
+import { resolveMdProvenance } from './md-provenance'
 import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 import { findUniquePoseByTitle, getCachedDockingTask, parseResidueFocus, resolveDockingPose, setCachedDockingTask, sortDockingPoseCatalog } from './docking-poses'
 
@@ -91,6 +92,14 @@ function inferFormat(task: Task | null, url: string): { format: VisualizationSce
 }
 
 const taskDetailRef = ref<Task | null>(null)
+
+async function sendReceptorToMd(): Promise<void> {
+  const routeProject = typeof route.params.projectId === 'string' ? route.params.projectId : ''
+  const query = resolveMdProvenance(taskDetailRef.value, routeProject)
+  if (!query.project_id) { message.error(t('screening.result.mdNoProject')); return }
+  if (!query.structure_id) message.warning(t('screening.result.mdPartialContext'))
+  await router.push({ path: '/md', query })
+}
 
 const scene = computed<VisualizationScene | null>(() => {
   if (!poseUrl.value || sdfRecordIndex.value === null || sdfRecordIndex.value < 0) return null
@@ -443,10 +452,13 @@ const poseSections = computed<DescriptionSection[]>(() => {
   <main class="docking-detail" data-testid="docking-detail-page">
     <AppPageHeader :title="t('screening.detail.title')" :subtitle="t('screening.detail.subtitle')">
       <template #actions>
-        <a-space>
+        <a-space wrap>
           <router-link v-if="taskId" :to="`/tasks/${taskId}`">
             <a-button data-testid="docking-detail-task-detail">{{ t('tasks.taskWorkspace.detail') }}</a-button>
           </router-link>
+          <a-button v-if="taskDetailRef" data-testid="docking-detail-send-md" @click="sendReceptorToMd">
+            {{ t('screening.result.useReceptorMd') }}
+          </a-button>
           <router-link :to="`/tasks/${taskId}/screening`">
             <a-button data-testid="docking-detail-back">{{ t('screening.detail.back') }}</a-button>
           </router-link>
@@ -495,6 +507,7 @@ const poseSections = computed<DescriptionSection[]>(() => {
             <a-table
               :columns="interactionColumns"
               :data-source="group.items"
+              :scroll="{ x: 'max-content' }"
               :pagination="false"
               :row-key="(_record: PoseInteraction, index: number) => index"
               :custom-row="(record: PoseInteraction) => ({ style: 'cursor: pointer;', onClick: () => handleInteractionFocus(record) })"

@@ -74,7 +74,7 @@ withDefaults(
 .app-description-hint {
   margin-left: 6px;
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--theme-text-tertiary, #64748b);
 }
 
 .app-description-mono {

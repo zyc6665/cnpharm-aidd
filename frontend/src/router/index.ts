@@ -140,7 +140,7 @@ const routes: RouteRecordRaw[] = [
     path: '/tasks/:id/result',
     name: 'TaskResult',
     component: () => import('@/views/tasks/Result.vue'),
-    meta: { title: 'tasks.resultPage.title', requiresAuth: true }
+    meta: { title: 'tasks.resultPage.title', requiresAuth: true, viewKey: 'task-result' }
   },
   {
     path: '/tasks/:id/results',
@@ -177,7 +177,7 @@ const routes: RouteRecordRaw[] = [
     path: '/docking-results/:id',
     name: 'DockingResultDetail',
     component: () => import('@/views/screening/DockingResultDetail.vue'),
-    meta: { title: 'screening.detail.title', requiresAuth: true }
+    meta: { title: 'screening.detail.title', requiresAuth: true, viewKey: 'docking-result' }
   },
   // MD / 自由能页面
   {
@@ -257,13 +257,13 @@ const routes: RouteRecordRaw[] = [
     path: '/projects/:projectId/tasks/:id',
     name: 'ProjectTaskDetail',
     component: () => import('@/views/tasks/Detail.vue'),
-    meta: { title: 'tasks.detail', requiresAuth: true }
+    meta: { title: 'tasks.detail', requiresAuth: true, viewKey: 'task-detail' }
   },
   {
     path: '/projects/:projectId/tasks/:id/result',
     name: 'ProjectTaskResult',
     component: () => import('@/views/tasks/Result.vue'),
-    meta: { title: 'tasks.resultPage.title', requiresAuth: true }
+    meta: { title: 'tasks.resultPage.title', requiresAuth: true, viewKey: 'task-result' }
   },
   {
     path: '/projects/:projectId/decisions',
@@ -303,7 +303,7 @@ const routes: RouteRecordRaw[] = [
     path: '/tasks/:id',
     name: 'TaskDetail',
     component: () => import('@/views/tasks/Detail.vue'),
-    meta: { title: 'tasks.detail', requiresAuth: true }
+    meta: { title: 'tasks.detail', requiresAuth: true, viewKey: 'task-detail' }
   },
   // 用户中心
   {

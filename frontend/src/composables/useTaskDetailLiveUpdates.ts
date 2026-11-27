@@ -14,7 +14,7 @@ export interface TaskDetailLiveUpdatesOptions {
   taskId: Ref<string>
   task: Ref<Task | null>
   fetchTaskDetail: () => Promise<unknown>
-  updateTaskProgress: (taskId: string, progress: number, status?: TaskStatus) => void
+  updateTaskProgress: (taskId: string, progress: number, status?: TaskStatus, progressMessage?: string | null, errorMessage?: string | null) => void
   /** SSE 不可用（EventSource 缺失）时的兜底轮询间隔。 */
   intervalMs?: number
   timestamp?: () => string
@@ -43,7 +43,9 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   let logSequence = 0
   let started = false
 
-  async function fetchLogs(taskId = options.taskId.value) {
+  async function fetchLogs(taskIdArg?: string) {
+    const taskId = typeof taskIdArg === 'string' ? taskIdArg : options.taskId.value
+    if (!taskId) return
     logsLoading.value = true
     try {
       // 从**最新**一段开始取（order=desc），而不是从任务开头那一页。
@@ -146,6 +148,8 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
       payload.taskId,
       Math.round(payload.progress ?? 0),
       payload.status ? normalizeTaskStatus(payload.status) : undefined,
+      payload.progressMessage,
+      payload.errorMessage,
     )
   }
 
@@ -213,6 +217,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   }
 
   async function start() {
+    closeCurrentTaskChannel()
     started = true
     openCurrentTaskChannel()
   }
@@ -268,7 +273,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 function mergeTaskLogs(primaryLogs: TaskLog[], fallbackLogs: TaskLog[]): TaskLog[] {
   const byKey = new Map<string, TaskLog>()
   for (const log of [...fallbackLogs, ...primaryLogs]) {
-    byKey.set(taskLogKey(log), log)
+    byKey.set(logContentKey(log), log)
   }
   const merged = [...byKey.values()].sort(compareTaskLogOrder)
   // 只保留最近的一段：日志面板是「看现在在干什么」的地方，不是归档。
@@ -284,10 +289,6 @@ function compareTaskLogOrder(left: TaskLog, right: TaskLog): number {
   return String(left.id).localeCompare(String(right.id))
 }
 
-function taskLogKey(log: TaskLog): string {
-  return `${log.id}:${log.task_id}:${log.timestamp}:${log.message}`
-}
-
-function logContentKey(log: Pick<TaskLog, 'task_id' | 'timestamp' | 'message'>): string {
-  return `${log.task_id}:${log.timestamp}:${log.message}`
+function logContentKey(log: Pick<TaskLog, 'task_id' | 'timestamp' | 'message' | 'level'>): string {
+  return `${log.task_id}:${log.timestamp}:${log.level}:${log.message}`
 }

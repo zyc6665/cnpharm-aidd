@@ -172,13 +172,13 @@ describe('useTaskDetailLiveUpdates', () => {
     vi.mocked(getTaskLogs).mockClear()
     fetchTaskDetail.mockClear()
 
-    handlers.onProgress?.(eventPayload({ status: 'running', progress: 42 }) as never)
+    handlers.onProgress?.(eventPayload({ status: 'running', progress: 42, progressMessage: 'Docking' }) as never)
     handlers.onLog?.({ id: 'log-1', taskId: 'task-1', level: 'info', message: 'started', timestamp: '2026-08-20T00:00:01Z' } as never)
     handlers.onDone?.(eventPayload({ status: 'success', progress: 100, terminal: true }) as never)
     await vi.runAllTimersAsync()
 
-    expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 42, 'running')
-    expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 100, 'success')
+    expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 42, 'running', 'Docking', null)
+    expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 100, 'success', null, null)
     expect(updates.logs.value).toContainEqual({
       id: 1,
       task_id: 'task-1',

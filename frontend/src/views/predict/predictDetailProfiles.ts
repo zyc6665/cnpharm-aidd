@@ -29,7 +29,7 @@ export interface PredictDetailProfile {
   showRadar: boolean
   basic: PredictDetailSection | null
   sections: PredictDetailSection[]
-  radar: Array<[string, string[]]>
+  radar: Array<[string, string[], PredictDetailPolarity?]>
   /** true = 按 CSV 列自动生成分组，用于未知能力族。 */
   generic?: boolean
 }
@@ -60,14 +60,14 @@ const ADMET_SECTIONS: PredictDetailSection[] = [
       { label: 'P-gp Inhibitor', aliases: ['Pgp-inhibitor', 'PgpInhibitor'], polarity: 'risk' },
       { label: 'P-gp Substrate', aliases: ['Pgp-substrate', 'PgpSubstrate'] },
       { label: 'Caco-2 Permeability', aliases: ['Caco2', 'Caco-2'] },
-      { label: 'MDCK Permeability (cm/s)', aliases: ['MDCK Permeability', 'MDCK'] }
+      { label: 'MDCK Permeability', aliases: ['MDCK Permeability', 'MDCK'] }
     ]
   },
   {
     titleKey: 'predict.result.detailSectionDistribution',
     defs: [
-      { label: 'BBB', aliases: ['BBB'], polarity: 'good' },
-      { label: 'Fraction Unbound (Fu)', aliases: ['Fu'], polarity: 'good' },
+      { label: 'BBB', aliases: ['BBB'], polarity: 'neutral' },
+      { label: 'Fraction Unbound (Fu)', aliases: ['Fu'], polarity: 'neutral' },
       { label: 'PPB', aliases: ['PPB'], unit: '%' },
       { label: 'VDss', aliases: ['VD', 'VDss'], unit: 'L/kg' }
     ]
@@ -156,9 +156,9 @@ export const ADMET_DETAIL_PROFILE: PredictDetailProfile = {
     ['F30', ['F30']],
     ['BBB', ['BBB']],
     ['Fu', ['Fu']],
-    ['hERG', ['hERG']],
-    ['DILI', ['DILI']],
-    ['AMES', ['AMES']]
+    ['hERG', ['hERG'], 'risk'],
+    ['DILI', ['DILI'], 'risk'],
+    ['AMES', ['AMES'], 'risk']
   ]
 }
 

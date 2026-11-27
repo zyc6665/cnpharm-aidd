@@ -23,7 +23,6 @@ import {
 } from '@/domain/tools/parameterSchema'
 import {
   ADMET_TOOL_SLUG,
-  PREDICT_DEFAULT_TASK_GROUPS,
   PREDICT_GROUP_I18N,
   PREDICT_TASK_GROUPS
 } from '@/types/predict'
@@ -102,9 +101,13 @@ const {
 
 // 预测类型：ADMET 分子性质 / 结合亲和力（亲和力属于评估验证→性质预测环节）。
 // 宿主可以固定初始类型，避免"点了亲和力这一步却停在上传 SMILES 的表单上"。
-const predictType = ref<'admet' | 'affinity'>(
-  props.initialType === 'affinity' || route.query.type === 'affinity' ? 'affinity' : 'admet'
-)
+function resolvePredictType(type: unknown): 'admet' | 'affinity' {
+  return props.initialType ?? (type === 'affinity' ? 'affinity' : 'admet')
+}
+const predictType = ref(resolvePredictType(route.query.type))
+watch(() => route.query.type, type => {
+  predictType.value = resolvePredictType(type)
+})
 const {
   options: affinityOptions,
   selectedSlug: affinitySlug,
@@ -133,6 +136,11 @@ const affinityCandidateSetId = ref('')
 
 const admetSchema = computed(() => admetSelected.value?.parameterSchema ?? null)
 const affinitySchema = computed(() => affinitySelected.value?.parameterSchema ?? null)
+const usesProjectSequence = computed(() => affinitySlug.value === 'boltz2-affinity-prediction' && affinitySource.value === 'project')
+const projectSequence = computed(() => proteins.value.find(item => item.id === selectedProteinId.value)?.sequence?.trim() ?? '')
+const effectiveAffinityParams = computed(() => usesProjectSequence.value && projectSequence.value
+  ? { ...affinityParams.value, sequence: projectSequence.value }
+  : affinityParams.value)
 const affinityInputFields = computed(() => affinitySelected.value?.inputFields ?? [])
 
 const targetOptions = computed(() =>
@@ -168,7 +176,7 @@ const affinityCanSubmit = computed(() => {
     if (fields.includes('protein_pdb') && !selectedStructureFileId.value) return false
     if (!fields.includes('protein_pdb') && fields.length === 0) return false
     if (ligandFieldsNeeded.value && !affinityCandidateSetId.value) return false
-    return validateParameters(affinitySchema.value, affinityParams.value).length === 0
+    return validateParameters(affinitySchema.value, effectiveAffinityParams.value).length === 0
   }
   if (fields.includes('protein_pdb') && !proteinPdbFile.value) return false
   if (ligandFieldsNeeded.value) {
@@ -177,7 +185,7 @@ const affinityCanSubmit = computed(() => {
       (fields.includes('ligand_smiles') && Boolean(ligandSmilesFile.value))
     if (!hasLigand) return false
   }
-  return validateParameters(affinitySchema.value, affinityParams.value).length === 0
+  return validateParameters(affinitySchema.value, effectiveAffinityParams.value).length === 0
 })
 
 watch(
@@ -239,9 +247,6 @@ watch(selectedProteinId, id => {
   }
 })
 
-const selectedGroups = ref<PredictTaskGroup[]>(
-  props.initialGroups?.length ? [...props.initialGroups] : [...PREDICT_DEFAULT_TASK_GROUPS]
-)
 const submitting = ref(false)
 const formError = ref('')
 
@@ -379,7 +384,7 @@ const canSubmit = computed(() => {
   if (predictType.value === 'affinity') {
     return affinityCanSubmit.value
   }
-  if (submitting.value || !projectId.value || !selectedGroups.value.length) {
+  if (submitting.value || !projectId.value) {
     return false
   }
   if (validateParameters(admetSchema.value, admetParams.value).length > 0) {
@@ -471,7 +476,7 @@ async function handleAffinitySubmit(): Promise<void> {
     ligandSmilesFile: ligandSmilesFile.value,
     toolSlug: affinitySlug.value,
     schema: affinitySchema.value,
-    params: { ...affinityParams.value }
+    params: { ...effectiveAffinityParams.value }
   }
   const fields = new Set(snapshot.fields)
   if (!snapshot.projectId || validateParameters(snapshot.schema, snapshot.params).length > 0) return
@@ -609,7 +614,6 @@ async function handleSubmit(): Promise<void> {
     smilesFile: smilesFile.value,
     inlineRows: parseInlineSmiles(inlineSmiles.value).validRows,
     candidateSetId: candidateSetId.value,
-    groups: [...selectedGroups.value],
     toolSlug: selectedSlug.value,
     schema: admetSchema.value,
     params: { ...admetParams.value }
@@ -628,10 +632,6 @@ async function handleSubmit(): Promise<void> {
   }
   if (snapshot.source === 'candidate' && !snapshot.candidateSetId) {
     formError.value = t('predict.submit.needFile')
-    return
-  }
-  if (!snapshot.groups.length) {
-    formError.value = t('predict.submit.needGroups')
     return
   }
   if (validateParameters(snapshot.schema, snapshot.params).length > 0) return
@@ -683,7 +683,7 @@ onMounted(() => {
     >
       <a-select
         :value="projectId || undefined"
-        style="width: 320px"
+        style="width: 100%; max-width: 320px"
         show-search
         option-filter-prop="label"
         :options="projectOptions"
@@ -723,6 +723,7 @@ onMounted(() => {
         v-if="affinitySchema"
         v-model="affinityParams"
         :schema="affinitySchema"
+        :overrides="usesProjectSequence && projectSequence ? { sequence: { hidden: true } } : undefined"
         :disabled="submitting"
       />
     </a-card>
@@ -765,7 +766,7 @@ onMounted(() => {
       <div v-else-if="source === 'candidate'" class="predict-submit__block">
         <a-select
           v-model:value="candidateSetId"
-          style="width: 320px"
+          style="width: 100%; max-width: 320px"
           :options="candidateSetOptions"
           :placeholder="t('predict.submit.candidateSetPlaceholder')"
           :not-found-content="t('predict.submit.noCandidateSets')"
@@ -836,7 +837,8 @@ onMounted(() => {
     <a-card v-if="predictType === 'admet'" class="predict-submit__card" :title="t('predict.submit.groups')">
       <p class="predict-submit__hint">{{ t('predict.submit.groupsHint') }}</p>
       <a-checkbox-group
-        v-model:value="selectedGroups"
+        :value="groupOptions.map(option => option.value)"
+        disabled
         :options="groupOptions"
         data-testid="predict-submit-groups"
       />
@@ -878,12 +880,12 @@ onMounted(() => {
 
       <template v-else>
         <p v-if="!projectId" class="predict-submit__hint">{{ t('predict.submit.needProject') }}</p>
-        <template v-if="affinityInputFields.includes('protein_pdb')">
+        <template v-if="affinityInputFields.includes('protein_pdb') || usesProjectSequence">
           <div class="predict-submit__block">
             <p class="predict-submit__hint">{{ t('predict.submit.target') }}</p>
             <a-select
               v-model:value="selectedTargetId"
-              style="width: 320px"
+              style="width: 100%; max-width: 320px"
               :options="targetOptions"
               :placeholder="t('predict.submit.targetPlaceholder')"
               :not-found-content="t('predict.submit.noTargets')"
@@ -894,18 +896,21 @@ onMounted(() => {
             <p class="predict-submit__hint">{{ t('predict.submit.protein') }}</p>
             <a-select
               v-model:value="selectedProteinId"
-              style="width: 320px"
+              style="width: 100%; max-width: 320px"
               :options="proteinOptions"
               :placeholder="t('predict.submit.proteinPlaceholder')"
               :not-found-content="t('predict.submit.noProteins')"
               data-testid="predict-affinity-protein"
             />
           </div>
-          <div v-if="selectedProteinId" class="predict-submit__block">
+          <p v-if="usesProjectSequence && selectedProteinId" class="predict-submit__hint">
+            {{ projectSequence ? t('predict.submit.projectProteinSequence', { count: projectSequence.length }) : t('predict.submit.projectProteinSequenceMissing') }}
+          </p>
+          <div v-if="selectedProteinId && affinityInputFields.includes('protein_pdb')" class="predict-submit__block">
             <p class="predict-submit__hint">{{ t('predict.submit.structure') }}</p>
             <a-select
               v-model:value="selectedStructureId"
-              style="width: 420px"
+              style="width: 100%; max-width: 420px"
               :options="structureOptions"
               :placeholder="t('predict.submit.structurePlaceholder')"
               :not-found-content="t('predict.submit.noStructures')"
@@ -920,7 +925,7 @@ onMounted(() => {
           <p class="predict-submit__hint">{{ t('predict.submit.candidateSet') }}</p>
           <a-select
             v-model:value="affinityCandidateSetId"
-            style="width: 320px"
+            style="width: 100%; max-width: 320px"
             :options="candidateSetOptions"
             :placeholder="t('predict.submit.candidateSetPlaceholder')"
             :not-found-content="t('predict.submit.noCandidateSets')"

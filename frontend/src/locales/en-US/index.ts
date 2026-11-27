@@ -1964,8 +1964,28 @@ export default {
           duration: 'About 2–10 min',
           scenario: 'Structure and affinity prediction to validate binding feasibility first'
         },
+        'autodock-vina': {
+          duration: 'Minutes for small batches',
+          scenario: 'Dock and screen small molecules in a binding pocket'
+        },
+        'molp-pc': {
+          duration: 'Seconds to minutes per batch',
+          scenario: 'Predict ADMET properties of small molecules'
+        },
+        msign: {
+          duration: 'Seconds to minutes per batch',
+          scenario: 'Estimate protein–ligand affinity'
+        },
+        gromacs: {
+          duration: 'Hours to days',
+          scenario: 'Simulate molecular dynamics and analyze trajectories'
+        },
+        therapainter: {
+          duration: 'Minutes per batch',
+          scenario: 'Predict peptide activity and toxicity'
+        },
         generic: {
-          duration: 'Depends on pocket size and sample count',
+          duration: 'Depends on input size, model settings, and queue',
           scenario: 'Runs the capability declared by the tool contract'
         }
       }
@@ -2034,6 +2054,7 @@ export default {
       pocketLabel: 'Pocket',
       pocketCenter: 'Pocket center',
       pocketBox: 'Pocket box',
+      selectProteinStructure: 'Select or upload a protein structure first.',
       pocketMissingFile: 'This structure has no usable structure file. Re-run structure prediction and try again.',
       pocketMissingCenter: 'Define a binding pocket first (project pocket, reference ligand, or center coordinates).',
       sourceProject: 'Pick project structure',
@@ -2101,6 +2122,7 @@ export default {
       fragmentRequired: 'Select a fragment or ligand structure file to continue.',
       fragmentAtomCount: 'First structure: {count} atoms (indices 0–{lastIndex})',
       fragmentFileReady: 'Atom count unavailable.',
+      fragmentV3000Unsupported: 'The fragment editor cannot read this V3000 structure. Export it as V2000 SDF or MOL.',
       fragmentUnreadable: 'Could not read a supported structure. Select a valid SDF, MOL, MOL2, or PDB file.',
       moleculeSize: 'Target molecule size',
       moleculeSizeHint: 'LDDM supports adaptive pocket-histogram sizing or explicit heavy-atom bounds (ignored in Dock mode).',
@@ -2227,7 +2249,7 @@ export default {
       deduplicate: 'Deduplicate',
       projectRequired: 'Select a project first',
       sequenceTooShort: 'Peptide sequence must contain at least 4 residues',
-      sequenceTooLong: 'Peptide sequence cannot exceed 20,000 characters',
+      sequenceTooLong: 'A peptide sequence cannot exceed 200 amino acids',
       invalidBatchSize: 'Batch size must be between 1 and 256',
       numPeptides: 'Number of peptides',
       lengthMin: 'Length lower bound',
@@ -2458,7 +2480,9 @@ export default {
       needProject:
         'Missing project_id, cannot load candidate sets; you can upload a SMILES CSV instead.',
       groups: 'Metric groups',
-      groupsHint: 'All selected by default; uncheck as needed.',
+      groupsHint: 'The model computes all ADMET properties together. The results page groups them for viewing.',
+      projectProteinSequence: 'Using the project target protein sequence ({count} aa).',
+      projectProteinSequenceMissing: 'This protein has no sequence. Enter one in the model parameters.',
       type: 'Prediction type',
       typeAdmet: 'ADMET properties',
       typeAffinity: 'Binding affinity',
@@ -2522,7 +2546,7 @@ export default {
       filterColumn: 'Filter column',
       filterMin: 'Min value',
       filterMax: 'Max value',
-      affinityFilterLabel: 'Predicted affinity ≥',
+      affinityFilterLabel: 'Predicted affinity {operator}',
       filterCount: 'Showing {shown} / {total} molecules',
       filterRangeInvalid: 'Min value cannot exceed max value',
       resetFilter: 'Reset filters',
@@ -2574,8 +2598,10 @@ export default {
       affinityQualityMiddle: 'Middle of pack',
       affinityQualityLow: 'Below most candidates',
       affinitySummarySingle: 'This result has only one candidate, so there is nothing to compare yet.',
-      affinitySummaryBest: 'Ranked #1 of {total} candidates; predicted affinity is {delta} above the candidate median.',
-      affinitySummary: 'Ranked #{rank} of {total} candidates, {gap} below the best candidate and {direction} the candidate median by {delta}.',
+      affinitySummaryBest: 'Ranked #1 of {total} candidates; predicted affinity is {delta} {direction} the candidate median.',
+      affinitySummaryBestEqual: 'Ranked #1 of {total} candidates, equal to the candidate median.',
+      affinitySummaryMedianTied: 'Ranked #{rank} of {total} candidates, {gap} {bestDirection} the best candidate and equal to the candidate median.',
+      affinitySummary: 'Ranked #{rank} of {total} candidates, {gap} {bestDirection} the best candidate and {direction} the candidate median by {delta}.',
       affinityAbove: 'above',
       affinityBelow: 'below',
       affinityComparisonTitle: 'Candidate comparison',
@@ -2587,6 +2613,7 @@ export default {
       affinityTechnical: 'Structure and preprocessing details',
       detailTable: 'Table view',
       detailRadar: 'Radar view',
+      radarSafety: '{metric} safety (1 − risk)',
       detailDownloadCsv: 'Download CSV',
       detailDownloadPdf: 'Download PDF',
       detailNoData: 'No data available for this molecule.',
@@ -2703,6 +2730,10 @@ export default {
       lddmDockModelDesc: '3D diffusion-based ligand pose generation inside a pocket, supporting full-ligand docking or partial atom re-sampling.',
       dockLigandTitle: 'Ligand to dock (3D structure)',
       dockLigandHint: 'Upload a single 3D ligand (.sdf / .mol / .mol2 / .pdb). Optionally pick specific atoms in the sketcher for partial docking, or leave empty for full docking.',
+      lddmCsvUnsupported: 'LDDM requires 3D ligand structures, not CSV. Upload SDF, MOL, MOL2, or PDB.',
+      vinaPocketCenterHint: 'Select a stored pocket, enter its center in Å, or upload a pocket PDB. Otherwise the tool uses the ligand center.',
+      vinaPocketCenterInvalid: 'Enter all three coordinates within −999.999 to 9999.999 Å.',
+      screeningTaskName: 'Virtual screening',
       dockLigandUnreadable: 'Could not read this ligand file. Upload a valid 3D SDF, MOL, MOL2, or PDB.',
       dockLigandSingleOnly: 'LDDM docking supports one 3D ligand per run. Upload a file containing a single molecule.',
       dockUseLigandCenter: 'Use ligand centroid as center',
@@ -3241,6 +3272,7 @@ export default {
     visualizationFailed: 'Failed to load 3D results',
     visualizationResetView: 'Reset view',
     visualizationMode: 'Viewer mode',
+    visualizationModes: { molecule: 'Molecule', protein: 'Protein', pocket: 'Pocket', docking: 'Docking' },
     visualizationProteinRepresentation: 'Protein representation',
     visualizationRepresentation: 'Representation',
     visualizationCartoon: 'Cartoon',
@@ -3892,6 +3924,15 @@ export default {
   },
 
   modelParams: {
+    validation: {
+      'required': 'Enter {field}.',
+      'invalid-number': 'Enter a valid number for {field}.',
+      'below-minimum': '{field} must be at least {limit}.',
+      'above-maximum': '{field} must be at most {limit}.',
+      'too-short': '{field} must contain at least {limit} characters.',
+      'too-long': '{field} must contain at most {limit} characters.',
+      'invalid-option': 'Select a valid option for {field}.',
+    },
     labels: {
       sequence: 'Sequence',
       name: 'Name',

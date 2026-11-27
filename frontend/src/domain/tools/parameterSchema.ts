@@ -108,3 +108,23 @@ export function validateParameters(
   }
   return errors
 }
+
+/** Convert one validation error into a localized field-specific message. */
+export function describeParameterError(
+  schema: ToolSchema | null | undefined,
+  error: string,
+  translate: (key: string, values: { field: string; limit: number | string }) => string,
+  label?: string
+): string {
+  const separator = error.lastIndexOf(':')
+  const key = error.slice(0, separator)
+  const reason = error.slice(separator + 1)
+  const property = schema?.properties[key]
+  const limits: Record<string, number | undefined> = {
+    'below-minimum': property?.minimum,
+    'above-maximum': property?.maximum,
+    'too-short': property?.minLength,
+    'too-long': property?.maxLength
+  }
+  return translate(`modelParams.validation.${reason}`, { field: label || property?.title || key, limit: limits[reason] ?? '' })
+}

@@ -249,7 +249,7 @@
               </div>
 
               <!-- 错误信息 -->
-              <div v-if="taskStatus === 'failure' && failureDiagnostics.hasDetails" class="info-card error">
+              <div v-if="(taskStatus === 'failure' || taskStatus === 'timeout') && failureDiagnostics.hasDetails" class="info-card error">
                 <h3 class="card-title">
                   <CloseCircleOutlined />
                   {{ t('tasks.errorMessage') }}
@@ -359,7 +359,7 @@
                     <template #extra>
                       <a-space :size="4">
                         <span class="log-count">{{ logCountText }}</span>
-                        <a-button type="link" size="small" :loading="logsLoading" @click.stop="fetchLogs">
+                        <a-button type="link" size="small" :loading="logsLoading" @click.stop="() => fetchLogs()">
                           <ReloadOutlined />
                         </a-button>
                       </a-space>
@@ -507,6 +507,7 @@ const effectiveProjectId = computed(() => {
   const fromParam = typeof route.params?.projectId === 'string' ? route.params.projectId : ''
   return fromParam || task.value?.project_id || ''
 })
+const taskListPath = computed(() => effectiveProjectId.value ? `/projects/${encodeURIComponent(effectiveProjectId.value)}/tasks` : '/tasks')
 
 // 只有存在「独立结果页」的任务才显示运行结果入口；结构/口袋预测返回 null。
 const taskResultPath = computed(() =>
@@ -684,11 +685,11 @@ const logCountText = computed(() => {
 })
 
 // 日志默认收起。任务处于运行中或失败时自动展开，省一次点击。
-const logCollapseKeys = ref<string[]>(['logs'])
+const logCollapseKeys = ref<string[]>([])
 watch(taskStatus, (status) => {
   const shouldOpen = ['running', 'failure', 'timeout', 'queued'].includes(String(status))
   logCollapseKeys.value = shouldOpen ? ['logs'] : []
-})
+}, { immediate: true })
 
 const handleCancel = () => {
   Modal.confirm({
@@ -709,7 +710,9 @@ const handleCancel = () => {
 
 const handleRetry = async () => {
   try {
-    await tasksStore.retryTask(taskId.value)
+    const id = taskId.value
+    await tasksStore.retryTask(id)
+    if (taskId.value === id) await startLiveUpdates()
     message.success(t('tasks.retrySuccess'))
   } catch {
     // 请求层已经展示具体错误，避免失败时误报成功。
@@ -745,9 +748,10 @@ const handleDelete = () => {
     cancelText: t('common.cancel'),
     onOk: async () => {
       try {
+        const returnPath = taskListPath.value
         await tasksStore.deleteTask(taskId.value)
         message.success(t('tasks.deleteSuccess'))
-        router.push('/tasks')
+        router.push(returnPath)
       } catch {
         // 请求层已经展示具体错误，删除失败时保留当前任务详情。
       }
@@ -762,7 +766,7 @@ const goToTool = () => {
 }
 
 const goBack = () => {
-  router.push('/tasks')
+  router.push(taskListPath.value)
 }
 
 const goTaskResult = () => {

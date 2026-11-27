@@ -12,6 +12,7 @@ import MoleculePredictDetail from './MoleculePredictDetail.vue'
 import MetricDistributionChart from './MetricDistributionChart.vue'
 import { loadMoleculeTable } from './molecule-table'
 import { filterPredictRows } from './predict-filter'
+import { affinityIsLowerBetter, findAffinityColumn, readAffinityField } from './affinityComparison'
 import { isNumericColumn } from './histogram'
 import { downloadCsv } from './csv-export'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
@@ -33,7 +34,7 @@ const rows = ref<CsvPreviewRow[]>([])
 const modelFamily = ref<string | null>(null)
 const toolName = ref('')
 const searchText = ref('')
-const filterColumn = ref('')
+const filterColumn = ref<string | undefined>(undefined)
 const filterMin = ref<number | null>(null)
 const filterMax = ref<number | null>(null)
 const affinityMin = ref<number | null>(null)
@@ -60,8 +61,16 @@ const numericColumns = computed(() => columns.value.filter(column => isNumericCo
 const hasSmilesColumn = computed(() => columns.value.some(column => column.key.toLowerCase() === 'smiles' || column.originalKey?.toLowerCase() === 'smiles'))
 const FILTER_EXCLUDED_PATTERN = /(^|\.)(complex_id|molecule_id|smiles|duration_sec|scale)$/i
 const filterColumnOptions = computed(() => numericColumns.value.filter(column => !FILTER_EXCLUDED_PATTERN.test(column.key)).map(column => ({ label: columnTitle(column.key, column.title), value: column.key })))
-const affinityColumnKey = computed(() => columns.value.find(column => /predicted_affinity/i.test(`${column.key} ${column.originalKey ?? ''}`))?.key ?? '')
-const isAffinityResult = computed(() => modelFamily.value === 'affinity' || Boolean(affinityColumnKey.value))
+const affinityColumn = computed(() => {
+  const field = findAffinityColumn(columns.value.map(column => column.originalKey || column.key))
+  return field ? columns.value.find(column => (column.originalKey || column.key) === field) : undefined
+})
+const affinityColumnKey = computed(() => affinityColumn.value?.key ?? '')
+const affinityLowerIsBetter = computed(() => affinityIsLowerBetter(
+  affinityColumn.value?.originalKey || affinityColumnKey.value,
+  rows.value.map(row => readAffinityField(row, 'scale')).find(Boolean),
+))
+const isAffinityResult = computed(() => Boolean(affinityColumnKey.value))
 const filterRangeInvalid = computed(() => filterMin.value !== null && filterMax.value !== null && filterMin.value > filterMax.value)
 function hasNumericValue(key: string): boolean {
   return rows.value.some(row => { const raw = String(row[key] ?? '').trim(); return raw !== '' && Number.isFinite(Number(raw)) })
@@ -84,7 +93,7 @@ function handleDistributionCascadeChange(value: Array<string | number> | undefin
 const distributionColumn = computed(() => distributionColumns.value.find(column => column.key === activeDistributionKey.value) ?? null)
 const filteredRows = computed(() => filterPredictRows(rows.value, {
   searchText: searchText.value, hasSmilesColumn: hasSmilesColumn.value, isAffinityResult: isAffinityResult.value,
-  affinityColumnKey: affinityColumnKey.value, affinityMin: affinityMin.value, column: filterColumn.value,
+  affinityColumnKey: affinityColumnKey.value, affinityMin: affinityMin.value, affinityLowerIsBetter: affinityLowerIsBetter.value, column: filterColumn.value,
   min: filterMin.value, max: filterMax.value
 }))
 const distributionPoints = computed(() => {
@@ -111,6 +120,11 @@ const matrixColumns = computed(() => {
     return {
       title: columnTitle(column.key, column.title), dataIndex: column.key, key: column.key,
       width: column.key === 'smiles' ? 240 : 130, fixed: index === 0 ? 'left' : undefined,
+      customRender: numeric ? ({ text }: { text: string | undefined }) => {
+        const value = text?.trim() ? Number(text) : Number.NaN
+        return Number.isFinite(value) ? formatStat(value) : text
+      } : undefined,
+      defaultSortOrder: column.key === affinityColumnKey.value ? (affinityLowerIsBetter.value ? 'ascend' : 'descend') as 'ascend' | 'descend' : undefined,
       align: numeric ? 'right' : 'left',
       sorter: numeric ? (left: CsvPreviewRow, right: CsvPreviewRow): number => {
         const parse = (raw: string | undefined) => raw?.trim() ? Number(raw) : Number.NaN
@@ -130,7 +144,7 @@ const handoffScopeRows = computed(() => (selectedKeys.value.length
 const handoffRows = computed(() => handoffScopeRows.value.slice(0, MAX_SAVE_CANDIDATES))
 const saveSkippedCount = computed(() => Math.max(0, filteredRows.value.length - eligibleFilteredRows.value.length))
 const rowSelection = computed(() => ({ selectedRowKeys: selectedKeys.value, preserveSelectedRowKeys: true, onChange: (keys: Array<string | number>) => { selectedKeys.value = keys.map(String) } }))
-function resetFilter(): void { searchText.value = ''; filterColumn.value = ''; filterMin.value = null; filterMax.value = null; affinityMin.value = null }
+function resetFilter(): void { searchText.value = ''; filterColumn.value = undefined; filterMin.value = null; filterMax.value = null; affinityMin.value = null }
 function handleFilterColumnChange(value: string | undefined): void { if (!value) { filterMin.value = null; filterMax.value = null } }
 function handleExport(): void { downloadCsv(`predictions-${taskId.value}.csv`, exportColumns.value, filteredRows.value) }
 async function projectIdForTask(): Promise<string> {
@@ -228,7 +242,7 @@ watch(taskId, () => { void load() }, { immediate: true })
     <template v-else-if="!errorMessage">
       <a-card class="predict-result__filters" :title="t('predict.result.filterTitle')"><a-space wrap>
         <a-input v-if="hasSmilesColumn" v-model:value="searchText" style="width: 220px" allow-clear :placeholder="t('predict.result.search')" />
-        <template v-if="isAffinityResult"><a-input-number v-model:value="affinityMin" style="width: 260px" :addon-before="t('predict.result.affinityFilterLabel')" :placeholder="t('predict.result.filterMin')" /></template>
+        <template v-if="isAffinityResult"><a-input-number v-model:value="affinityMin" style="width: 260px" :addon-before="t('predict.result.affinityFilterLabel', { operator: affinityLowerIsBetter ? '≤' : '≥' })" :placeholder="t(affinityLowerIsBetter ? 'predict.result.filterMax' : 'predict.result.filterMin')" /></template>
         <template v-else><a-select v-model:value="filterColumn" style="width: 200px" allow-clear :placeholder="t('predict.result.filterColumn')" :options="filterColumnOptions" @change="handleFilterColumnChange" /><a-input-number v-model:value="filterMin" style="width: 150px" :disabled="!filterColumn" :placeholder="t('predict.result.filterMin')" /><a-input-number v-model:value="filterMax" style="width: 150px" :disabled="!filterColumn" :placeholder="t('predict.result.filterMax')" /></template>
         <a-button data-testid="predict-result-reset" @click="resetFilter">{{ t('predict.result.resetFilter') }}</a-button><span class="predict-result__count">{{ t('predict.result.filterCount', { shown: filteredRows.length, total: rows.length }) }}</span><span v-if="filterRangeInvalid" class="predict-result__filter-warning">{{ t('predict.result.filterRangeInvalid') }}</span>
       </a-space></a-card>
@@ -248,7 +262,8 @@ watch(taskId, () => { void load() }, { immediate: true })
         <p>{{ t('predict.result.saveScope', { count: handoffRows.length, total: handoffScopeRows.length, skipped: saveSkippedCount }) }}</p>
       </a-form>
     </a-modal>
-  </main><ResultDisclaimer />
+    <ResultDisclaimer />
+  </main>
 </template>
 
 <style scoped lang="less">

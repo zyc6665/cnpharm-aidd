@@ -45,7 +45,8 @@ test('亲和力预测在设计流程里就地预测，而不是只给一个跳�
   assert.match(guided, /在性质预测页打开/)
   // 宿主固定初始类型，避免点了亲和力那一步却停在上传 SMILES 的 ADMET 表单上
   assert.match(predict, /initialType\?: 'admet' \| 'affinity'/)
-  assert.match(predict, /props\.initialType === 'affinity' \|\| route\.query\.type === 'affinity'/)
+  assert.match(predict, /props\.initialType \?\? \(type === 'affinity' \? 'affinity' : 'admet'\)/)
+  assert.match(predict, /watch\(\(\) => route\.query\.type/)
   // 内嵌时不渲染页面头（外层已有步骤标题）
   assert.match(predict, /<AppPageHeader\s+v-if="!projectIdOverride"/)
 })

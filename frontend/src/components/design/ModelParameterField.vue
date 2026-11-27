@@ -3,6 +3,8 @@
     :label="parameterLabel()"
     :required="required"
     :extra="parameterHint()"
+    :validate-status="fieldError ? 'error' : undefined"
+    :help="fieldError || undefined"
   >
     <a-switch
       v-if="fieldType() === 'boolean'"
@@ -12,6 +14,7 @@
       @update:checked="(next: boolean) => emit('update', next)"
     />
     <a-select
+      style="width: 100%"
       v-else-if="property.enum?.length"
       :value="value as string | undefined"
       :options="enumOptions()"
@@ -55,7 +58,8 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { ParameterValue } from '@/domain/tools/parameterSchema'
+import { computed } from 'vue'
+import { describeParameterError, validateParameters, type ParameterValue } from '@/domain/tools/parameterSchema'
 import type { SchemaProperty } from '@/types/models'
 
 const props = withDefaults(
@@ -72,6 +76,11 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (event: 'update', value: ParameterValue): void }>()
 const { t, te } = useI18n()
+const fieldError = computed(() => {
+  const schema = { type: 'object' as const, properties: { [props.fieldKey]: props.property }, required: props.required ? [props.fieldKey] : [] }
+  const [error] = validateParameters(schema, { [props.fieldKey]: props.value })
+  return error ? describeParameterError(schema, error, t, parameterLabel()) : ''
+})
 
 const KNOWN_OPTION_KEYS: Record<string, Record<string, string>> = {
   device: { auto: 'deviceAuto', cpu: 'deviceCpu', gpu: 'deviceGpu' },

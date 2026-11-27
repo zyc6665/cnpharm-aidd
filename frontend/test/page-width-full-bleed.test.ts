@@ -48,9 +48,10 @@ describe('业务页面铺满内容区', () => {
   it('多字段表单用自适应网格，宽屏不挤在左侧', () => {
     const molecule = readFileSync(join(ROOT, 'src/views/design/MoleculeGeneration.vue'), 'utf8')
     const peptide = readFileSync(join(ROOT, 'src/views/design/PeptideDesign.vue'), 'utf8')
-    for (const source of [molecule, peptide]) {
-      assert.match(source, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(@field-grid-min,\s*1fr\)\)/)
-    }
+    const parameters = readFileSync(join(ROOT, 'src/components/design/ModelParameterForm.vue'), 'utf8')
+    assert.match(molecule, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(@field-grid-min,\s*1fr\)\)/)
+    assert.match(peptide, /<ModelParameterForm/)
+    assert.match(parameters, /:xs="24"\s+:sm="fieldSpan\(key, property\)"/)
     // 上传区不能再被 560px 的正文宽度限制住
     assert.doesNotMatch(molecule, /\.source-body\s*\{[^}]*max-width:\s*560px/)
   })

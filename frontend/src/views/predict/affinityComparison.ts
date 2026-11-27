@@ -4,7 +4,8 @@ export const AFFINITY_FIELD_ALIASES = {
   moleculeId: ['molecule_id'],
   complexId: ['complex_id'],
   duration: ['duration_sec'],
-  predictedAffinity: ['prediction.predicted_affinity', 'predicted_affinity'],
+  predictedAffinity: ['prediction.predicted_affinity', 'predicted_affinity', 'affinity_pred_value', 'log(IC50)', 'binding_energy', 'energy', 'pKd', 'pKi', 'affinity_probability_binary', 'probability'],
+  probability: ['affinity_probability_binary'],
   ligandToPocket: ['prediction.predicted_ligand_to_pocket', 'predicted_ligand_to_pocket'],
   pocketToLigand: ['prediction.predicted_pocket_to_ligand', 'predicted_pocket_to_ligand'],
   scale: ['prediction.scale', 'scale'],
@@ -42,6 +43,7 @@ export interface AffinityComparison {
   /** Percent of other candidates this molecule beats (0-100). */
   percentile: number
   scale: string
+  lowerIsBetter: boolean
 }
 
 function normalize(value: string): string {
@@ -90,6 +92,18 @@ function median(values: number[]): number | null {
   return lower === undefined || upper === undefined ? null : (lower + upper) / 2
 }
 
+export function findAffinityColumn(keys: string[]): string | undefined {
+  return AFFINITY_FIELD_ALIASES.predictedAffinity
+    .map(alias => keys.find(key => normalize(key) === normalize(alias)))
+    .find(key => key !== undefined)
+}
+
+export function affinityIsLowerBetter(column: string, scale = ''): boolean {
+  if (/probability|(?:^|[^a-z])p(?:kd|ki)(?:$|[^a-z])/i.test(column)) return false
+  if (/\bp(?:kd|ki)\b|probability/i.test(scale)) return false
+  return /affinity[._ ]pred[._ ]value|log(?:10)?\s*\(?\s*(?:ic50|ki|kd)|kcal\s*\/\s*mol|energy/i.test(`${column} ${scale}`)
+}
+
 function toCandidate(row: CsvPreviewRow): AffinityCandidate | null {
   const affinity = readAffinityNumber(row, 'predictedAffinity')
   if (affinity === null) {
@@ -114,19 +128,22 @@ function toCandidate(row: CsvPreviewRow): AffinityCandidate | null {
  * biological thresholds are invented.
  */
 export function buildAffinityComparison(rows: CsvPreviewRow[], currentRow: CsvPreviewRow): AffinityComparison {
+  const scale = readAffinityField(currentRow, 'scale') || rows.map(row => readAffinityField(row, 'scale')).find(Boolean) || ''
+  const lowerIsBetter = affinityIsLowerBetter(findAffinityColumn(Object.keys(currentRow)) ?? '', scale)
   const candidates = rows
     .map(toCandidate)
     .filter((candidate): candidate is AffinityCandidate => Boolean(candidate))
     .sort((left, right) => {
       if (right.affinity !== left.affinity) {
-        return right.affinity - left.affinity
+        return lowerIsBetter ? left.affinity - right.affinity : right.affinity - left.affinity
       }
       return left.moleculeId.localeCompare(right.moleculeId)
     })
 
-  for (const candidate of candidates) {
-    candidate.rank = 1 + candidates.filter(other => other.affinity > candidate.affinity).length
-  }
+  candidates.forEach((candidate, index) => {
+    const previous = candidates[index - 1]
+    candidate.rank = previous?.affinity === candidate.affinity ? previous.rank : index + 1
+  })
 
   const currentKey = String(currentRow.__rowKey ?? '')
   const current = candidates.find(candidate => candidate.row === currentRow)
@@ -166,6 +183,7 @@ export function buildAffinityComparison(rows: CsvPreviewRow[], currentRow: CsvPr
     gapToBest,
     quality,
     percentile,
-    scale: current ? readAffinityField(current.row, 'scale') : ''
+    scale,
+    lowerIsBetter
   }
 }

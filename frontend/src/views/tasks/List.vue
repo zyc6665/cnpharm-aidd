@@ -186,6 +186,7 @@
         row-key="id"
         :columns="taskColumns"
         :data-source="displayTasks"
+        :scroll="{ x: 'max-content' }"
         :pagination="false"
       >
         <template #bodyCell="{ column, record }">
@@ -218,7 +219,7 @@
           <template v-else-if="column.key === 'actions'">
             <a-space>
               <a-button
-                v-if="taskResultPath(record)"
+                v-if="record.status === 'success' && taskResultPath(record)"
                 type="link"
                 size="small"
                 data-testid="tasks-open-result"

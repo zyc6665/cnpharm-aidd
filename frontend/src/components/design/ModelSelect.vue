@@ -70,45 +70,21 @@ interface ModelMetaHint {
   scenario: string
 }
 
-interface ModelMetaDefinition {
-  prefix: string
-  durationKey: string
-  scenarioKey: string
-}
-
-/** 已知模型的耗时/适用场景提示；未命中的 slug 落入通用文案。 */
-const MODEL_META_DEFINITIONS: ModelMetaDefinition[] = [
-  {
-    prefix: 'pocket2mol',
-    durationKey: 'design.modelSelect.meta.pocket2mol.duration',
-    scenarioKey: 'design.modelSelect.meta.pocket2mol.scenario',
-  },
-  {
-    prefix: 'diffdock',
-    durationKey: 'design.modelSelect.meta.diffdock.duration',
-    scenarioKey: 'design.modelSelect.meta.diffdock.scenario',
-  },
-  {
-    prefix: 'boltz2',
-    durationKey: 'design.modelSelect.meta.boltz2.duration',
-    scenarioKey: 'design.modelSelect.meta.boltz2.scenario',
-  },
-  {
-    prefix: 'lddm',
-    durationKey: 'design.modelSelect.meta.lddm.duration',
-    scenarioKey: 'design.modelSelect.meta.lddm.scenario',
-  },
-]
+/** Known tools with localized duration and scenario hints, keyed by slug prefix. */
+const modelMetaPrefixes = [
+  'pocket2mol', 'diffdock', 'boltz2', 'lddm', 'autodock-vina', 'molp-pc',
+  'msign', 'gromacs', 'therapainter',
+] as const
 
 const selectedOption = computed(
   () => props.options.find(option => option.slug === props.modelValue) ?? null
 )
 
 function metaFor(option: ModelOption): ModelMetaHint {
-  const definition = MODEL_META_DEFINITIONS.find(({ prefix }) => option.slug.startsWith(prefix))
+  const prefix = modelMetaPrefixes.find(prefix => option.slug.startsWith(prefix)) ?? 'generic'
   return {
-    duration: t(definition?.durationKey ?? 'design.modelSelect.meta.generic.duration'),
-    scenario: t(definition?.scenarioKey ?? 'design.modelSelect.meta.generic.scenario'),
+    duration: t(`design.modelSelect.meta.${prefix}.duration`),
+    scenario: t(`design.modelSelect.meta.${prefix}.scenario`),
   }
 }
 

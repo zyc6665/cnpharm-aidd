@@ -207,16 +207,18 @@ const radarMetrics = computed(() => {
     return []
   }
   return profile.value.radar
-    .map(([label, aliases]) => {
+    .map(([label, aliases, polarity]) => {
       const column = aliases.map(alias => columnIndex.value.get(normalize(alias))).find(Boolean)
       if (!column) {
         return null
       }
-      const value = Number(row[column.key])
-      if (!Number.isFinite(value)) {
+      const text = String(row[column.key] ?? '').trim()
+      const value = Number(text)
+      if (!text || !Number.isFinite(value)) {
         return null
       }
-      return { label, value: Math.min(1, Math.max(0, value)) }
+      const normalized = Math.min(1, Math.max(0, value))
+      return polarity === 'risk' ? { label: t('predict.result.radarSafety', { metric: label }), value: 1 - normalized } : { label, value: normalized }
     })
     .filter((item): item is { label: string; value: number } => Boolean(item))
 })

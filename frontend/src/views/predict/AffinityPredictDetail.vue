@@ -226,7 +226,8 @@ const deltaClass = computed(() => {
   if (delta === null || Math.abs(delta) < 0.0005) {
     return ''
   }
-  return delta > 0 ? 'affinity-kpi__value--good' : 'affinity-kpi__value--bad'
+  const betterThanMedian = comparison.value.lowerIsBetter ? delta < 0 : delta > 0
+  return betterThanMedian ? 'affinity-kpi__value--good' : 'affinity-kpi__value--bad'
 })
 
 const summary = computed(() => {
@@ -238,9 +239,27 @@ const summary = computed(() => {
     return t('predict.result.affinitySummarySingle')
   }
   if (value.rank === 1) {
+    const absDelta = Math.abs(value.deltaToMedian ?? 0)
+    if (absDelta < 0.0005) {
+      return t('predict.result.affinitySummaryBestEqual', { total: value.total })
+    }
     return t('predict.result.affinitySummaryBest', {
       total: value.total,
-      delta: formatNumber(Math.abs(value.deltaToMedian ?? 0))
+      direction: value.lowerIsBetter ? t('predict.result.affinityBelow') : t('predict.result.affinityAbove'),
+      delta: formatNumber(absDelta)
+    })
+  }
+  const bestDirection = value.lowerIsBetter
+    ? t('predict.result.affinityAbove')
+    : t('predict.result.affinityBelow')
+  const absDelta = Math.abs(value.deltaToMedian ?? 0)
+  const gap = formatNumber(Math.abs(value.gapToBest ?? 0))
+  if (absDelta < 0.0005) {
+    return t('predict.result.affinitySummaryMedianTied', {
+      total: value.total,
+      rank: value.rank,
+      bestDirection,
+      gap
     })
   }
   const direction = (value.deltaToMedian ?? 0) >= 0
@@ -249,9 +268,10 @@ const summary = computed(() => {
   return t('predict.result.affinitySummary', {
     total: value.total,
     rank: value.rank,
-    gap: formatNumber(Math.abs(value.gapToBest ?? 0)),
+    bestDirection,
+    gap,
     direction,
-    delta: formatNumber(Math.abs(value.deltaToMedian ?? 0))
+    delta: formatNumber(absDelta)
   })
 })
 

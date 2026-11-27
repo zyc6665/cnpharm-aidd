@@ -62,7 +62,7 @@ function makeStructure(overrides: Partial<ProteinStructureDetail> = {}): Protein
   }
 }
 
-test('sortPocketsByScore 按 score 降序返回新数组，score 为 null 的排到末尾', () => {
+test('sortPocketsByScore 按能量分数升序返回新数组，score 为 null 的排到末尾', () => {
   const pockets = [
     makePocket({ id: 'null-score', score: null }),
     makePocket({ id: 'low', score: -5.2 }),
@@ -74,7 +74,7 @@ test('sortPocketsByScore 按 score 降序返回新数组，score 为 null 的排
 
   assert.deepEqual(
     sorted.map((pocket) => pocket.id),
-    ['low', 'mid', 'high', 'null-score'],
+    ['high', 'mid', 'low', 'null-score'],
   )
   assert.deepEqual(
     pockets.map((pocket) => pocket.id),

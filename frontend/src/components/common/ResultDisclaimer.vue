@@ -14,10 +14,11 @@
   .result-disclaimer {
     margin: 16px 0 0;
     padding: 10px 12px;
-    border-left: 3px solid var(--color-warning-border, #faad14);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-left: 3px solid #f59e0b;
     border-radius: 4px;
-    background: var(--color-warning-bg, #fffbe6);
-    color: var(--color-text-secondary, #595959);
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--theme-text-secondary, #94a3b8);
     font-size: 12px;
     line-height: 1.6;
   }
