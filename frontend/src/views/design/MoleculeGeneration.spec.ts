@@ -2,6 +2,7 @@ import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MoleculeGeneration from './MoleculeGeneration.vue'
+import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 
 const POCKET2MOL = 'pocket2mol-pocket-ligand-generation'
 const LDDM = 'lddm-pocket-ligand-generation'
@@ -16,7 +17,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, values?: Record<string, number | string>) =>
-      values && 'count' in values ? `${key}:${values.count}:${values.lastIndex}` : key,
+      values && 'count' in values
+        ? `${key}:${values.count}:${values.lastIndex}`
+        : values && 'fields' in values
+          ? `${key}:${values.fields}`
+          : key,
     te: () => false
   })
 }))
@@ -77,7 +82,12 @@ const Select = defineComponent({
     <option v-for="option in (options || [])" :key="option.value" :value="option.value">{{ option.label }}</option>
   </select>`
 })
-const Alert = defineComponent({ props: ['message', 'type'], template: '<div>{{ message }}</div>' })
+const Alert = defineComponent({
+  props: ['message', 'type', 'description'],
+  template: '<div class="alert-stub">{{ message }}<span class="alert-desc">{{ description }}</span><slot name="action" /></div>'
+})
+
+const paramStorageKey = (slug: string) => `design:molecule-params:${slug}`
 
 const molBlock = [
   'Methanol', '  Test', '', '  2  1  0  0  0  0            999 V2000',
@@ -533,5 +543,41 @@ describe('MoleculeGeneration', () => {
         standardInputUploads: { protein_pdb: 'protein', pocket: 'ligand' }
       })
     )
+  })
+
+  it('announces restored parameters and resets them to schema defaults', async () => {
+    wrapper.unmount()
+    localStorage.setItem(
+      paramStorageKey(MOLECULE_GENERATION_TOOL_SLUG),
+      JSON.stringify({ sourceMode: 'project', uploadProjectId: '', params: { num_samples: 42 } })
+    )
+
+    wrapper = mountPage()
+    await flushPromises()
+
+    expect(get('params-restored-hint').text()).toContain('design.molecule.paramsRestoredDiff:num_samples')
+    expect(wrapper.getComponent(ParameterForm).props('modelValue')).toMatchObject({ num_samples: 42 })
+
+    await get('params-restored-reset').trigger('click')
+    await flushPromises()
+
+    expect(hidden('params-restored-hint')).toBe(true)
+    expect(wrapper.getComponent(ParameterForm).props('modelValue')).toMatchObject({ num_samples: 20 })
+    expect(localStorage.getItem(paramStorageKey(MOLECULE_GENERATION_TOOL_SLUG))).toBeNull()
+  })
+
+  it('stays quiet when nothing was restored or restored values match defaults', async () => {
+    expect(hidden('params-restored-hint')).toBe(true)
+
+    wrapper.unmount()
+    localStorage.setItem(
+      paramStorageKey(MOLECULE_GENERATION_TOOL_SLUG),
+      JSON.stringify({ sourceMode: 'project', uploadProjectId: '', params: { num_samples: 20 } })
+    )
+
+    wrapper = mountPage()
+    await flushPromises()
+
+    expect(hidden('params-restored-hint')).toBe(true)
   })
 })
