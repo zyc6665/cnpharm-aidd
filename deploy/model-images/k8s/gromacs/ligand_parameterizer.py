@@ -15,41 +15,39 @@ ALLOWED_CHARGE_METHODS = ("bcc", "gas")
 DEFAULT_LIGAND_RESNAME = "LIG"
 MAX_ZIP_FILES = 32
 MAX_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
-STANDARD_AMINO_ACIDS = frozenset(
-    "ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL".split())
+STANDARD_AMINO_ACIDS = frozenset("ALA ARG ASN ASP CYS GLN GLU GLY HIS ILE LEU LYS MET PHE PRO SER THR TRP TYR VAL".split())
 RESERVED_RESNAMES = STANDARD_AMINO_ACIDS | frozenset((
-    "00C 01W 02K 02L 03Y 07O 08P 0A0 0A1 0A2 0A8 0AA 0AB 0AC 0AF 0AG 0AH 0AK 0BN 0CS 0E5 0EA 0FL 0NC 0WZ 0Y8 143 193 "
-    "1OP 1PA 1PI 1TQ 1TY 1X6 200 23F 23S 26B 2AD 2AG 2AO 2AS 2CO 2DO 2FM 2HF 2KK 2KP 2LU 2ML 2MR 2MT 2OR 2PI 2QZ 2R3 "
-    "2SI 2TL 2TY 2VA 2XA 32S 32T 33X 3AH 3AR 3CF 3GA 3MD 3NF 3QN 3TY 3XH 4BF 4CF 4CY 4DP 4FB 4FW 4HT 4IN 4MM 4PH 4U7 "
-    "56A 5AB 5CS 5CW 5HP 6CL 6CW 6GL 6HN 7JA 9NE 9NF 9NR 9NV A5N A66 AA3 AA4 AAR AB7 ABA ACB ACE ACL ADD AEA AEI AFA "
-    "AGM AGT AHB AHH AHO AHP AHS AHT AIB AKL AKZ ALC ALM ALN ALO ALS ALT ALV ALY AN8 APE APH API APK APM APP AR2 AR4 "
-    "AR7 ARM ARN ARO ARV AS2 AS9 ASA ASB ASF ASH ASI ASK ASL ASM ASQ ASX AVN AYA AZK AZS AZY B1F B2A B2F B2I B2V B3A "
-    "B3D B3E B3K B3L B3M B3Q B3S B3T B3U B3X B3Y BB6 BB7 BB8 BB9 BBC BCS BE2 BFD BG1 BH2 BHD BIF BIL BIU BJH BL2 BLE "
-    "BLY BMT BNN BNO BOR BPE BSE BTA BTC BTR BUC BUG C1X C22 C3Y C4R C5C C66 C6C CA CAF CAL CAS CAV CAY CCL CCS CDE "
-    "CDV CEA CGA CGU CHF CHG CHP CHS CIR CL CLE CLG CLH CME CMH CML CMT CPC CPI CR5 CS0 CS1 CS3 CS4 CSA CSB CSD CSE "
-    "CSJ CSO CSP CSR CSS CSU CSW CSX CSZ CTE CTH CUC CWR CXM CY0 CY1 CY3 CY4 CYA CYD CYF CYG CYJ CYM CYN CYQ CYR CYX "
-    "CZ2 CZZ D11 D3P D4P DA2 DAB DAH DAL DAR DAS DBB DBS DBU DBY DBZ DC2 DCL DCY DDE DFI DFO DGH DGL DGN DHA DHI DHL "
-    "DHN DHP DHV DI7 DIL DIR DIV DLE DLS DLY DM0 DMH DMK DMT DNE DNL DNP DNS DOA DOD DOH DON DPL DPN DPP DPQ DPR DSE "
-    "DSG DSN DSP DTH DTR DTY DVA DYS ECC EFC EHP ESB ESC EXY EYS F2F FAK FB5 FB6 FCL FE FGA FGL FGP FH7 FHL FHO FLA "
-    "FLE FLT FME FOE FOR FP9 FRD FT6 FTR FTY FVA FZN GAU GCM GFT GGL GHG GHP GL3 GLH GLJ GLK GLM GLQ GLX GLZ GMA GND "
-    "GPL GSC GSU GT9 GVL H14 H20 H2O H5M HAC HAR HBN HCS HFA HGL HHI HHO HIA HIC HID HIE HIH HIP HIQ HL2 HLU HMR HOH "
-    "HPC HPE HPH HPQ HQA HRG HRP HS8 HS9 HSD HSE HSH HSL HSO HSP HTI HTN HTR HV5 HVA HY3 HYP HZP I2M I58 IAM IAR IAS "
-    "IEL IGL IIL ILG ILX IML IOY IPG IT1 IYR IYT IZO JJJ JJK JJL K K1R KCX KGC KNB KOR KPI KST KYN KYQ L2A LA2 LAA "
-    "LAL LBY LCK LCX LCZ LDH LED LEF LEH LEI LEM LEN LET LEX LHC LLP LLY LME LMF LMQ LP6 LPD LPG LPL LPS LSO LTA LTR "
-    "LVG LVN LYF LYK LYM LYN LYR LYX LYZ M0H M2L M2S M30 M3L MA MAA MAI MBQ MC1 MCG MCL MCS MD3 MD6 MDF MDH MEA MED "
-    "MEG MEN MEQ MEU MF3 MG MGG MGN MGY MHL MHO MHS MIS MK8 ML3 MLE MLL MLY MLZ MME MMO MND MNL MNV MOD MP8 MPH MPJ "
-    "MPQ MSA MSE MSL MSO MSP MT2 MTY MVA N10 N2C N7P N80 N8P NA NA8 NAL NAM NB8 NBQ NC1 NCB NCY NDF NEM NEP NFA NH2 "
-    "NHL NIY NLE NLN NLO NLP NLQ NMA NMC NME NMM NNH NPH NPI NSK NTR NTY NVA NYS NZH O12 OAR OAS OBF OBS OCS OCY OH2 "
-    "OHH OHI OHS OIC OLE OLT OLZ OMT ONH ONL OPR ORN ORQ OSE OTB OTH OXX P1L P2Y PAQ PAS PAT PAU PBB PBF PCA PCC PCE "
-    "PCS PDL PEC PF5 PFF PFX PG1 PG9 PGL PGY PH6 PHA PHD PHI PHL PHM PIV PLE PM3 POM PPN PR3 PR9 PRS PSA PSH PTA PTH "
-    "PTM PTR PVH PVL PYA PYL PYX QCS QLN QMM QPA QPH R1A R4K RE0 RE3 RON RVX RZ4 S1H S2C S2D S2P SAC SAH SAR SBL SCH "
-    "SCS SCY SD2 SDP SE7 SEB SEC SEG SEL SEM SEN SEP SET SGB SHC SHP SHR SIB SLR SLZ SMC SME SMF SNC SNN SOC SOL SOY "
-    "SPC SRZ STY SUB SUN SVA SVV SVW SVX SVY SVZ SYS T11 T3P T4P T5P T66 TA4 TAV TBG TBM TCQ TCR TDD TFQ TH6 THC THO "
-    "THZ TIH TIP TMB TMD TNB TNR TOQ TPH TPL TPO TPQ TQI TQQ TRF TRG TRN TRO TRQ TRW TRX TRY TST TTQ TTS TXY TY1 TY2 "
-    "TY3 TY5 TYB TYI TYJ TYN TYO TYQ TYS TYT TYW TYX TYY TZB TZO UMA UN1 UN2 UNK VAD VAF VB1 VDL VLL VLM VMS VOL WAT "
-    "WLU WPA WRP WVL X2W XCN XCP XDT XPL XPR XSN XX1 YCM YOF YTH Z01 ZAL ZCL ZFB ZN ZU0 ZZJ").split())
-_GLOBAL_SECTIONS = frozenset("atomtypes bondtypes pairtypes angletypes dihedraltypes constrainttypes "
-                             "nonbond_params implicit_genborn_params cmaptypes".split())
+    "00C 01W 02K 02L 03Y 07O 08P 0A0 0A1 0A2 0A8 0AA 0AB 0AC 0AF 0AG 0AH 0AK 0BN 0CS 0E5 0EA 0FL 0NC 0WZ 0Y8 143 193 1OP 1PA "
+    "1PI 1TQ 1TY 1X6 200 23F 23S 26B 2AD 2AG 2AO 2AS 2CO 2DO 2FM 2HF 2KK 2KP 2LU 2ML 2MR 2MT 2OR 2PI 2QZ 2R3 2SI 2TL 2TY 2VA "
+    "2XA 32S 32T 33X 3AH 3AR 3CF 3GA 3MD 3NF 3QN 3TY 3XH 4BF 4CF 4CY 4DP 4FB 4FW 4HT 4IN 4MM 4PH 4U7 56A 5AB 5CS 5CW 5HP 6CL "
+    "6CW 6GL 6HN 7JA 9NE 9NF 9NR 9NV A5N A66 AA3 AA4 AAR AB7 ABA ACB ACE ACL ADD AEA AEI AFA AGM AGT AHB AHH AHO AHP AHS AHT "
+    "AIB AKL AKZ ALC ALM ALN ALO ALS ALT ALV ALY AN8 APE APH API APK APM APP AR2 AR4 AR7 ARM ARN ARO ARV AS2 AS9 ASA ASB ASF "
+    "ASH ASI ASK ASL ASM ASQ ASX AVN AYA AZK AZS AZY B1F B2A B2F B2I B2V B3A B3D B3E B3K B3L B3M B3Q B3S B3T B3U B3X B3Y BB6 "
+    "BB7 BB8 BB9 BBC BCS BE2 BFD BG1 BH2 BHD BIF BIL BIU BJH BL2 BLE BLY BMT BNN BNO BOR BPE BSE BTA BTC BTR BUC BUG C1X C22 "
+    "C3Y C4R C5C C66 C6C CA CAF CAL CAS CAV CAY CCL CCS CDE CDV CEA CGA CGU CHF CHG CHP CHS CIR CL CLE CLG CLH CME CMH CML "
+    "CMT CPC CPI CR5 CS0 CS1 CS3 CS4 CSA CSB CSD CSE CSJ CSO CSP CSR CSS CSU CSW CSX CSZ CTE CTH CUC CWR CXM CY0 CY1 CY3 CY4 "
+    "CYA CYD CYF CYG CYJ CYM CYN CYQ CYR CYX CZ2 CZZ D11 D3P D4P DA2 DAB DAH DAL DAR DAS DBB DBS DBU DBY DBZ DC2 DCL DCY DDE "
+    "DFI DFO DGH DGL DGN DHA DHI DHL DHN DHP DHV DI7 DIL DIR DIV DLE DLS DLY DM0 DMH DMK DMT DNE DNL DNP DNS DOA DOD DOH DON "
+    "DPL DPN DPP DPQ DPR DSE DSG DSN DSP DTH DTR DTY DVA DYS ECC EFC EHP ESB ESC EXY EYS F2F FAK FB5 FB6 FCL FE FGA FGL FGP "
+    "FH7 FHL FHO FLA FLE FLT FME FOE FOR FP9 FRD FT6 FTR FTY FVA FZN GAU GCM GFT GGL GHG GHP GL3 GLH GLJ GLK GLM GLQ GLX GLZ "
+    "GMA GND GPL GSC GSU GT9 GVL H14 H20 H2O H5M HAC HAR HBN HCS HFA HGL HHI HHO HIA HIC HID HIE HIH HIP HIQ HL2 HLU HMR HOH "
+    "HPC HPE HPH HPQ HQA HRG HRP HS8 HS9 HSD HSE HSH HSL HSO HSP HTI HTN HTR HV5 HVA HY3 HYP HZP I2M I58 IAM IAR IAS IEL IGL "
+    "IIL ILG ILX IML IOY IPG IT1 IYR IYT IZO JJJ JJK JJL K K1R KCX KGC KNB KOR KPI KST KYN KYQ L2A LA2 LAA LAL LBY LCK LCX "
+    "LCZ LDH LED LEF LEH LEI LEM LEN LET LEX LHC LLP LLY LME LMF LMQ LP6 LPD LPG LPL LPS LSO LTA LTR LVG LVN LYF LYK LYM LYN "
+    "LYR LYX LYZ M0H M2L M2S M30 M3L MA MAA MAI MBQ MC1 MCG MCL MCS MD3 MD6 MDF MDH MEA MED MEG MEN MEQ MEU MF3 MG MGG MGN MGY "
+    "MHL MHO MHS MIS MK8 ML3 MLE MLL MLY MLZ MME MMO MND MNL MNV MOD MP8 MPH MPJ MPQ MSA MSE MSL MSO MSP MT2 MTY MVA N10 N2C "
+    "N7P N80 N8P NA NA8 NAL NAM NB8 NBQ NC1 NCB NCY NDF NEM NEP NFA NH2 NHL NIY NLE NLN NLO NLP NLQ NMA NMC NME NMM NNH NPH "
+    "NPI NSK NTR NTY NVA NYS NZH O12 OAR OAS OBF OBS OCS OCY OH2 OHH OHI OHS OIC OLE OLT OLZ OMT ONH ONL OPR ORN ORQ OSE OTB "
+    "OTH OXX P1L P2Y PAQ PAS PAT PAU PBB PBF PCA PCC PCE PCS PDL PEC PF5 PFF PFX PG1 PG9 PGL PGY PH6 PHA PHD PHI PHL PHM PIV "
+    "PLE PM3 POM PPN PR3 PR9 PRS PSA PSH PTA PTH PTM PTR PVH PVL PYA PYL PYX QCS QLN QMM QPA QPH R1A R4K RE0 RE3 RON RVX RZ4 "
+    "S1H S2C S2D S2P SAC SAH SAR SBL SCH SCS SCY SD2 SDP SE7 SEB SEC SEG SEL SEM SEN SEP SET SGB SHC SHP SHR SIB SLR SLZ SMC "
+    "SME SMF SNC SNN SOC SOL SOY SPC SRZ STY SUB SUN SVA SVV SVW SVX SVY SVZ SYS T11 T3P T4P T5P T66 TA4 TAV TBG TBM TCQ TCR "
+    "TDD TFQ TH6 THC THO THZ TIH TIP TMB TMD TNB TNR TOQ TPH TPL TPO TPQ TQI TQQ TRF TRG TRN TRO TRQ TRW TRX TRY TST TTQ TTS "
+    "TXY TY1 TY2 TY3 TY5 TYB TYI TYJ TYN TYO TYQ TYS TYT TYW TYX TYY TZB TZO UMA UN1 UN2 UNK VAD VAF VB1 VDL VLL VLM VMS VOL "
+    "WAT WLU WPA WRP WVL X2W XCN XCP XDT XPL XPR XSN XX1 YCM YOF YTH Z01 ZAL ZCL ZFB ZN ZU0 ZZJ SO4 PO4 NO3 CO3 PI NH4 CU "
+    "CU1 MN BR I CS RB SR BA HG CD PB LI AL F ZN2 MG2 FE2 SOD POT CLA HEM HEC HEA NAD NAP NAI NDP FAD FMN ATP ADP GDP GTP "
+    "AMP GMP COA ACO SAM").split())
+_GLOBAL_SECTIONS = frozenset("atomtypes bondtypes pairtypes angletypes dihedraltypes constrainttypes nonbond_params implicit_genborn_params cmaptypes".split())
 _SUPPORTED_COMPRESSION = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 _INCLUDE_RE = re.compile(r'^\s*#\s*include\b\s*[<"]([^>"]+)[>"]')
 _SECTION_RE = re.compile(r"^\s*\[\s*([A-Za-z0-9_]+)\s*\]")
@@ -57,8 +55,7 @@ _DIRECTIVE_RE = re.compile(r"^\s*#\s*([A-Za-z]+)\b")
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 _CONDITIONAL_DIRECTIVES = frozenset({"ifdef", "ifndef", "else", "elif", "endif", "define", "undef"})
 _POSITION_RESTRAINT_SECTIONS = frozenset({"position_restraints"})
-class LigandParameterizationError(ValueError):
-    pass
+class LigandParameterizationError(ValueError): pass
 @dataclass(frozen=True)
 class LigandPrepConfig:
     mode: str = "auto"
@@ -109,8 +106,7 @@ def _register_zip_directory(spellings: dict[str, str], relative: str, member: st
     key = relative.casefold()
     existing = spellings.get(key)
     if existing is not None and existing != relative:
-        raise LigandParameterizationError(
-            f"case-insensitive directory duplicate: {existing!r} vs {relative!r} (member {member})")
+        raise LigandParameterizationError(f"case-insensitive directory duplicate: {existing!r} vs {relative!r} ({member})")
     spellings[key] = relative
 def _publish_directory(staging: Path, dest_dir: Path) -> None:
     # The staging tree lives in dest_dir's parent, so the swap is a same-filesystem rename; replacing a tree
@@ -126,8 +122,7 @@ def _publish_directory(staging: Path, dest_dir: Path) -> None:
         os.replace(staging, dest_dir)
     except BaseException as exc:
         if dest_dir.exists():
-            raise LigandParameterizationError(
-                f"cannot publish {dest_dir}: target reappeared; previous results kept at {backup}") from exc
+            raise LigandParameterizationError(f"cannot publish {dest_dir}: target reappeared; kept at {backup}") from exc
         os.replace(backup, dest_dir)
         raise
     shutil.rmtree(backup, ignore_errors=True)
@@ -213,8 +208,7 @@ def validate_itp_security(itp_path: Path, *, root: Path | None = None, _visited:
     root_path = Path(root).resolve() if root is not None else None
     if root_path is not None and resolved != root_path and root_path not in resolved.parents:
         raise LigandParameterizationError(f"topology file escapes bundle root: {path}")
-    entry, visited, visiting = (
-        _visiting is None, {} if _visited is None else _visited, set() if _visiting is None else _visiting)
+    entry, visited, visiting = _visiting is None, {} if _visited is None else _visited, set() if _visiting is None else _visiting
     if resolved in visiting:
         raise LigandParameterizationError(f"recursive #include cycle at {path}")
     if resolved in visited:
@@ -226,8 +220,7 @@ def validate_itp_security(itp_path: Path, *, root: Path | None = None, _visited:
         match = _INCLUDE_RE.match(code)
         if match and root_path is not None:
             target = _resolve_include_target(resolved.parent, match.group(1), root_path, path)
-            has_section = validate_itp_security(target, root=root_path, _visited=visited, _visiting=visiting) \
-                or has_section
+            has_section = validate_itp_security(target, root=root_path, _visited=visited, _visiting=visiting) or has_section
         if not code or code.startswith("#"):
             continue
         has_content = True
@@ -284,23 +277,51 @@ def inline_itp_includes(itp_path: Path, *, root: Path, seen: set[Path] | None = 
             expanded.extend(expand(target, (*stack, current)))
         return expanded
     return "\n".join(expand(resolved, ())) + "\n"
-def _split_atomtypes_texts(sources: list[tuple[Path, str]], *, out_atomtypes_itp: Path,
-                           out_clean_itp: Path) -> tuple[Path | None, Path]:
-    clean_lines, global_lines, header_lines = [], [], []
+def _atomtype_param_key(token: str) -> object:
+    try:
+        val = float(token)
+        return val if math.isfinite(val) else token
+    except ValueError:
+        return token
+def _dedup_atomtype_lines(lines: list[str], seen: dict[str, tuple[object, ...]], *, reject_duplicates: bool) -> list[str]:
+    kept: list[str] = []
+    for line in lines:
+        code = line.split(";", 1)[0].strip()
+        if not code or code.startswith("#") or _SECTION_RE.match(code):
+            kept.append(line)
+            continue
+        cols = code.split()
+        atype, spec = cols[0], tuple(_atomtype_param_key(tok) for tok in cols[1:])
+        if atype in seen:
+            if reject_duplicates or seen[atype] != spec:
+                kind = "duplicate" if seen[atype] == spec else "conflicting"
+                raise LigandParameterizationError(f"{kind} [ atomtypes ] definition for {atype}")
+            continue
+        seen[atype] = spec
+        kept.append(line)
+    return kept
+def _split_atomtypes_texts(sources: list[tuple[Path, str]], *, out_atomtypes_itp: Path, out_clean_itp: Path) -> tuple[Path | None, Path]:
+    clean_lines, header_lines, global_chunks, seen_atomtypes = [], [], [], {}
+    atomtype_chunk: list[str] | None = None
     for position, (path, text) in enumerate(sources):
         blocks, final_depth, has_conditionals = _section_blocks(text)
         if final_depth != 0:
             raise LigandParameterizationError(f"unbalanced conditional compilation in {path}")
-        has_globals = any(name in _GLOBAL_SECTIONS for name, _lines, _start, _max in blocks)
-        if has_globals and has_conditionals:
-            # Relocating global sections past #define/#ifdef would change macro scope: refuse instead of guessing.
-            raise LigandParameterizationError(
-                f"conditional directives interleave with global parameter sections in {path}")
+        if has_conditionals and any(name in _GLOBAL_SECTIONS for name, *_ in blocks):
+            raise LigandParameterizationError(f"conditional directives interleave with global parameter sections in {path}")
         for name, lines, start_depth, end_depth in blocks:
             if name in _GLOBAL_SECTIONS:
                 if start_depth or end_depth:
                     raise LigandParameterizationError(f"[{name}] is inside conditional compilation in {path}")
-                global_lines.extend([*lines, ""])
+                if name != "atomtypes":
+                    global_chunks.append(lines)
+                    continue
+                deduped = _dedup_atomtype_lines(lines[1:], seen_atomtypes, reject_duplicates=False)
+                if atomtype_chunk is None:
+                    atomtype_chunk = [lines[0], *deduped]
+                    global_chunks.append(atomtype_chunk)
+                else:
+                    atomtype_chunk.extend(deduped)
             elif position == 0:
                 clean_lines.extend(lines)
             elif name == "preamble":
@@ -308,18 +329,17 @@ def _split_atomtypes_texts(sources: list[tuple[Path, str]], *, out_atomtypes_itp
                 if len(keep) != len(lines):
                     raise LigandParameterizationError(f"non-comment preamble of {path} cannot be relocated")
                 header_lines.extend(keep)
-    out_clean = Path(out_clean_itp)
+    global_lines = [line for chunk in global_chunks for line in (*chunk, "")]
+    out_clean, out_atomtypes = Path(out_clean_itp), Path(out_atomtypes_itp)
     out_clean.parent.mkdir(parents=True, exist_ok=True)
     clean_text = "\n".join(clean_lines).strip()
     out_clean.write_text(clean_text + "\n" if clean_text else "", encoding="utf-8")
     if not global_lines:
         return None, out_clean
-    out_atomtypes = Path(out_atomtypes_itp)
     out_atomtypes.parent.mkdir(parents=True, exist_ok=True)
     out_atomtypes.write_text("\n".join([*header_lines, *global_lines]).strip() + "\n", encoding="utf-8")
     return out_atomtypes, out_clean
-def split_atomtypes_from_itp(source_itp: Path, *, out_atomtypes_itp: Path, out_clean_itp: Path,
-                             extra_prm: Path | None = None) -> tuple[Path | None, Path]:
+def split_atomtypes_from_itp(source_itp: Path, *, out_atomtypes_itp: Path, out_clean_itp: Path, extra_prm: Path | None = None) -> tuple[Path | None, Path]:
     sources = [Path(source_itp)] + ([Path(extra_prm)] if extra_prm else [])
     texts: list[tuple[Path, str]] = []
     for path in sources:
@@ -329,7 +349,7 @@ def split_atomtypes_from_itp(source_itp: Path, *, out_atomtypes_itp: Path, out_c
     return _split_atomtypes_texts(texts, out_atomtypes_itp=out_atomtypes_itp, out_clean_itp=out_clean_itp)
 def _has_include(text: str) -> bool:
     return any(_INCLUDE_RE.match(line.split(";", 1)[0].strip()) for line in text.splitlines())
-def _delivered_sections(path: Path, label: str) -> list[str]:
+def _delivered_sections(path: Path, label: str) -> tuple[list[str], list[tuple[str, list[str], int, int]]]:
     if not path.is_file():
         raise LigandParameterizationError(f"{label} ITP missing after splitting: {path}")
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -342,27 +362,27 @@ def _delivered_sections(path: Path, label: str) -> list[str]:
     # GROMACS already read the force-field [ defaults ] by the time it includes us; a second one is fatal.
     if "defaults" in names:
         raise LigandParameterizationError(f"[ defaults ] is not allowed in delivered topology: {path}")
-    return names
+    return names, blocks
 def validate_delivered_topology(ligand_itp: Path, atomtypes_itp: Path | None) -> None:
-    # GROMACS must read exactly the graph we validated: delivered files are self-contained (includes
-    # inlined), globals live only in the atomtypes ITP, and [ atomtypes ] precedes dependents.
-    ligand_path = Path(ligand_itp)
-    ligand_sections = _delivered_sections(ligand_path, "ligand")
-    leaked = sorted({name for name in ligand_sections if name in _GLOBAL_SECTIONS})
-    if leaked:
-        raise LigandParameterizationError(f"global parameter sections leaked into {ligand_path}: {leaked}")
+    # Delivered files are self-contained (includes inlined), globals live only in atomtypes ITP,
+    # [ atomtypes ] precedes dependents, and atomtypes are unique.
+    ligand_sections, _ = _delivered_sections(Path(ligand_itp), "ligand")
+    if (leaked := sorted({name for name in ligand_sections if name in _GLOBAL_SECTIONS})):
+        raise LigandParameterizationError(f"global parameter sections leaked into {ligand_itp}: {leaked}")
     if atomtypes_itp is None:
         return
-    atomtypes_path = Path(atomtypes_itp)
-    names = _delivered_sections(atomtypes_path, "atomtypes")
-    unexpected = sorted({name for name in names if name not in _GLOBAL_SECTIONS})
-    if unexpected:
-        raise LigandParameterizationError(f"non-global sections in {atomtypes_path}: {unexpected}")
+    names, blocks = _delivered_sections(Path(atomtypes_itp), "atomtypes")
+    if (unexpected := sorted({name for name in names if name not in _GLOBAL_SECTIONS})):
+        raise LigandParameterizationError(f"non-global sections in {atomtypes_itp}: {unexpected}")
     if "atomtypes" not in names:
-        raise LigandParameterizationError(f"no [ atomtypes ] section in {atomtypes_path}")
+        raise LigandParameterizationError(f"no [ atomtypes ] section in {atomtypes_itp}")
     for name in names:
         if name != "atomtypes" and name in _GLOBAL_SECTIONS and names.index(name) < names.index("atomtypes"):
-            raise LigandParameterizationError(f"[{name}] precedes [ atomtypes ] in {atomtypes_path}")
+            raise LigandParameterizationError(f"[{name}] precedes [ atomtypes ] in {atomtypes_itp}")
+    seen_atomtypes: dict[str, tuple[object, ...]] = {}
+    for name, lines, _s, _m in blocks:
+        if name == "atomtypes":
+            _dedup_atomtype_lines(lines[1:], seen_atomtypes, reject_duplicates=True)
 def _prepare_delivered_posre(posre_path: Path, *, root: Path, out_path: Path, seen: set[Path] | None = None) -> Path:
     # The .top re-includes the posre file by name, so the delivered copy must resolve next to it: expand the
     # validated graph and keep only position-restraint sections (a stray [ atomtypes ]/[ defaults ] would
@@ -481,13 +501,17 @@ def _gro_atom(line: str) -> tuple[str, tuple[float, float, float]]:
         raise LigandParameterizationError(f"unexpected extra .gro fields: {line!r}")
     return line[0:15], (coordinates[0], coordinates[1], coordinates[2])
 def merge_gro_files(protein_gro: Path, ligand_gro: Path, out_complex_gro: Path) -> int:
-    # Fixed 8.3f precision for every atom; a 3- or 9-component box is preserved verbatim.
+    # Fixed 8.3f precision; offsets ligand resids past protein max resid; preserves 3/9-component box.
     protein_atoms, box = _read_gro(protein_gro)
     ligand_atoms, _ = _read_gro(ligand_gro)
+    prot_parsed = [_gro_atom(line) for line in protein_atoms]
+    offset = max((int(p[:5]) for p, _ in prot_parsed if p[:5].strip().isdigit()), default=0)
     rows = []
-    for line in [*protein_atoms, *ligand_atoms]:
-        prefix, coordinates = _gro_atom(line)
-        rows.append(f"{prefix}{(len(rows) + 1) % 100000:5d}" + "".join(f"{value:8.3f}" for value in coordinates))
+    for is_lig, atoms in ((False, prot_parsed), (True, [_gro_atom(line) for line in ligand_atoms])):
+        for prefix, coordinates in atoms:
+            if is_lig and offset > 0 and prefix[:5].strip().isdigit():
+                prefix = f"{(offset + int(prefix[:5]) - 1) % 99999 + 1:5d}{prefix[5:]}"
+            rows.append(f"{prefix}{(len(rows) + 1) % 100000:5d}" + "".join(f"{value:8.3f}" for value in coordinates))
     out = Path(out_complex_gro)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(["complex", f"{len(rows):5d}", *rows, box]) + "\n", encoding="utf-8")
@@ -577,24 +601,20 @@ def patch_topol_top(topol_path: Path, *, ligand_itp_name: str, moleculetype_name
     # [ atomtypes ] must precede the ligand's [ atoms ]: refuse to patch an unusable include order.
     atomtypes_index = _find_include(lines, atomtypes_itp_name, depths) if atomtypes_itp_name else None
     if atomtypes_index is not None and ligand_index is not None and atomtypes_index > ligand_index:
-        raise LigandParameterizationError(
-            f"topology includes {ligand_itp_name} before {atomtypes_itp_name}; reorder them first")
+        raise LigandParameterizationError(f"topology includes {ligand_itp_name} before {atomtypes_itp_name}; reorder first")
     section = _section_index(lines, "molecules", depths)
     if section is None:
         raise LigandParameterizationError("topology has no top-level [ molecules ] section")
     entry = f"{moleculetype_name} {int(ligand_count)}"
     # Only a depth-0 header ends [ molecules ]; a conditional header must not truncate the scan.
-    end = next((i for i in range(section + 1, len(lines))
-                if depths[i] == 0 and _SECTION_RE.match(lines[i].split(";", 1)[0].strip())), len(lines))
+    end = next((i for i in range(section + 1, len(lines)) if depths[i] == 0 and _SECTION_RE.match(lines[i].split(";", 1)[0].strip())), len(lines))
     # Only a top-level entry may be rewritten; one inside #ifdef belongs to a different build.
-    hit = next((i for i in range(section + 1, end)
-                if depths[i] == 0 and (lines[i].split(";", 1)[0].split() or [""])[0] == moleculetype_name), None)
+    hit = next((i for i in range(section + 1, end) if depths[i] == 0 and (lines[i].split(";", 1)[0].split() or [""])[0] == moleculetype_name), None)
     if hit is not None:
         lines[hit] = entry
     else:
         insert_at = end
-        while insert_at > section + 1 and (depths[insert_at - 1] != 0
-                                           or not lines[insert_at - 1].split(";", 1)[0].strip()):
+        while insert_at > section + 1 and (depths[insert_at - 1] != 0 or not lines[insert_at - 1].split(";", 1)[0].strip()):
             insert_at -= 1
         lines.insert(insert_at, entry)
     text = "\n".join(lines).rstrip() + "\n"
@@ -618,13 +638,10 @@ def _validate_structure_consistency(itp_path: Path, gro_path: Path, *, expected_
     if not rows:
         raise LigandParameterizationError(f"no [ atoms ] entries in {itp_path}")
     if len(rows) != len(gro_atoms):
-        raise LigandParameterizationError(
-            f"atom count mismatch: {itp_path} has {len(rows)}, {gro_path} has {len(gro_atoms)}")
-    itp_resnames = {row[3] for row in rows if len(row) >= 4}
-    gro_resnames = {line[5:10].strip() for line in gro_atoms}
+        raise LigandParameterizationError(f"atom count mismatch: {itp_path} has {len(rows)}, {gro_path} has {len(gro_atoms)}")
+    itp_resnames, gro_resnames = {row[3] for row in rows if len(row) >= 4}, {line[5:10].strip() for line in gro_atoms}
     if itp_resnames != gro_resnames:
-        raise LigandParameterizationError(
-            f"residue name mismatch: itp {sorted(itp_resnames)}, gro {sorted(gro_resnames)}")
+        raise LigandParameterizationError(f"residue name mismatch: itp {sorted(itp_resnames)}, gro {sorted(gro_resnames)}")
     if expected_resname is not None and itp_resnames != {expected_resname}:
         raise LigandParameterizationError(f"unexpected ligand residue name(s): {sorted(itp_resnames)}")
     return len(rows)
@@ -668,35 +685,29 @@ def prepare_ligand_with_rdkit(ligand_path: Path, work_dir: Path, *, ligand_resna
         raise LigandParameterizationError(f"net charge mismatch: config {net_charge}, molecule {inferred}")
     molecule.SetProp("_Name", resname)
     for index, atom in enumerate(molecule.GetAtoms(), start=1):
-        atom.SetMonomerInfo(Chem.AtomPDBResidueInfo(atomName=f"{atom.GetSymbol()}{index}"[:4],
-                            residueName=resname, residueNumber=1, chainId="A", isHeteroAtom=True))
+        atom.SetMonomerInfo(Chem.AtomPDBResidueInfo(atomName=f"{atom.GetSymbol()}{index}"[:4], residueName=resname, residueNumber=1, chainId="A", isHeteroAtom=True))
     sdf, pdb = work / "ligand.sdf", work / "ligand.pdb"
     writer = Chem.SDWriter(str(sdf))
     writer.write(molecule)
     writer.close()
     Chem.MolToPDBFile(molecule, str(pdb))
-    return {"sdf": sdf, "pdb": pdb, "net_charge": inferred if net_charge is None else int(net_charge),
-            "atom_count": molecule.GetNumAtoms()}
+    return {"sdf": sdf, "pdb": pdb, "net_charge": inferred if net_charge is None else int(net_charge), "atom_count": molecule.GetNumAtoms()}
 def build_acpype_command(ligand_mol_path: Path, *, ligand_resname: str = DEFAULT_LIGAND_RESNAME,
                          charge_method: str = "bcc", net_charge: int = 0, acpype_bin: str = "acpype") -> list[str]:
     resname, method = validate_ligand_resname(ligand_resname), str(charge_method).lower()
     if method not in ALLOWED_CHARGE_METHODS:
         raise LigandParameterizationError(f"unsupported charge method: {charge_method}")
-    return [acpype_bin, "-i", str(ligand_mol_path), "-b", resname, "-a", "gaff2",
-            "-c", method, "-n", str(int(net_charge)), "-o", "gmx", "-d"]
+    return [acpype_bin, "-i", str(ligand_mol_path), "-b", resname, "-a", "gaff2", "-c", method, "-n", str(int(net_charge)), "-o", "gmx", "-d"]
 def resolve_amber_env(amber_root: str | Path, base_env: dict | None = None) -> dict:
-    conda = Path(amber_root) / "anaconda3"
+    conda, env = Path(amber_root) / "anaconda3", dict(os.environ if base_env is None else base_env)
     amber = conda / "envs" / "AmberTools"
-    env = dict(os.environ if base_env is None else base_env)
     env.update({"AMBERHOME": str(amber), "OPAL_PREFIX": str(conda),
                 "PATH": f"{amber / 'bin'}{os.pathsep}{conda / 'bin'}{os.pathsep}{env.get('PATH', '')}",
-                "LD_LIBRARY_PATH": (f"{conda / 'lib'}{os.pathsep}{amber / 'lib'}{os.pathsep}"
-                                    f"{env.get('LD_LIBRARY_PATH', '')}"),
+                "LD_LIBRARY_PATH": f"{conda / 'lib'}{os.pathsep}{amber / 'lib'}{os.pathsep}{env.get('LD_LIBRARY_PATH', '')}",
                 "OMPI_MCA_plm": "isolated", "OMPI_MCA_rmaps_base_oversubscribe": "1"})
     return env
-def _run_custom_bundle(work: Path, config: LigandPrepConfig, resname: str, ligand_sdf: Path | None,
-                       custom_itp: Path | None, custom_prm: Path | None, custom_gro: Path | None,
-                       custom_zip: Path | None) -> ParameterizedLigand:
+def _run_custom_bundle(work: Path, config: LigandPrepConfig, resname: str, ligand_sdf: Path | None, custom_itp: Path | None,
+                       custom_prm: Path | None, custom_gro: Path | None, custom_zip: Path | None) -> ParameterizedLigand:
     source_itp, source_prm, source_gro = (Path(p) if p else None for p in (custom_itp, custom_prm, custom_gro))
     extras: list[Path] = []
     referenced: set[Path] = set()
@@ -725,8 +736,7 @@ def _run_custom_bundle(work: Path, config: LigandPrepConfig, resname: str, ligan
     sources = [(source_itp, inline_itp_includes(source_itp, root=root, seen=included))]
     if source_prm is not None and source_prm.resolve() not in included:
         sources.append((source_prm, inline_itp_includes(source_prm, root=root)))
-    atomtypes, clean_itp = _split_atomtypes_texts(
-        sources, out_atomtypes_itp=work / "ligand_atomtypes.itp", out_clean_itp=work / "ligand.itp")
+    atomtypes, clean_itp = _split_atomtypes_texts(sources, out_atomtypes_itp=work / "ligand_atomtypes.itp", out_clean_itp=work / "ligand.itp")
     validate_delivered_topology(clean_itp, atomtypes)
     posre_candidates = [p for p in extras if p.suffix.lower() == ".itp" and "posre" in p.name.lower()]
     posre_candidate = _select_entry(posre_candidates, root=root, section="position_restraints", referenced=referenced)
@@ -739,9 +749,7 @@ def _run_custom_bundle(work: Path, config: LigandPrepConfig, resname: str, ligan
         if not (posre_seen <= included):
             if posre_seen & included:
                 shared = ", ".join(sorted(path.name for path in posre_seen & included))
-                raise LigandParameterizationError(
-                    f"posre ITP shares inlined #include files with the ligand topology ({shared}); "
-                    "delivering both would duplicate position restraints")
+                raise LigandParameterizationError(f"posre ITP shares #include ({shared}); delivering both would duplicate restraints")
             posre = _prepare_delivered_posre(posre_candidate, root=root, out_path=work / "posre_ligand.itp", seen=posre_seen)
     atom_count = _validate_structure_consistency(clean_itp, source_gro)
     itp_resnames = {row[3] for row in _itp_atom_rows(clean_itp) if len(row) >= 4}
@@ -749,22 +757,17 @@ def _run_custom_bundle(work: Path, config: LigandPrepConfig, resname: str, ligan
         raise LigandParameterizationError(f"Mode 0 requires one ligand residue name, got: {sorted(itp_resnames)}")
     actual_resname = validate_ligand_resname(next(iter(itp_resnames)))
     return ParameterizedLigand(
-        mode="custom_itp", ligand_resname=actual_resname, atomtypes_itp=atomtypes, ligand_itp=clean_itp,
-        ligand_gro=source_gro, posre_itp=posre, template_sdf=Path(ligand_sdf) if ligand_sdf else None,
-        net_charge=int(config.net_charge or 0), atom_count=atom_count,
-        charge_method="custom", moleculetype=detect_moleculetype_name(clean_itp))
-def _run_acpype_mode(work: Path, config: LigandPrepConfig, resname: str, ligand_sdf: Path,
-                     runner) -> ParameterizedLigand:
-    prepared = prepare_ligand_with_rdkit(ligand_sdf, work / "prepared", ligand_resname=resname,
-                                         net_charge=config.net_charge, ligand_index=config.ligand_index)
+        mode="custom_itp", ligand_resname=actual_resname, atomtypes_itp=atomtypes, ligand_itp=clean_itp, ligand_gro=source_gro,
+        posre_itp=posre, template_sdf=Path(ligand_sdf) if ligand_sdf else None, net_charge=int(config.net_charge or 0),
+        atom_count=atom_count, charge_method="custom", moleculetype=detect_moleculetype_name(clean_itp))
+def _run_acpype_mode(work: Path, config: LigandPrepConfig, resname: str, ligand_sdf: Path, runner) -> ParameterizedLigand:
+    prepared = prepare_ligand_with_rdkit(ligand_sdf, work / "prepared", ligand_resname=resname, net_charge=config.net_charge, ligand_index=config.ligand_index)
     # A fresh directory per call: stale output from an earlier run can never be picked up.
     acpype_dir = Path(tempfile.mkdtemp(prefix="acpype-", dir=str(work)))
     # acpype names its outputs after -b, so the command and the artefact lookup must share this exact basename.
-    command = build_acpype_command(prepared["pdb"], ligand_resname=resname, charge_method=config.charge_method,
-                                   net_charge=prepared["net_charge"], acpype_bin=config.acpype_bin)
+    command = build_acpype_command(prepared["pdb"], ligand_resname=resname, charge_method=config.charge_method, net_charge=prepared["net_charge"], acpype_bin=config.acpype_bin)
     env = resolve_amber_env(config.amber_root)
-    result = (runner(command, cwd=acpype_dir, env=env) if runner is not None else
-              subprocess.run(command, cwd=str(acpype_dir), env=env, text=True, capture_output=True, check=False))
+    result = runner(command, cwd=acpype_dir, env=env) if runner is not None else subprocess.run(command, cwd=str(acpype_dir), env=env, text=True, capture_output=True, check=False)
     if getattr(result, "returncode", 1) != 0:
         raise LigandParameterizationError("acpype failed: " + str(getattr(result, "stderr", ""))[-1200:])
     output_dir = acpype_dir / f"{resname}.acpype"
@@ -773,18 +776,15 @@ def _run_acpype_mode(work: Path, config: LigandPrepConfig, resname: str, ligand_
     if not gmx_itp.is_file() or not gmx_gro.is_file():
         raise LigandParameterizationError(f"acpype output incomplete: expected {gmx_itp.name} and {gmx_gro.name}")
     validate_itp_security(gmx_itp)
-    atomtypes, ligand_itp = split_atomtypes_from_itp(
-        gmx_itp, out_atomtypes_itp=work / "ligand_atomtypes.itp", out_clean_itp=work / "ligand.itp")
+    atomtypes, ligand_itp = split_atomtypes_from_itp(gmx_itp, out_atomtypes_itp=work / "ligand_atomtypes.itp", out_clean_itp=work / "ligand.itp")
     posre = next((path for path in sorted(output_dir.glob("*.itp")) if "posre" in path.name.lower()), None)
     return ParameterizedLigand(
-        mode="gaff2_acpype", ligand_resname=resname, atomtypes_itp=atomtypes, ligand_itp=ligand_itp,
-        ligand_gro=gmx_gro, posre_itp=posre, template_sdf=prepared["sdf"], net_charge=prepared["net_charge"],
+        mode="gaff2_acpype", ligand_resname=resname, atomtypes_itp=atomtypes, ligand_itp=ligand_itp, ligand_gro=gmx_gro,
+        posre_itp=posre, template_sdf=prepared["sdf"], net_charge=prepared["net_charge"],
         atom_count=_validate_structure_consistency(ligand_itp, gmx_gro, expected_resname=resname),
         charge_method=str(config.charge_method).lower(), moleculetype=detect_moleculetype_name(ligand_itp))
-def parameterize_ligand(work_dir: Path, *, config: LigandPrepConfig, ligand_sdf: Path | None = None,
-                        custom_itp: Path | None = None, custom_prm: Path | None = None,
-                        custom_gro: Path | None = None, custom_zip: Path | None = None,
-                        runner=None) -> ParameterizedLigand:
+def parameterize_ligand(work_dir: Path, *, config: LigandPrepConfig, ligand_sdf: Path | None = None, custom_itp: Path | None = None,
+                        custom_prm: Path | None = None, custom_gro: Path | None = None, custom_zip: Path | None = None, runner=None) -> ParameterizedLigand:
     work = Path(work_dir).resolve()
     work.mkdir(parents=True, exist_ok=True)
     resname, mode = validate_ligand_resname(config.ligand_resname), config.mode

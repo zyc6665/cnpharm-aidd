@@ -98,6 +98,10 @@ def test_constants_are_locked():
     assert ligand.MAX_ZIP_FILES == 32
     assert ligand.MAX_ZIP_UNCOMPRESSED_BYTES == 50 * 1024 * 1024
     assert issubclass(ligand.LigandParameterizationError, ValueError)
+    assert len(ligand.RESERVED_RESNAMES) >= 885
+    for name in ("SO4", "PO4", "NO3", "CO3", "CU", "MN", "BR", "I", "CS", "RB", "SR", "BA", "HG", "CD", "PB",
+                 "LI", "AL", "F", "HEM", "NAD", "NDP", "FAD", "FMN", "ATP", "ADP", "GDP", "GTP", "COA", "SAM"):
+        assert name in ligand.RESERVED_RESNAMES
 
 
 def test_validate_ligand_resname_accepts_and_rejects():
@@ -105,7 +109,9 @@ def test_validate_ligand_resname_accepts_and_rejects():
     assert ligand.validate_ligand_resname("A1") == "A1"
     for bad in ("lig", "LIGAND", "", "ALA", "HIE", "HID", "HIP", "HSD", "HSE", "HSP", "ASH", "GLH",
                 "CYX", "CYM", "LYN", "ARN", "MSE", "SEP", "TPO", "PTR", "ACE", "NME", "SOL", "NA",
-                "HOH", "HHO", "OH2", "OHH", "TIP", "SPC", "H2O"):
+                "HOH", "HHO", "OH2", "OHH", "TIP", "SPC", "H2O", "SO4", "PO4", "NO3", "CO3", "CU",
+                "MN", "BR", "I", "CS", "RB", "SR", "BA", "HG", "CD", "PB", "LI", "AL", "F", "HEM",
+                "NAD", "NDP", "FAD", "FMN", "ATP", "ADP", "GDP", "GTP", "COA", "SAM", "SOD", "POT", "CLA"):
         with pytest.raises(ligand.LigandParameterizationError):
             ligand.validate_ligand_resname(bad)
 
@@ -409,6 +415,45 @@ def test_validate_delivered_topology_rejects_include_leaks_and_wrong_order(tmp_p
     ligand.validate_delivered_topology(clean, atomtypes)
     ligand.validate_delivered_topology(clean, None)  # 没有全局节时只校验配体文件
 
+
+def test_split_atomtypes_deduplicates_identical_atomtypes_across_sources(tmp_path: Path):
+    source = tmp_path / "source.itp"
+    source.write_text(
+        "[ atomtypes ]\nc3 6 12.01 0.0 A 0.34 0.46\n\n"
+        "[ moleculetype ]\nLIG 3\n\n[ atoms ]\n 1 c3 1 LIG C1 1 0.0 12.01\n",
+        encoding="utf-8",
+    )
+    prm = tmp_path / "extra.prm"
+    prm.write_text("[ atomtypes ]\nc3 6 12.0100 0.000 A 0.3400 0.4600\nna 11 22.99 1.0 A 0.33 0.01\n", encoding="utf-8")
+    atomtypes, clean = ligand.split_atomtypes_from_itp(
+        source, out_atomtypes_itp=tmp_path / "atomtypes.itp", out_clean_itp=tmp_path / "clean.itp", extra_prm=prm)
+    assert atomtypes is not None
+    text = atomtypes.read_text(encoding="utf-8")
+    assert text.count("[ atomtypes ]") == 1
+    assert sum(1 for line in text.splitlines() if line.strip().startswith("c3 ")) == 1
+    assert "na 11" in text
+    ligand.validate_delivered_topology(clean, atomtypes)
+
+
+def test_split_atomtypes_rejects_conflicting_atomtypes_across_sources(tmp_path: Path):
+    source = tmp_path / "source.itp"
+    source.write_text("[ atomtypes ]\nc3 6 12.01 0.0 A 0.34 0.46\n[ moleculetype ]\nLIG 3\n", encoding="utf-8")
+    prm = tmp_path / "extra.prm"
+    prm.write_text("[ atomtypes ]\nc3 6 12.01 0.0 A 0.35 0.99\n", encoding="utf-8")
+    with pytest.raises(ligand.LigandParameterizationError, match="conflicting"):
+        ligand.split_atomtypes_from_itp(
+            source, out_atomtypes_itp=tmp_path / "atomtypes.itp", out_clean_itp=tmp_path / "clean.itp", extra_prm=prm)
+
+
+def test_validate_delivered_topology_rejects_duplicate_atomtypes(tmp_path: Path):
+    clean = tmp_path / "ligand.itp"
+    clean.write_text("[ moleculetype ]\nLIG 1\n[ atoms ]\n 1 c3 1 LIG C1 1\n", encoding="utf-8")
+    atomtypes = tmp_path / "atomtypes.itp"
+    atomtypes.write_text("[ atomtypes ]\nc3 6 12.01 0.0 A 0.34 0.46\n[ atomtypes ]\nc3 6 12.01 0.0 A 0.34 0.46\n",
+                         encoding="utf-8")
+    with pytest.raises(ligand.LigandParameterizationError, match="duplicate"):
+        ligand.validate_delivered_topology(clean, atomtypes)
+
     clean.write_text('#include "x.prm"\n[ moleculetype ]\nLIG 1\n', encoding="utf-8")
     with pytest.raises(ligand.LigandParameterizationError, match="still contains #include"):
         ligand.validate_delivered_topology(clean, atomtypes)
@@ -469,8 +514,23 @@ def test_merge_gro_files_normalises_precision_and_renumbers(tmp_path: Path):
     lines = (tmp_path / "complex.gro").read_text(encoding="utf-8").splitlines()
     assert lines[1].strip() == "4"
     assert [line[15:20] for line in lines[2:6]] == ["    1", "    2", "    3", "    4"]
+    assert [line[0:5] for line in lines[2:6]] == ["    1", "    2", "    3", "    4"]
     assert lines[2][20:28] == "   0.100"  # 4 位小数输入统一写回 8.3f
     assert lines[6].split() == ["5.00000", "5.00000", "5.00000"]
+
+
+def test_merge_gro_files_offsets_ligand_resid_past_protein_max(tmp_path: Path):
+    protein = tmp_path / "protein.gro"
+    protein.write_text(_gro_from_atom_lines([
+        f"{1:5d}{'ALA':<5s}{'CA':<5s}{1:5d}   1.000   1.000   1.000",
+        f"{50:5d}{'GLY':<5s}{'CA':<5s}{2:5d}   2.000   2.000   2.000",
+    ]), encoding="utf-8")
+    ligand_gro = tmp_path / "ligand.gro"
+    ligand_gro.write_text(_gro(2, "LIG"), encoding="utf-8")
+    assert ligand.merge_gro_files(protein, ligand_gro, tmp_path / "complex.gro") == 4
+    lines = (tmp_path / "complex.gro").read_text(encoding="utf-8").splitlines()
+    assert [line[0:5] for line in lines[2:6]] == ["    1", "   50", "   51", "   52"]
+    assert [line[15:20] for line in lines[2:6]] == ["    1", "    2", "    3", "    4"]
 
 
 def test_merge_gro_files_parses_nine_and_ten_column_coordinates(tmp_path: Path):
