@@ -58,4 +58,38 @@ describe('useParameterMemory', () => {
     expect(memory.persist({ nsteps: 10000 })).toBe(false)
     spy.mockRestore()
   })
+
+  it('uses structural equality for default comparisons and drops incompatible schema versions', () => {
+    const schemaWithArray = ref<ToolSchema | null>({
+      type: 'object',
+      properties: {
+        targets: { type: 'array', default: ['A', 'B'] },
+        water_model: { type: 'string', enum: ['tip3p', 'spc', 'tip4p'], default: 'tip3p' },
+      },
+    })
+    const slug = ref('array-tool')
+    const memory = useParameterMemory({ scope: 'test', slug, schema: schemaWithArray })
+
+    memory.persist({ targets: ['A', 'B'] as never, water_model: 'tip3p' })
+    const sameDefaults = memory.restore()
+    expect(sameDefaults.diffKeys).toEqual([])
+    expect(sameDefaults.restoredFromMemory).toBe(false)
+
+    // Type mismatch / enum mismatch is filtered out
+    localStorage.setItem(
+      memory.storageKey.value,
+      JSON.stringify({ v: 1, params: { targets: 'not-an-array', water_model: 'bad-water' } })
+    )
+    expect(memory.restore().values).toEqual({ targets: ['A', 'B'], water_model: 'tip3p' })
+
+    // Schema change invalidates old fingerprint
+    const changedSchema: ToolSchema = {
+      type: 'object',
+      properties: {
+        targets: { type: 'array', default: ['A', 'B'] },
+        water_model: { type: 'integer', default: 1 },
+      },
+    }
+    expect(memory.restore(changedSchema).restoredFromMemory).toBe(false)
+  })
 })

@@ -102,11 +102,11 @@ M  V30 BEGIN ATOM
 M  V30 10 O 1.0 2.0 0.0 0 -
 M  V30 CHG=-1
 M  V30 20 C 2.0 3.0 0.0 0
-M  V30 30 N 3.0 1.0 0.0 0 CHG=1
+M  V30 30 N 3.0 1.0 0.0 0 CHG=+1
 M  V30 END ATOM
 M  V30 BEGIN BOND
 M  V30 1 4 10 20
-M  V30 2 2 20 30
+M  V30 2 5 20 30
 M  V30 END BOND
 M  V30 END CTAB
 M  END
@@ -122,7 +122,7 @@ $$$$
     ])
     expect(mol.bonds).toEqual([
       { a: 0, b: 1, order: 1.5 },
-      { a: 1, b: 2, order: 2 },
+      { a: 1, b: 2, order: 1 },
     ])
   })
 

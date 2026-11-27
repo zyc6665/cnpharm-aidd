@@ -1,8 +1,8 @@
-import { defineComponent } from 'vue'
+import { defineComponent, reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const route = { params: {} as Record<string, string>, query: {} as Record<string, string> }
+const route = reactive({ params: {} as Record<string, string>, query: {} as Record<string, string> })
 const replaceMock = vi.fn()
 const pushMock = vi.fn()
 
@@ -123,8 +123,10 @@ const AInputNumberStub = {
     @input="$emit('update:value', $event.target.value === '' ? null : Number($event.target.value))" />`
 }
 
+const mountedWrappers: Array<ReturnType<typeof mount>> = []
+
 function mountPage(props: Record<string, unknown> = {}) {
-  return mount(ScreenConfig, {
+  const wrapper = mount(ScreenConfig, {
     props,
     global: {
       stubs: {
@@ -152,7 +154,15 @@ function mountPage(props: Record<string, unknown> = {}) {
       }
     }
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
+
+afterEach(() => {
+  while (mountedWrappers.length > 0) {
+    mountedWrappers.pop()!.unmount()
+  }
+})
 
 describe('ScreenConfig input sources', () => {
   beforeEach(() => {
@@ -593,5 +603,58 @@ describe('ScreenConfig input sources', () => {
     expect(vm.selectedStructureId).toBe('s1')
     expect(vm.vinaPocketId).toBe('pk2')
     expect(vm.vinaPocketCoordinates).toEqual({ x: 12.5, y: -4.25, z: 8.75 })
+  })
+
+  it('clears prefilled target/pocket handoff and query params when switching projects', async () => {
+    route.query = {
+      project_id: 'p1',
+      target_id: 't1',
+      protein_id: 'pr1',
+      structure_id: 's1',
+      pocket_id: 'pk2',
+      center_x: '12.5',
+      center_y: '-4.25',
+      center_z: '8.75'
+    }
+    replaceMock.mockImplementation(({ query }: { query: Record<string, string> }) => {
+      route.query = query
+    })
+    listProjectsMock.mockResolvedValue({
+      data: { items: [{ id: 'p1', name: 'P1' }, { id: 'p2', name: 'P2' }] }
+    })
+    listTargetsMock.mockImplementation(async (pid: string) => ({
+      data: { items: pid === 'p1' ? [{ id: 't1', name: 'T1' }] : [{ id: 't2', name: 'T2' }] }
+    }))
+    getTargetMock.mockResolvedValue({ data: { id: 't1', proteins: [{ id: 'pr1', name: 'PR1' }] } })
+    listStructuresMock.mockResolvedValue({
+      data: { items: [{ id: 's1', source_type: 'predicted', structure_file_id: 'sf1' }] }
+    })
+    listPocketsMock.mockResolvedValue({
+      data: { items: [{ id: 'pk2', rank: 2, selected: false, center: { x: 12.5, y: -4.25, z: 8.75 } }] }
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      selectedTargetId: string
+      selectedProteinId: string
+      selectedStructureId: string
+      vinaPocketId: string | undefined
+      vinaPocketCoordinates: { x: number | null; y: number | null; z: number | null }
+    }
+    expect(vm.selectedStructureId).toBe('s1')
+    expect(vm.vinaPocketId).toBe('pk2')
+
+    const projectSelect = wrapper.find('[data-testid="screen-config-project-select"]')
+    await projectSelect.setValue('p2')
+    await flushPromises()
+
+    expect(replaceMock).toHaveBeenCalledWith({ query: { project_id: 'p2' } })
+    expect(vm.selectedTargetId).toBe('')
+    expect(vm.selectedProteinId).toBe('')
+    expect(vm.selectedStructureId).toBe('')
+    expect(vm.vinaPocketId).toBeUndefined()
+    expect(vm.vinaPocketCoordinates).toEqual({ x: null, y: null, z: null })
   })
 })

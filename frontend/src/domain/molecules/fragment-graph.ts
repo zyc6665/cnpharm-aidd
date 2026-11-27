@@ -46,22 +46,27 @@ function makeBond(a: number | undefined, b: number | undefined, order: number, a
 function unfoldV3000Lines(rawLines: string[]): string[] {
   const unfolded: string[] = []
   let buffer = ''
+  let padSpace = false
   for (const raw of rawLines) {
-    if (!/^M\s+V30\s/.test(raw)) {
+    if (!/^M\s+V30\s*/.test(raw)) {
       if (buffer) {
-        unfolded.push(buffer)
+        unfolded.push(`M  V30 ${buffer}`)
         buffer = ''
+        padSpace = false
       }
       unfolded.push(raw)
       continue
     }
-    const content = raw.replace(/^M\s+V30\s+/, '').trimEnd()
-    const merged = buffer ? `${buffer} ${content}` : content
-    if (merged.endsWith('-') && !merged.endsWith('--')) {
-      buffer = merged.slice(0, -1).trimEnd()
+    const content = raw.replace(/^M\s+V30\s*/, '').trimEnd()
+    const merged = buffer ? (padSpace ? `${buffer} ${content}` : `${buffer}${content}`) : content
+    if (/(?:^|\s|[^-])-$/.test(merged) && !merged.endsWith('--')) {
+      const withoutHyphen = merged.slice(0, -1)
+      padSpace = /\s$/.test(withoutHyphen)
+      buffer = withoutHyphen.trimEnd()
     } else {
       unfolded.push(`M  V30 ${merged}`)
       buffer = ''
+      padSpace = false
     }
   }
   if (buffer) unfolded.push(`M  V30 ${buffer}`)
@@ -132,9 +137,9 @@ function parseV3000Molfile(lines: string[]): Graph | null {
       if (!Number.isSafeInteger(atomId) || atomId < 1 || atomIds.has(atomId)) return null
       let charge: number | undefined
       for (const token of tokens.slice(6)) {
-        const chgMatch = /^CHG=(-?\d+)$/i.exec(token)
+        const chgMatch = /^CHG=([+-]?\d+)$/i.exec(token)
         if (chgMatch) {
-          const parsed = Number(chgMatch[1])
+          const parsed = Number.parseInt(chgMatch[1] ?? '0', 10)
           if (Number.isInteger(parsed) && parsed !== 0) charge = parsed
         }
       }
@@ -148,7 +153,12 @@ function parseV3000Molfile(lines: string[]): Graph | null {
       const tokens = body.split(/\s+/)
       if (tokens.length < 4) return null
       const type = Number(tokens[1])
-      const order = type === 4 ? 1.5 : type
+      const order =
+        type === 4 || type === 6 || type === 7
+          ? 1.5
+          : type === 5 || type === 8
+            ? 1
+            : type
       const bond = makeBond(atomIds.get(Number(tokens[2])), atomIds.get(Number(tokens[3])), order, atoms.length)
       if (!bond) return null
       bonds.push(bond)

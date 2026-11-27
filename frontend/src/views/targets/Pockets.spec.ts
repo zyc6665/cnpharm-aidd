@@ -65,8 +65,9 @@ describe('Pockets.vue handoff', () => {
           'a-table': true,
           'a-tag': true,
           'a-button': {
+            props: ['disabled', 'loading'],
             emits: ['click'],
-            template: '<button @click="$emit(\'click\', $event)"><slot /></button>',
+            template: '<button :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
           },
         },
       },
@@ -106,5 +107,24 @@ describe('Pockets.vue handoff', () => {
         center_z: '4.75',
       },
     })
+  })
+
+  it('disables handoff actions until structure/protein/target context finishes resolving', async () => {
+    let resolveStructure!: (value: unknown) => void
+    getStructureMock.mockReturnValueOnce(new Promise(resolve => { resolveStructure = resolve }))
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const genBtn = wrapper.get('[data-testid="pockets-handoff-generation"]')
+    const screenBtn = wrapper.get('[data-testid="pockets-handoff-screening"]')
+    expect(genBtn.attributes('disabled')).toBeDefined()
+    expect(screenBtn.attributes('disabled')).toBeDefined()
+
+    resolveStructure({ data: { id: 's-1', protein_id: 'pr-1' } })
+    await flushPromises()
+
+    expect(genBtn.attributes('disabled')).toBeUndefined()
+    expect(screenBtn.attributes('disabled')).toBeUndefined()
   })
 })

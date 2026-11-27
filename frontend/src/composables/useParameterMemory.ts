@@ -41,6 +41,48 @@ function resolveUserId(): string {
   }
 }
 
+const MEMORY_FORMAT_VERSION = 1
+
+function isSameParameterValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, idx) => isSameParameterValue(item, b[idx]))
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keysA = Object.keys(a)
+    const keysB = Object.keys(b)
+    return keysA.length === keysB.length && keysA.every(key => isSameParameterValue(a[key], b[key]))
+  }
+  return false
+}
+
+function matchesSchemaProperty(value: unknown, prop: Record<string, unknown> | undefined): boolean {
+  if (!prop) return true
+  if (Array.isArray(prop.enum) && !prop.enum.some(choice => isSameParameterValue(choice, value))) {
+    return false
+  }
+  const type = Array.isArray(prop.type) ? prop.type[0] : prop.type
+  if (type === 'integer') return typeof value === 'number' && Number.isInteger(value)
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value)
+  if (type === 'boolean') return typeof value === 'boolean'
+  if (type === 'string') return typeof value === 'string'
+  if (type === 'array') return Array.isArray(value)
+  return true
+}
+
+function schemaFingerprint(schema: ToolSchema | null): string {
+  const properties = schema?.properties
+  if (!properties) return 'none'
+  return Object.keys(properties)
+    .sort()
+    .map(key => {
+      const prop = properties[key] as Record<string, unknown> | undefined
+      const type = Array.isArray(prop?.type) ? prop?.type.join('|') : String(prop?.type ?? '')
+      return `${key}:${type}`
+    })
+    .join(',')
+}
+
 /**
  * User-scoped, schema-validated parameter memory persisted in `localStorage`.
  * Prevents cross-user leakage and drops stale keys absent from the active schema.
@@ -61,6 +103,9 @@ export function useParameterMemory(options: UseParameterMemoryOptions) {
       if (omit.has(key)) continue
       if (allowed.size > 0 && !allowed.has(key)) continue
       if (value === undefined) continue
+      if (allowed.size > 0 && !matchesSchemaProperty(value, properties[key] as Record<string, unknown> | undefined)) {
+        continue
+      }
       next[key] = value
     }
     return next
@@ -73,6 +118,8 @@ export function useParameterMemory(options: UseParameterMemoryOptions) {
       if (!raw) return {}
       const parsed = JSON.parse(raw) as unknown
       if (!isPlainObject(parsed)) return {}
+      if (typeof parsed.v === 'number' && parsed.v !== MEMORY_FORMAT_VERSION) return {}
+      if (typeof parsed.schema === 'string' && schema && parsed.schema !== schemaFingerprint(schema)) return {}
       const candidate = isPlainObject(parsed.params) ? (parsed.params as ParameterValues) : (parsed as ParameterValues)
       return schemaOnly(candidate, schema)
     } catch {
@@ -83,7 +130,7 @@ export function useParameterMemory(options: UseParameterMemoryOptions) {
   function restore(schema: ToolSchema | null = options.schema.value): ParameterMemoryResult {
     const defaults = buildDefaultValues(schema, { omit: resolveOmit(options.omitKeys) })
     const restored = readStored(schema)
-    const diffKeys = Object.keys(restored).filter(key => restored[key] !== defaults[key])
+    const diffKeys = Object.keys(restored).filter(key => !isSameParameterValue(restored[key], defaults[key]))
     return {
       defaults,
       restored,
@@ -95,9 +142,13 @@ export function useParameterMemory(options: UseParameterMemoryOptions) {
 
   function persist(values: ParameterValues): boolean {
     if (typeof localStorage === 'undefined') return false
-    const filtered = schemaOnly(values, options.schema.value)
+    const schema = options.schema.value
+    const filtered = schemaOnly(values, schema)
     try {
-      localStorage.setItem(storageKey.value, JSON.stringify({ params: filtered }))
+      localStorage.setItem(
+        storageKey.value,
+        JSON.stringify({ v: MEMORY_FORMAT_VERSION, schema: schemaFingerprint(schema), params: filtered })
+      )
       return true
     } catch {
       return false

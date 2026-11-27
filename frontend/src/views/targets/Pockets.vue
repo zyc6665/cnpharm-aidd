@@ -45,6 +45,8 @@
           <a-button
             size="small"
             type="primary"
+            :loading="contextLoading"
+            :disabled="contextLoading || !contextReady"
             data-testid="pockets-handoff-generation"
             @click="goToGeneration(selectedPocket)"
           >
@@ -52,6 +54,8 @@
           </a-button>
           <a-button
             size="small"
+            :loading="contextLoading"
+            :disabled="contextLoading || !contextReady"
             data-testid="pockets-handoff-screening"
             @click="goToScreening(selectedPocket)"
           >
@@ -196,14 +200,19 @@
     }
   }
 
+  const contextLoading = ref(false)
   const resolvedContext = ref<{ projectId: string; targetId: string; proteinId: string }>({
     projectId: '',
     targetId: '',
     proteinId: ''
   })
+  const contextReady = computed(() =>
+    Boolean(resolvedContext.value.projectId && resolvedContext.value.targetId && resolvedContext.value.proteinId)
+  )
 
   async function resolvePocketContext(): Promise<void> {
     if (!structureId.value) return
+    contextLoading.value = true
     try {
       const { data: structure } = await getStructure(structureId.value)
       const proteinId = structure.protein_id ?? ''
@@ -217,6 +226,8 @@
       resolvedContext.value.projectId = target.project_id ?? ''
     } catch {
       // 上下文反查失败不阻塞口袋表格与残基查看
+    } finally {
+      contextLoading.value = false
     }
   }
 

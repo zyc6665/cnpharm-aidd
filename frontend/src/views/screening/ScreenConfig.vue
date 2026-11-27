@@ -113,6 +113,13 @@ function handleProjectChange(value: unknown): void {
   delete query.file_id
   delete query.filename
   delete query.candidate_set_id
+  delete query.target_id
+  delete query.protein_id
+  delete query.structure_id
+  delete query.pocket_id
+  delete query.center_x
+  delete query.center_y
+  delete query.center_z
   if (next) query.project_id = next
   else delete query.project_id
   if (next !== projectId.value) {
@@ -123,6 +130,12 @@ function handleProjectChange(value: unknown): void {
     appliedHandoffKey = `${String(query.candidate_set_id ?? '')}|${String(query.file_id ?? '')}|${String(
       query.filename ?? ''
     )}|${next}`
+    appliedTargetHandoffKey = `${next}|||||`
+    pendingPocketHandoff = null
+    targetHandoffSequence.invalidate()
+    clearVinaPocket()
+    vinaPocketOptions.value = []
+    dockPocketPanelRef.value?.clearCoordinates()
   }
   void router.replace({ query })
 }
@@ -158,6 +171,11 @@ watch(
       candidateSetId.value = ''
       ligandSource.value = 'upload'
       appliedHandoffKey = getHandoffKey()
+      pendingPocketHandoff = null
+      targetHandoffSequence.invalidate()
+      clearVinaPocket()
+      vinaPocketOptions.value = []
+      dockPocketPanelRef.value?.clearCoordinates()
     }
     selectedTargetId.value = ''
     selectedProteinId.value = ''
@@ -273,8 +291,12 @@ async function applyTargetQueryHandoff(): Promise<void> {
     pendingPocketHandoff = structureId ? { structureId, pocketId, center } : null
     applyingTargetHandoff = true
     try {
-      if (projectId.value && !targets.value.length) await loadTargets()
+      await loadTargets()
       if (!targetHandoffSequence.isCurrent(seq)) return
+      if (targetId && !targets.value.some(item => item.id === targetId)) {
+        pendingPocketHandoff = null
+        return
+      }
       if (targetId) {
         selectedTargetId.value = targetId
         try {
