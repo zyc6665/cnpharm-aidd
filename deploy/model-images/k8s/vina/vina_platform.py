@@ -26,6 +26,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -33,6 +34,21 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 FEATURE_FAMILIES = ("Donor", "Acceptor", "Aromatic", "Hydrophobe")
+
+# 结晶水与溶剂：进受体前必须清掉，否则 mk_prepare_receptor 会把它们当成可配位
+# 残基，Vina 网格里也会多出一堆占据点，盒子中心/打分都被带偏。
+WATER_RESIDUES = frozenset({"HOH", "WAT", "DOD", "TIP", "TIP3", "SOL"})
+
+# 常见金属离子：金属位点往往是结合口袋的一部分，删掉会让口袋失去静电特征，
+# 所以按 HETATM 保留。
+METAL_IONS = frozenset(
+    {
+        "LI", "NA", "K", "RB", "CS", "MG", "CA", "SR", "BA",
+        "MN", "FE", "FE2", "CO", "NI", "CU", "CU1", "ZN", "CD", "HG",
+        "AL", "GA", "IN", "TL", "PB", "MO", "W", "PT", "AU", "AG",
+        "CL", "BR", "IOD",
+    }
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -86,12 +102,57 @@ def pick_input(
     return None
 
 
+def strip_receptor_heterogens(pdb: Path, target: Path) -> Path:
+    """清理受体 PDB：去掉结晶水与非金属有机共晶配体。
+
+    保留规则（按优先级）：
+    1. 所有 ``ATOM`` / ``TER`` / ``END`` —— 标准蛋白链；
+    2. ``HETATM`` 里残基名属于 :data:`METAL_IONS` 的金属离子；
+    3. 聚合物型 ``HETATM``（如 MSE、SEP 等修饰残基）——判据是残基内有 ``CA``
+       原子，这样不会把蛋白自带的修饰残基当成配体删掉。
+
+    其余 ``HETATM``（缓冲液、去污剂、共晶小分子、辅因子有机骨架）一律删除：
+    它们是「蛋白结构里恰好带着的分子」，不是本次对接的配体，留在受体里会让
+    Vina 的网格占据和静电项都在描述错误的对象。非 PDB 输入（CIF）原样返回。
+    """
+    if pdb.suffix.lower() != ".pdb":
+        return pdb
+
+    lines = pdb.read_text(encoding="utf-8", errors="ignore").splitlines()
+    polymer_heter: set[tuple[str, str, str]] = set()
+    for line in lines:
+        if not line.startswith("HETATM"):
+            continue
+        resname = line[17:20].strip().upper()
+        atom_name = line[12:16].strip().upper()
+        if resname in WATER_RESIDUES:
+            continue
+        if atom_name == "CA":
+            polymer_heter.add((line[21:22], line[22:26].strip(), line[26:27]))
+
+    kept: List[str] = []
+    for line in lines:
+        if line.startswith("HETATM"):
+            resname = line[17:20].strip().upper()
+            residue_key = (line[21:22], line[22:26].strip(), line[26:27])
+            if resname in WATER_RESIDUES:
+                continue
+            if resname not in METAL_IONS and residue_key not in polymer_heter:
+                continue
+        kept.append(line)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(kept).rstrip("\n") + "\n", encoding="utf-8")
+    return target
+
+
 def prepare_receptor(pdb: Path, work: Path) -> Path:
+    receptor_input = strip_receptor_heterogens(pdb, work / "receptor_input.pdb")
     subprocess.run(
         [
             "mk_prepare_receptor.py",
             "--read_pdb",
-            str(pdb),
+            str(receptor_input),
             "-o",
             str(work / "receptor"),
             "-p",
@@ -180,6 +241,26 @@ def read_smiles_rows(path: Path) -> List[Tuple[str, str]]:
     return rows
 
 
+def optimize_geometry(mol, max_iters: int = 200) -> bool:
+    """对 ETKDG 嵌入的构象做力场优化，返回是否成功。
+
+    ETKDG 只保证「键长键角像样、不打架」，能量上经常还停在局部高点：芳环翘曲、
+    氢键给体朝向不合理。直接拿这种构象去生成 PDBQT，Vina 打分会被初始几何
+    系统性带偏。MMFF94 参数覆盖不足时（金属配位、罕见杂环）退回 UFF。
+    """
+    from rdkit.Chem import AllChem
+
+    try:
+        if AllChem.MMFFHasAllMoleculeParams(mol):
+            AllChem.MMFFOptimizeMolecule(mol, maxIters=max_iters)
+        else:
+            AllChem.UFFOptimizeMolecule(mol, maxIters=max_iters)
+    except Exception as exc:  # noqa: BLE001 - 几何优化失败不应阻断整批对接
+        print(f"ligand geometry optimization skipped: {exc}", file=sys.stderr, flush=True)
+        return False
+    return True
+
+
 def ensure_3d(mol, seed: int):
     from rdkit import Chem
     from rdkit.Chem import AllChem
@@ -190,6 +271,7 @@ def ensure_3d(mol, seed: int):
         params.randomSeed = int(seed)
         if AllChem.EmbedMolecule(mol, params) != 0:
             return None
+        optimize_geometry(mol)
     return mol
 
 
@@ -253,10 +335,6 @@ def centroid_of_mol(mol) -> List[float]:
     return [sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs)]
 
 
-def box_for(mol, box_size: float, center: Optional[List[float]] = None):
-    return center or centroid_of_mol(mol), [box_size, box_size, box_size]
-
-
 def protein_center(pdb: Path) -> Optional[List[float]]:
     points: List[Tuple[float, float, float]] = []
     try:
@@ -314,6 +392,46 @@ def pocket_center(path: Optional[Path]) -> Optional[List[float]]:
                 sum(point[2] for point in points) / len(points),
             ]
     return None
+
+
+def _finite_float(value: Any) -> Optional[float]:
+    """把参数值转成有限浮点数；空串 / None / NaN / inf 一律视为「没提供」。"""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def resolve_docking_center(
+    run_params: dict[str, Any], pocket_file: Optional[Path]
+) -> List[float]:
+    """确定对接盒中心的唯一入口；没有可靠来源时直接失败。
+
+    历史实现有两条危险的隐性回退：盒子中心取「配体自身质心」或「全蛋白几何
+    中心」。两者本质都是盲对接——盒子落在配体原来待的位置或蛋白质心，跑得完、
+    也出分数，但分数描述的是一个生物学上不存在的位点，且没有任何报错提示。
+    现在只认两个来源：显式 ``center_x/center_y/center_z``，或口袋文件坐标；
+    两者都没有就 ``SystemExit``，让上游补参数而不是产出假阳性。
+    """
+    explicit = [
+        _finite_float(run_params.get("center_x")),
+        _finite_float(run_params.get("center_y")),
+        _finite_float(run_params.get("center_z")),
+    ]
+    if all(value is not None for value in explicit):
+        return [float(value) for value in explicit]
+
+    center = pocket_center(pocket_file)
+    if center is not None:
+        return center
+
+    raise SystemExit(
+        "docking box center is undefined: provide center_x/center_y/center_z "
+        "or a binding pocket file with coordinates"
+    )
 
 
 def read_pose_scores(pose_pdbqt: Path) -> list[tuple[float, float, float]]:
@@ -403,11 +521,12 @@ def main() -> int:
     if protein is None:
         raise SystemExit("no protein input found")
     pocket_file = pick_input(files, input_dir, ("pocket",), (".pdb", ".mol2", ".sdf"))
-    fixed_center = pocket_center(pocket_file)
+    # 在准备受体 / 读配体之前先确定中心：缺中心属于输入错误，应该立刻失败，
+    # 而不是先花几分钟准备受体、最后才发现盒子无处安放。
+    docking_center = resolve_docking_center(run_params, pocket_file)
 
     receptor_pdbqt = prepare_receptor(protein, work)
     ligands = load_ligands(files, input_dir, seed, work)
-    protein_fixed_center = fixed_center or (protein_center(protein) if len(ligands) > 1 else None)
 
     rows: List[Dict[str, Any]] = []
     pose_files: Dict[str, Path] = {}
@@ -440,8 +559,9 @@ def main() -> int:
             continue
 
         try:
-            prepared_mol, ligand_pdbqt = prepare_ligand(molecule, work, index, seed)
-            center, size = box_for(prepared_mol, box_size, protein_fixed_center)
+            _, ligand_pdbqt = prepare_ligand(molecule, work, index, seed)
+            center = docking_center
+            size = [box_size, box_size, box_size]
             vina = Vina(
                 sf_name="vina",
                 cpu=max(1, os.cpu_count() or 1),
@@ -551,6 +671,7 @@ def main() -> int:
             "generated_by": "autodock-vina",
             "protein_file": protein.name,
             "pocket_file": pocket_file.name if pocket_file else None,
+            "docking_center": docking_center,
             "box_size": box_size,
             "exhaustiveness": exhaustiveness,
             "n_poses": n_poses,
