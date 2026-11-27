@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -16,6 +16,8 @@ import PocketCoordinatePanel, {
   type PocketTestIds
 } from '@/components/design/PocketCoordinatePanel.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
+import { useParameterMemory } from '@/composables/useParameterMemory'
+import type { ToolSchema } from '@/types/models'
 import { SCREENING_PARAM_DEFAULTS, SCREENING_PARAM_RANGES, VINA_TOOL_SLUG } from '@/types/screening'
 import { LDDM_GENERATION_TOOL_SLUG } from '@/types/design'
 import type { ScreeningParams } from '@/types/screening'
@@ -170,6 +172,7 @@ watch(
 )
 
 watch(selectedTargetId, async id => {
+  if (applyingTargetHandoff) return
   const seq = requestTrackers.proteins.next()
   pocketFile.value = null
   pocketName.value = ''
@@ -183,6 +186,7 @@ watch(selectedTargetId, async id => {
 })
 
 watch(selectedProteinId, async id => {
+  if (applyingTargetHandoff) return
   const seq = requestTrackers.structures.next()
   pocketFile.value = null
   pocketName.value = ''
@@ -233,8 +237,95 @@ function applyQueryHandoff(): void {
     applyingHandoff = false
   }
 }
-watch(() => route.query, applyQueryHandoff)
-onMounted(() => { applyQueryHandoff(); void loadProjects() })
+let applyingTargetHandoff = false
+let appliedTargetHandoffKey = ''
+const targetHandoffSequence = useRequestSequence()
+let pendingPocketHandoff: {
+  structureId: string
+  pocketId: string
+  center: { x: number; y: number; z: number } | null
+} | null = null
+
+function parseQueryCoord(value: unknown): number | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+async function applyTargetQueryHandoff(): Promise<void> {
+  const targetId = typeof route.query.target_id === 'string' ? route.query.target_id.trim() : ''
+  const proteinId = typeof route.query.protein_id === 'string' ? route.query.protein_id.trim() : ''
+  const structureId = typeof route.query.structure_id === 'string' ? route.query.structure_id.trim() : ''
+  const pocketId = typeof route.query.pocket_id === 'string' ? route.query.pocket_id.trim() : ''
+  const cx = parseQueryCoord(route.query.center_x)
+  const cy = parseQueryCoord(route.query.center_y)
+  const cz = parseQueryCoord(route.query.center_z)
+  const center = cx !== null && cy !== null && cz !== null ? { x: cx, y: cy, z: cz } : null
+  const key = `${projectId.value}|${targetId}|${proteinId}|${structureId}|${pocketId}|${center ? `${cx},${cy},${cz}` : ''}`
+  if (key === appliedTargetHandoffKey) return
+  if (!targetId && !proteinId && !structureId && !pocketId && !center) return
+  appliedTargetHandoffKey = key
+
+  const seq = targetHandoffSequence.next()
+  if (targetId || proteinId || structureId || pocketId) {
+    receptorSource.value = 'project'
+    pendingPocketHandoff = structureId ? { structureId, pocketId, center } : null
+    applyingTargetHandoff = true
+    try {
+      if (projectId.value && !targets.value.length) await loadTargets()
+      if (!targetHandoffSequence.isCurrent(seq)) return
+      if (targetId) {
+        selectedTargetId.value = targetId
+        try {
+          const response = await getTarget(targetId)
+          if (!targetHandoffSequence.isCurrent(seq)) return
+          proteins.value = response.data.proteins ?? []
+        } catch {
+          proteins.value = []
+        }
+      }
+      if (proteinId) {
+        selectedProteinId.value = proteinId
+        try {
+          const response = await listStructures(proteinId)
+          if (!targetHandoffSequence.isCurrent(seq)) return
+          structures.value = response.data.items ?? []
+        } catch {
+          structures.value = []
+        }
+      }
+      if (structureId) {
+        selectedStructureId.value = structureId
+      }
+      await nextTick()
+    } finally {
+      applyingTargetHandoff = false
+    }
+    return
+  }
+
+  if (center) {
+    vinaPocketId.value = undefined
+    vinaPocketCoordinates.x = center.x
+    vinaPocketCoordinates.y = center.y
+    vinaPocketCoordinates.z = center.z
+    await nextTick()
+    if (isLddmDock.value) {
+      dockPocketPanelRef.value?.setCoordinates(center)
+    }
+  }
+}
+
+watch(() => route.query, () => {
+  applyQueryHandoff()
+  void nextTick().then(() => applyTargetQueryHandoff())
+})
+onMounted(() => {
+  applyQueryHandoff()
+  void applyTargetQueryHandoff()
+  void loadProjects()
+})
 
 const receptorFile = ref<File | null>(null)
 const receptorName = ref('')
@@ -294,10 +385,44 @@ watch([receptorSource, selectedStructureId, receptorFile], async ([source, struc
   if (source !== 'project' || !structureId) return
   try {
     const { data } = await listPockets(structureId)
-    if (vinaPocketSequence.isCurrent(seq)) vinaPocketOptions.value = data.items.filter(pocket =>
-      pocket.center && vinaPocketAxes.every(axis => canEncodePocketCoordinate(pocket.center?.[axis] ?? null))
-    )
+    if (vinaPocketSequence.isCurrent(seq)) {
+      vinaPocketOptions.value = data.items.filter(pocket =>
+        pocket.center && vinaPocketAxes.every(axis => canEncodePocketCoordinate(pocket.center?.[axis] ?? null))
+      )
+    }
   } catch { /* Manual coordinates and file upload remain available. */ }
+  if (!vinaPocketSequence.isCurrent(seq)) return
+  if (pendingPocketHandoff && pendingPocketHandoff.structureId === structureId) {
+    const handoff = pendingPocketHandoff
+    pendingPocketHandoff = null
+    const matched = handoff.pocketId ? vinaPocketOptions.value.find(p => p.id === handoff.pocketId) : undefined
+    const targetCenter = matched?.center ?? handoff.center
+    if (matched) {
+      applyVinaPocket(matched.id)
+    } else if (handoff.center) {
+      vinaPocketId.value = handoff.pocketId || undefined
+      vinaPocketCoordinates.x = handoff.center.x
+      vinaPocketCoordinates.y = handoff.center.y
+      vinaPocketCoordinates.z = handoff.center.z
+    }
+    if (
+      targetCenter &&
+      targetCenter.x !== null &&
+      targetCenter.y !== null &&
+      targetCenter.z !== null &&
+      Number.isFinite(targetCenter.x) &&
+      Number.isFinite(targetCenter.y) &&
+      Number.isFinite(targetCenter.z) &&
+      isLddmDock.value
+    ) {
+      await nextTick()
+      dockPocketPanelRef.value?.setCoordinates({
+        x: targetCenter.x,
+        y: targetCenter.y,
+        z: targetCenter.z
+      })
+    }
+  }
 })
 
 function vinaPocketInput(): File | null {
@@ -393,16 +518,64 @@ const lddmParameterErrors = computed(() =>
   isLddmDock.value ? validateParameters(lddmSchema.value, lddmEffectiveParams.value) : []
 )
 
+const lddmMemory = useParameterMemory({
+  scope: 'screen-lddm',
+  slug: selectedSlug,
+  schema: lddmSchema,
+  omitKeys: LDDM_DOCK_HIDDEN_KEYS
+})
+
 watch(
   lddmSchema,
   schema => {
     if (!schema) return
-    lddmParams.value = buildDefaultValues(schema, { omit: LDDM_DOCK_HIDDEN_KEYS })
+    lddmParams.value = lddmMemory.restore(schema).values
   },
   { immediate: true }
 )
 
+const vinaMemorySchema = computed<ToolSchema>(() => ({
+  type: 'object',
+  properties: Object.fromEntries(
+    (Object.keys(SCREENING_PARAM_DEFAULTS) as Array<keyof ScreeningParams>).map(key => [
+      key,
+      {
+        type: key === 'docking_score_cutoff' ? 'number' : 'integer',
+        default: SCREENING_PARAM_DEFAULTS[key],
+        minimum: SCREENING_PARAM_RANGES[key].min,
+        maximum: SCREENING_PARAM_RANGES[key].max
+      }
+    ])
+  )
+}))
+
+const vinaMemory = useParameterMemory({
+  scope: 'screen-vina',
+  slug: selectedSlug,
+  schema: vinaMemorySchema
+})
+
 const params = reactive<ScreeningParams>({ ...SCREENING_PARAM_DEFAULTS })
+
+function restoreVinaParams(): void {
+  const { values } = vinaMemory.restore(vinaMemorySchema.value)
+  for (const key of Object.keys(SCREENING_PARAM_DEFAULTS) as Array<keyof ScreeningParams>) {
+    const candidate = values[key]
+    const range = SCREENING_PARAM_RANGES[key]
+    params[key] =
+      typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= range.min && candidate <= range.max
+        ? candidate
+        : SCREENING_PARAM_DEFAULTS[key]
+  }
+}
+
+watch(
+  () => selectedSlug.value,
+  () => {
+    if (!isLddmDock.value) restoreVinaParams()
+  },
+  { immediate: true }
+)
 const submitting = ref(false)
 const formError = ref('')
 
@@ -690,6 +863,7 @@ async function handleSubmit(): Promise<void> {
         },
         standardInputUploads: uploads
       })
+      lddmMemory.persist(lddmParams.value)
       message.success(t('screening.config.success'))
       await router.push(`/tasks/${task.id}/results`)
     } catch (error) {
@@ -744,6 +918,7 @@ async function handleSubmit(): Promise<void> {
     else uploads.ligand_sdf = (await uploadFile(await buildSdfPayload(snapshot.files))).data.id
     if (snapshot.pocketFile) uploads.binding_pocket = (await uploadFile(snapshot.pocketFile)).data.id
     const task = await submitToolTask({ toolSlug: snapshot.slug, projectId: snapshot.projectId || undefined, name: `${t('screening.config.screeningTaskName')} ${new Date().toISOString().slice(0, 10)}`, params: snapshot.params, standardInputUploads: uploads })
+    vinaMemory.persist({ ...snapshot.params })
     message.success(t('screening.config.success'))
     await router.push(`/tasks/${task.id}/screening`)
   } catch (error) {

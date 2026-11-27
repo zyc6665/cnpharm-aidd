@@ -1166,7 +1166,9 @@ export default {
       modelChoiceAllScpdb: 'All SCPDB',
       device: 'Compute device',
       deviceAuto: 'Auto',
-      backToStructure: 'Back to structure details'
+      backToStructure: 'Back to structure details',
+      useForGeneration: 'Use for molecule generation',
+      useForScreening: 'Use for virtual screening'
     },
     residues: {
       title: 'Pocket residues',

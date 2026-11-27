@@ -187,6 +187,10 @@ const props = withDefaults(
     defaultProjectId?: string
     /** 外部受控项目 ID（隐藏内置项目选择器时与外层统一项目同步）。 */
     projectId?: string
+    initialTargetId?: string
+    initialProteinId?: string
+    initialStructureId?: string
+    initialPocketId?: string
     hideProjectSelect?: boolean
     hidePocketSelect?: boolean
     /** 是否在口袋选定后展示紧凑的三维预览（默认关闭，保持既有调用方行为）。 */
@@ -195,6 +199,10 @@ const props = withDefaults(
   {
     defaultProjectId: '',
     projectId: '',
+    initialTargetId: '',
+    initialProteinId: '',
+    initialStructureId: '',
+    initialPocketId: '',
     hideProjectSelect: false,
     hidePocketSelect: false,
     showPreview: false
@@ -344,7 +352,9 @@ const structureSequence = useRequestSequence()
 const pocketSequence = useRequestSequence()
 const predictedSequence = useRequestSequence()
 const relaySequence = useRequestSequence()
+const prefillSequence = useRequestSequence()
 const error = ref('')
+let appliedPrefillKey = ''
 
 const currentStep = computed(() => {
   const stepIndex = !selectedProject.value
@@ -487,7 +497,13 @@ async function handleProteinChange(value: unknown): Promise<void> {
 
 async function loadPocketsForStructure(structureId: string): Promise<void> {
   const seq = pocketSequence.next(); loadingPockets.value = true; pockets.value = []; selectedPocket.value = undefined
-  try { const all = await listStructurePockets(structureId); if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) pockets.value = all.filter(pocket => pocket.selected) }
+  try {
+    const all = await listStructurePockets(structureId)
+    if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) {
+      const targetPocketId = props.initialPocketId
+      pockets.value = all.filter(pocket => pocket.selected || (Boolean(targetPocketId) && pocket.id === targetPocketId))
+    }
+  }
   catch { if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) error.value = t('design.pocket.loadFailed') }
   finally { if (pocketSequence.isCurrent(seq) && selectedStructure.value === structureId) loadingPockets.value = false }
 }
@@ -531,21 +547,71 @@ function handlePocketChange(value: unknown): void {
   emitPocketSelection(pocket)
 }
 
+function hasInitialHierarchy(): boolean {
+  return Boolean(props.initialTargetId || props.initialProteinId || props.initialStructureId || props.initialPocketId)
+}
+
+function prefillKeyFor(projectId: string): string {
+  return `${projectId}|${props.initialTargetId}|${props.initialProteinId}|${props.initialStructureId}|${props.initialPocketId}`
+}
+
+async function applyInitialPrefill(projectId: string): Promise<void> {
+  const key = prefillKeyFor(projectId)
+  if (!projectId || !hasInitialHierarchy() || key === appliedPrefillKey) return
+  appliedPrefillKey = key
+  const seq = prefillSequence.next()
+  selectedProject.value = projectId
+  await handleProjectChange(projectId)
+  if (!prefillSequence.isCurrent(seq) || selectedProject.value !== projectId) return
+  if (!props.initialTargetId || !targets.value.some(item => item.id === props.initialTargetId)) return
+  selectedTarget.value = props.initialTargetId
+  await handleTargetChange(props.initialTargetId)
+  if (!prefillSequence.isCurrent(seq) || selectedTarget.value !== props.initialTargetId) return
+  if (!props.initialProteinId || !proteins.value.some(item => item.id === props.initialProteinId)) return
+  selectedProtein.value = props.initialProteinId
+  await handleProteinChange(props.initialProteinId)
+  if (!prefillSequence.isCurrent(seq) || selectedProtein.value !== props.initialProteinId) return
+  if (!props.initialStructureId || !structures.value.some(item => item.id === props.initialStructureId)) return
+  selectedStructure.value = props.initialStructureId
+  await handleStructureChange(props.initialStructureId)
+  if (!prefillSequence.isCurrent(seq) || selectedStructure.value !== props.initialStructureId) return
+  if (props.initialPocketId && pockets.value.some(item => item.id === props.initialPocketId)) {
+    selectedPocket.value = props.initialPocketId
+    handlePocketChange(props.initialPocketId)
+  }
+}
+
 watch(
   () => props.projectId,
   nextProjectId => {
     if (!props.hideProjectSelect) return
     const normalized = nextProjectId || undefined
+    if (normalized && hasInitialHierarchy() && prefillKeyFor(normalized) !== appliedPrefillKey) {
+      void applyInitialPrefill(normalized)
+      return
+    }
     if (normalized === selectedProject.value) return
     selectedProject.value = normalized
     void handleProjectChange(normalized)
   }
 )
 
+watch(
+  [() => props.initialTargetId, () => props.initialProteinId, () => props.initialStructureId, () => props.initialPocketId],
+  () => {
+    const project = selectedProject.value || props.projectId || props.defaultProjectId
+    if (project && hasInitialHierarchy()) {
+      void applyInitialPrefill(project)
+    }
+  }
+)
+
 onMounted(async () => {
   await loadProjects()
   const initialProject = props.projectId || props.defaultProjectId
-  if (!selectedProject.value && initialProject) {
+  if (initialProject && hasInitialHierarchy()) {
+    await applyInitialPrefill(initialProject)
+  } else if (!selectedProject.value && initialProject) {
     selectedProject.value = initialProject
     await handleProjectChange(initialProject)
   }

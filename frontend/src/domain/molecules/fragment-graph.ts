@@ -43,8 +43,123 @@ function makeBond(a: number | undefined, b: number | undefined, order: number, a
   return { a, b, order }
 }
 
+function unfoldV3000Lines(rawLines: string[]): string[] {
+  const unfolded: string[] = []
+  let buffer = ''
+  for (const raw of rawLines) {
+    if (!/^M\s+V30\s/.test(raw)) {
+      if (buffer) {
+        unfolded.push(buffer)
+        buffer = ''
+      }
+      unfolded.push(raw)
+      continue
+    }
+    const content = raw.replace(/^M\s+V30\s+/, '').trimEnd()
+    const merged = buffer ? `${buffer} ${content}` : content
+    if (merged.endsWith('-') && !merged.endsWith('--')) {
+      buffer = merged.slice(0, -1).trimEnd()
+    } else {
+      unfolded.push(`M  V30 ${merged}`)
+      buffer = ''
+    }
+  }
+  if (buffer) unfolded.push(`M  V30 ${buffer}`)
+  return unfolded
+}
+
+function parseV3000Molfile(lines: string[]): Graph | null {
+  const unfolded = unfoldV3000Lines(lines.slice(4))
+  let inCtab = false
+  let inAtom = false
+  let inBond = false
+  let expectedAtoms: number | null = null
+  let expectedBonds: number | null = null
+  const atoms: FragmentAtom[] = []
+  const bonds: FragmentBond[] = []
+  const atomIds = new Map<number, number>()
+
+  for (const line of unfolded) {
+    if (/^M\s+END\s*$/.test(line)) {
+      if (!inCtab && atoms.length > 0 && (expectedAtoms === null || atoms.length === expectedAtoms) &&
+          (expectedBonds === null || bonds.length === expectedBonds)) {
+        return { atoms, bonds }
+      }
+      return null
+    }
+    if (!/^M\s+V30\s+/.test(line)) continue
+    const body = line.replace(/^M\s+V30\s+/, '').trim()
+    if (body === 'BEGIN CTAB') {
+      inCtab = true
+      continue
+    }
+    if (body === 'END CTAB') {
+      inCtab = false
+      inAtom = false
+      inBond = false
+      continue
+    }
+    if (!inCtab) continue
+    if (body.startsWith('COUNTS ')) {
+      const parts = body.split(/\s+/)
+      const nAtoms = Number(parts[1])
+      const nBonds = Number(parts[2])
+      if (!Number.isInteger(nAtoms) || nAtoms < 1 || !Number.isInteger(nBonds) || nBonds < 0) return null
+      expectedAtoms = nAtoms
+      expectedBonds = nBonds
+      continue
+    }
+    if (body === 'BEGIN ATOM') {
+      inAtom = true
+      continue
+    }
+    if (body === 'END ATOM') {
+      inAtom = false
+      continue
+    }
+    if (body === 'BEGIN BOND') {
+      inBond = true
+      continue
+    }
+    if (body === 'END BOND') {
+      inBond = false
+      continue
+    }
+    if (inAtom) {
+      const tokens = body.split(/\s+/)
+      if (tokens.length < 6) return null
+      const atomId = Number(tokens[0])
+      if (!Number.isSafeInteger(atomId) || atomId < 1 || atomIds.has(atomId)) return null
+      let charge: number | undefined
+      for (const token of tokens.slice(6)) {
+        const chgMatch = /^CHG=(-?\d+)$/i.exec(token)
+        if (chgMatch) {
+          const parsed = Number(chgMatch[1])
+          if (Number.isInteger(parsed) && parsed !== 0) charge = parsed
+        }
+      }
+      const atom = makeAtom(atoms.length, tokens[1] ?? '', [tokens[2] ?? '', tokens[3] ?? '', tokens[4] ?? ''], charge)
+      if (!atom) return null
+      atomIds.set(atomId, atom.index)
+      atoms.push(atom)
+      continue
+    }
+    if (inBond) {
+      const tokens = body.split(/\s+/)
+      if (tokens.length < 4) return null
+      const type = Number(tokens[1])
+      const order = type === 4 ? 1.5 : type
+      const bond = makeBond(atomIds.get(Number(tokens[2])), atomIds.get(Number(tokens[3])), order, atoms.length)
+      if (!bond) return null
+      bonds.push(bond)
+    }
+  }
+  return null
+}
+
 function parseMolfile(lines: string[]): Graph | null {
   const counts = lines[3] ?? ''
+  if (/V3000\s*$/.test(counts)) return parseV3000Molfile(lines)
   if (!/V2000\s*$/.test(counts)) return null
   const atomCount = Number(counts.slice(0, 3))
   const bondCount = Number(counts.slice(3, 6))

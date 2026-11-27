@@ -12,6 +12,7 @@ const exportCandidateSetMock = vi.fn()
 const listTargetsMock = vi.fn()
 const getTargetMock = vi.fn()
 const listStructuresMock = vi.fn()
+const listPocketsMock = vi.fn().mockResolvedValue({ data: { items: [] } })
 const submitToolTaskMock = vi.fn()
 const uploadFileMock = vi.fn()
 
@@ -40,7 +41,8 @@ vi.mock('@/api/compounds', () => ({
 vi.mock('@/api/targets', () => ({
   listTargets: (...args: unknown[]) => listTargetsMock(...args),
   getTarget: (...args: unknown[]) => getTargetMock(...args),
-  listStructures: (...args: unknown[]) => listStructuresMock(...args)
+  listStructures: (...args: unknown[]) => listStructuresMock(...args),
+  listPockets: (...args: unknown[]) => listPocketsMock(...args)
 }))
 
 vi.mock('@/api/screening', () => ({
@@ -154,8 +156,11 @@ function mountPage(props: Record<string, unknown> = {}) {
 
 describe('ScreenConfig input sources', () => {
   beforeEach(() => {
+    localStorage.clear()
     route.params = {}
     route.query = {}
+    listPocketsMock.mockReset()
+    listPocketsMock.mockResolvedValue({ data: { items: [] } })
     if (mockModelState.selectedSlugRef) mockModelState.selectedSlugRef.value = 'autodock-vina-docking'
     if (mockModelState.selectedOptionRef) mockModelState.selectedOptionRef.value = null
     replaceMock.mockReset()
@@ -506,5 +511,87 @@ describe('ScreenConfig input sources', () => {
         pocket: 'file-uploaded'
       }
     }))
+  })
+
+  it('persists Vina screening parameters in user-scoped localStorage and restores on remount', async () => {
+    listProjectsMock.mockResolvedValue({ data: { items: [{ id: 'p1', name: 'Project 1' }] } })
+    submitToolTaskMock.mockResolvedValue({ id: 'task-vina-mem' })
+
+    const makeTextFile = (name: string, text: string) => {
+      const file = new File([text], name)
+      Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue(text) })
+      return file
+    }
+
+    const first = mountPage()
+    await flushPromises()
+
+    const vm1 = first.vm as unknown as { params: Record<string, number> }
+    vm1.params.box_size = 28
+    vm1.params.exhaustiveness = 16
+
+    const uploads = first.findAllComponents(AUploadStub)
+    await (uploads[0]!.props('beforeUpload') as (f: File) => Promise<boolean>)(
+      makeTextFile('receptor.pdb', 'ATOM      1  CA  GLY A   1      1.000  2.000  3.000  1.00  0.00           C\nEND\n')
+    )
+    const sdfInput = first.findAll('textarea').find(() => true)
+    expect(sdfInput).toBeUndefined()
+    // Provide valid manual pocket coordinates and inline SMILES
+    const pocketComp = first.vm as unknown as { vinaPocketCoordinates: { x: number; y: number; z: number }; ligandSource: string; inlineText: string; selectedProjectId?: string; projectId: string }
+    pocketComp.vinaPocketCoordinates.x = 1.5
+    pocketComp.vinaPocketCoordinates.y = 2.5
+    pocketComp.vinaPocketCoordinates.z = 3.5
+    pocketComp.ligandSource = 'inline'
+    pocketComp.inlineText = 'CCO\tethanol'
+    await flushPromises()
+
+    await first.find('[data-testid="screen-config-submit"]').trigger('click')
+    await flushPromises()
+    expect(submitToolTaskMock).toHaveBeenCalledTimes(1)
+
+    const second = mountPage()
+    await flushPromises()
+    const vm2 = second.vm as unknown as { params: Record<string, number> }
+    expect(vm2.params.box_size).toBe(28)
+    expect(vm2.params.exhaustiveness).toBe(16)
+  })
+
+  it('prefills target hierarchy and pocket coordinates from route query parameters', async () => {
+    route.query = {
+      project_id: 'p1',
+      target_id: 't1',
+      protein_id: 'pr1',
+      structure_id: 's1',
+      pocket_id: 'pk2'
+    }
+    listProjectsMock.mockResolvedValue({ data: { items: [{ id: 'p1', name: 'P1' }] } })
+    listTargetsMock.mockResolvedValue({ data: { items: [{ id: 't1', name: 'T1' }] } })
+    getTargetMock.mockResolvedValue({ data: { id: 't1', proteins: [{ id: 'pr1', name: 'PR1' }] } })
+    listStructuresMock.mockResolvedValue({ data: { items: [{ id: 's1', source_type: 'predicted', structure_file_id: 'sf1' }] } })
+    listPocketsMock.mockResolvedValue({
+      data: {
+        items: [
+          { id: 'pk2', rank: 2, selected: false, center: { x: 12.5, y: -4.25, z: 8.75 } }
+        ]
+      }
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      receptorSource: string
+      selectedTargetId: string
+      selectedProteinId: string
+      selectedStructureId: string
+      vinaPocketId: string | undefined
+      vinaPocketCoordinates: { x: number | null; y: number | null; z: number | null }
+    }
+    expect(vm.receptorSource).toBe('project')
+    expect(vm.selectedTargetId).toBe('t1')
+    expect(vm.selectedProteinId).toBe('pr1')
+    expect(vm.selectedStructureId).toBe('s1')
+    expect(vm.vinaPocketId).toBe('pk2')
+    expect(vm.vinaPocketCoordinates).toEqual({ x: 12.5, y: -4.25, z: 8.75 })
   })
 })

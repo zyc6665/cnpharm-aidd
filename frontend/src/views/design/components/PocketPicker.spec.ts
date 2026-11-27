@@ -191,4 +191,45 @@ describe('PocketPicker', () => {
     await flushPromises()
     expect(w.findAllComponents(SelectStub)[1]!.props('loading')).toBe(false)
   })
+
+  it('prefills full target hierarchy including unselected initialPocketId when provided', async () => {
+    const { listStructurePockets } = await import('@/api/design')
+    const targetPocket = {
+      id: 'pk-2',
+      rank: 2,
+      score: 0.91,
+      selected: false,
+      center: { x: 11.2, y: -3.4, z: 7.8 },
+      box_size: { x: 20, y: 20, z: 20 },
+    }
+    vi.mocked(listStructurePockets).mockResolvedValueOnce([
+      { id: 'pk-1', rank: 1, score: 0.95, selected: true, center: { x: 1, y: 2, z: 3 } },
+      targetPocket,
+    ] as never)
+
+    const w = mount(PocketPicker, {
+      props: {
+        modelValue: null,
+        projectId: 'p1',
+        hideProjectSelect: true,
+        initialTargetId: 't1',
+        initialProteinId: 'pr1',
+        initialStructureId: 's1',
+        initialPocketId: 'pk-2',
+      },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+
+    expect(listStructurePockets).toHaveBeenCalledWith('s1')
+    const emitted = w.emitted('update:modelValue')
+    expect(emitted?.[emitted.length - 1]?.[0]).toMatchObject({
+      projectId: 'p1',
+      targetId: 't1',
+      proteinId: 'pr1',
+      structureId: 's1',
+      pocketId: 'pk-2',
+      center: { x: 11.2, y: -3.4, z: 7.8 },
+    })
+  })
 })

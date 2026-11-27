@@ -91,6 +91,41 @@ describe('parseFragmentMolecule', () => {
     expect(parseFragmentMolecule(pdb, 'ligand.pdb')?.bonds).toEqual([{ a: 0, b: 1, order: 1 }])
   })
 
+  it('parses V3000 CTAB records with formal charges, aromatic bonds, and line continuation', () => {
+    const v3000Sdf = `V3000Example
+  RDKit          3D
+
+  0  0  0     0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 3 2 0 0 0
+M  V30 BEGIN ATOM
+M  V30 10 O 1.0 2.0 0.0 0 -
+M  V30 CHG=-1
+M  V30 20 C 2.0 3.0 0.0 0
+M  V30 30 N 3.0 1.0 0.0 0 CHG=1
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 4 10 20
+M  V30 2 2 20 30
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+$$$$
+`
+    const mol = parseFragmentMolecule(v3000Sdf, 'v3000.sdf')!
+    expect(mol).not.toBeNull()
+    expect(mol.name).toBe('V3000Example')
+    expect(mol.atoms.map(({ index, element, charge }) => [index, element, charge])).toEqual([
+      [0, 'O', -1],
+      [1, 'C', undefined],
+      [2, 'N', 1],
+    ])
+    expect(mol.bonds).toEqual([
+      { a: 0, b: 1, order: 1.5 },
+      { a: 1, b: 2, order: 2 },
+    ])
+  })
+
   it('rejects unsupported files and malformed records rather than shifting atom indices', () => {
     expect(parseFragmentMolecule(planarSdf, 'example.txt')).toBeNull()
     expect(parseFragmentMolecule(planarSdf.replace('V2000', 'V3000'), 'example.sdf')).toBeNull()
