@@ -79,6 +79,24 @@ export function countLipinskiViolations(
   return evaluateLipinski(properties).filter(rule => rule.passed === false).length
 }
 
+/** Classic Lipinski Rule-of-Five violations; null means all four inputs are missing. */
+export function countRo5Violations(
+  properties: LipinskiProperties | null | undefined
+): number | null {
+  const values = [
+    finiteOrNull(properties?.mw),
+    finiteOrNull(properties?.logp),
+    finiteOrNull(properties?.hbd),
+    finiteOrNull(properties?.hba),
+  ]
+  if (values.every(value => value === null)) return null
+  const limits = [500, 5, 5, 10]
+  return values.reduce<number>(
+    (count, value, index) => count + (value !== null && value > (limits[index] ?? 0) ? 1 : 0),
+    0
+  )
+}
+
 export function hasLipinskiData(properties: LipinskiProperties | null | undefined): boolean {
   return evaluateLipinski(properties).some(rule => rule.value !== null)
 }

@@ -248,6 +248,23 @@
           </div>
           <span class="source-hint">{{ t('design.molecule.moleculeSizeHint') }}</span>
         </div>
+        <!-- 参数是从上次提交的记忆里恢复的：明确告诉用户哪些值和默认不同，
+             并给一个一键回到默认的出口，避免「怎么和我以为的不一样」 -->
+        <a-alert
+          v-if="restoredFromMemory"
+          type="info"
+          show-icon
+          class="param-restored-alert"
+          :message="t('design.molecule.paramsRestored')"
+          :description="t('design.molecule.paramsRestoredDiff', { fields: restoredDiffLabel })"
+          data-testid="params-restored-hint"
+        >
+          <template #action>
+            <a-button size="small" type="link" data-testid="params-restored-reset" @click="resetParams">
+              {{ t('design.molecule.resetToDefault') }}
+            </a-button>
+          </template>
+        </a-alert>
         <ParameterPresets
           v-if="selectedOption?.parameterSchema"
           :schema="selectedOption.parameterSchema"
@@ -669,6 +686,20 @@
   const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
   const paramStorageKey = computed(() => `${PARAM_STORAGE_PREFIX}${selectedSlug.value}`)
 
+  /** 参数来自上一次提交的记忆，且与当前 schema 默认值存在差异。 */
+  const restoredFromMemory = ref(false)
+  const restoredDiffKeys = ref<string[]>([])
+
+  function paramLabel(key: string): string {
+    const field = schema.value?.properties?.[key]
+    const title = field && typeof field === 'object' && 'title' in field ? field.title : undefined
+    return typeof title === 'string' && title ? title : key
+  }
+
+  const restoredDiffLabel = computed(() =>
+    restoredDiffKeys.value.map(key => paramLabel(key)).join(', ')
+  )
+
   interface StoredMoleculeParams {
     sourceMode: 'project' | 'upload'
     /** 上传模式下选过的目标项目；恢复时一并带回，避免用户重新选一次。 */
@@ -747,6 +778,9 @@
     const defaults = buildDefaultValues(option?.parameterSchema ?? null, { omit: modeParamKeys.value })
     const stored = readStoredParams()
     const restored = stored ? schemaOnly(stored.params) : {}
+    const diffKeys = Object.keys(restored).filter(key => restored[key] !== defaults[key])
+    restoredDiffKeys.value = diffKeys
+    restoredFromMemory.value = diffKeys.length > 0
     const explicit = defaultProjectId.value
     if (stored) {
       if (!explicit && stored.uploadProjectId) uploadProjectId.value = stored.uploadProjectId
@@ -767,6 +801,8 @@
     }
     form.params = buildDefaultValues(schema.value, { omit: modeParamKeys.value })
     resetGeneration()
+    restoredFromMemory.value = false
+    restoredDiffKeys.value = []
     message.success(t('design.molecule.paramsReset'))
   }
 
@@ -1420,6 +1456,10 @@
     margin: 0 0 16px;
     font-size: 16px;
     font-weight: 600;
+  }
+
+  .param-restored-alert {
+    margin-bottom: 12px;
   }
 
   .param-header {

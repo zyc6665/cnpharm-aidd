@@ -146,9 +146,9 @@ const stubs = {
   },
   'a-checkbox': {
     props: ['checked', 'indeterminate'],
-    emits: ['change'],
+    emits: ['change', 'update:checked'],
     template:
-      '<label class="a-checkbox"><input type="checkbox" :checked="checked" @change="$emit(\'change\', $event)" /><slot /></label>',
+      '<label class="a-checkbox"><input type="checkbox" :checked="checked" @change="$emit(\'change\', $event); $emit(\'update:checked\', $event.target.checked)" /><slot /></label>',
   },
   'a-segmented': {
     props: ['value', 'options'],
@@ -675,5 +675,147 @@ describe('GenerationResults', () => {
         expect(saveButton.attributes('disabled')).toBeDefined()
       }
     )
+  })
+
+  describe('Round 4 review improvements', () => {
+    it('sorts vina_score ascending (most negative first) and shows Ro5 violation tags instead of stars', async () => {
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'vina_score', title: 'vina_score', numeric: true },
+          { key: 'mw', title: 'mw', numeric: true },
+          { key: 'logp', title: 'logp', numeric: true },
+          { key: 'hbd', title: 'hbd', numeric: true },
+          { key: 'hba', title: 'hba', numeric: true },
+          { key: 'tpsa', title: 'tpsa', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', vina_score: '-6.1', mw: '180', logp: '1.2', hbd: '1', hba: '3', tpsa: '60' },
+          { __rowKey: '1', smiles: 'CCN', vina_score: '-10.5', mw: '620', logp: '6.1', hbd: '1', hba: '4', tpsa: '70' },
+        ],
+      })
+      const wrapper = await mountResults()
+
+      // Most negative vina_score (-10.5) should appear first
+      const firstCells = wrapper.findAll('[data-testid="molecule-row"]')[0]!.findAll('td.col-num')
+      expect(firstCells[0]!.text()).toBe('-10.5')
+      expect(wrapper.get('[data-testid="results-viewer-rating"]').text()).toBe(
+        t('design.results.ro5ViolationsBadge', { count: 2 })
+      )
+      expect(wrapper.text()).toContain(t('design.results.lowerIsBetter'))
+    })
+
+    it('applies Ro5 preset, reports missing-value exclusions, and updates handoff counts dynamically', async () => {
+      mockTable(fullTable)
+      const wrapper = await mountResults()
+
+      expect(wrapper.get('[data-testid="results-handoff"] [data-testid="results-send-admet"]').text()).toBe(
+        t('design.results.handoff.sendAdmetCount', { count: 2 })
+      )
+
+      await wrapper.get('[data-testid="results-ro5-preset"]').trigger('click')
+      await flushPromises()
+
+      // Row 0 (MW 780) is filtered by MW<=500, Row 1 (hbd='') is excluded due to missing hbd
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(0)
+      expect(wrapper.get('[data-testid="results-missing-excluded"]').text()).toBe(
+        t('design.results.missingExcludedNotice', { count: 1 }).trim()
+      )
+
+      await wrapper.get('[data-testid="results-include-missing-toggle"] input').setValue(true)
+      await flushPromises()
+
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(1)
+      expect(wrapper.find('[data-testid="results-missing-excluded"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="results-handoff"] [data-testid="results-send-admet"]').text()).toBe(
+        t('design.results.handoff.sendAdmetCount', { count: 1 })
+      )
+    })
+
+    it('disables Ro5 preset without druglikeness columns and scopes preset to existing columns', async () => {
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'score', title: 'score', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', score: '-8.2' },
+          { __rowKey: '1', smiles: 'CCN', score: '-7.5' },
+        ],
+      })
+      const wrapperNoRo5 = await mountResults()
+      const ro5Btn = wrapperNoRo5.get('[data-testid="results-ro5-preset"]')
+      expect(ro5Btn.attributes('disabled')).toBeDefined()
+      await ro5Btn.trigger('click')
+      await flushPromises()
+      expect(wrapperNoRo5.findAll('[data-testid="molecule-row"]')).toHaveLength(2)
+
+      // Partial Ro5 columns: only mw exists — Ro5 preset should not filter out rows on missing hbd/hba/logp
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'mw', title: 'mw', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', mw: '320' },
+          { __rowKey: '1', smiles: 'CCN', mw: '780' },
+        ],
+      })
+      const wrapperPartial = await mountResults()
+      const partialBtn = wrapperPartial.get('[data-testid="results-ro5-preset"]')
+      expect(partialBtn.attributes('disabled')).toBeUndefined()
+      await partialBtn.trigger('click')
+      await flushPromises()
+      expect(wrapperPartial.findAll('[data-testid="molecule-row"]')).toHaveLength(1)
+    })
+
+    it('respects include-missing toggle when filtering by QED min', async () => {
+      mockTable({
+        columns: [
+          { key: 'smiles', title: 'smiles', numeric: false },
+          { key: 'qed', title: 'qed', numeric: true },
+        ],
+        rows: [
+          { __rowKey: '0', smiles: 'CCO', qed: '0.8' },
+          { __rowKey: '1', smiles: 'CCN', qed: '' },
+          { __rowKey: '2', smiles: 'CCC', qed: '0.3' },
+        ],
+      })
+      const wrapper = await mountResults()
+
+      await wrapper.get('[data-testid="results-toggle-filters"]').trigger('click')
+      await wrapper.get('[data-testid="results-qed-min"]').setValue('0.5')
+      await flushPromises()
+
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(1)
+      expect(wrapper.get('[data-testid="results-missing-excluded"]').text()).toBe(
+        t('design.results.missingExcludedNotice', { count: 1 }).trim()
+      )
+
+      await wrapper.get('[data-testid="results-include-missing-toggle"] input').setValue(true)
+      await flushPromises()
+
+      expect(wrapper.findAll('[data-testid="molecule-row"]')).toHaveLength(2)
+      expect(wrapper.find('[data-testid="results-missing-excluded"]').exists()).toBe(false)
+    })
+
+    it('displays queue position and estimated wait in results-progress when task is pending', async () => {
+      vi.mocked(getDesignGenerationResult).mockResolvedValue({
+        status: 'pending',
+        project_id: 'p1',
+        outputs: [],
+      } as never)
+      vi.mocked(getTaskDetail).mockResolvedValue({
+        data: {
+          status: 'queued',
+          dispatch: { queue: 'gpu_queue', queue_position: 3, estimated_wait_seconds: 120 },
+        },
+      } as never)
+
+      const wrapper = await mountResults()
+      const progressBox = wrapper.get('[data-testid="results-progress"]')
+      expect(progressBox.text()).toContain(t('design.progressCard.queuePosition', { position: 3 }))
+      expect(progressBox.text()).toContain('2')
+    })
   })
 })

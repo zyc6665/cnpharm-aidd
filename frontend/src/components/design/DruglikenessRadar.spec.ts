@@ -18,6 +18,7 @@ interface LabelCall {
 function fakeContext(): { ctx: Record<string, unknown>; labels: LabelCall[] } {
   const labels: LabelCall[] = []
   const ctx: Record<string, unknown> = {
+    setLineDash: vi.fn(),
     setTransform: vi.fn(),
     clearRect: vi.fn(),
     beginPath: vi.fn(),

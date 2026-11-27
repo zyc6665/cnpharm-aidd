@@ -31,6 +31,12 @@
       <p class="results-progress__text">
         {{ t('design.results.statusLabel') }}：{{ statusText }}
         <span v-if="progressMessage"> · {{ progressMessage }}</span>
+        <span v-if="queueInfo.queuePosition !== null">
+          · {{ t('design.progressCard.queuePosition', { position: queueInfo.queuePosition }) }}
+        </span>
+        <span v-if="queueInfo.estimatedWaitSeconds !== null">
+          · {{ t('design.progressCard.estimatedWait', { time: formatWaitSeconds(queueInfo.estimatedWaitSeconds) }) }}
+        </span>
       </p>
     </section>
 
@@ -49,6 +55,9 @@
           {{ isPeptideResult
             ? t('design.results.peptideCount', { count: rows.length })
             : t('design.results.moleculeCount', { count: rows.length }) }}
+        </span>
+        <span v-if="missingExcludedCount > 0" data-testid="results-missing-excluded">
+          {{ t('design.results.missingExcludedNotice', { count: missingExcludedCount }) }}
         </span>
       </section>
 
@@ -77,18 +86,21 @@
 
           <div v-if="numericColumns.length" class="results-filters__sort">
             <span class="results-filters__label">{{ t('design.results.sortBy') }}</span>
-            <a-select v-model:value="sortKey" class="filter-control" data-testid="results-sort-key">
+            <a-select :value="sortKey" class="filter-control" data-testid="results-sort-key" @change="onSortKeyChange">
               <a-select-option v-for="column in numericColumns" :key="column.key" :value="column.key">
                 {{ column.title }}
               </a-select-option>
             </a-select>
+            <span class="results-filters__label">{{ t(isLowerBetterColumn(sortKey) ? 'design.results.lowerIsBetter' : 'design.results.higherIsBetter') }}</span>
             <a-radio-group v-model:value="sortOrder" button-style="solid" size="small">
               <a-radio-button value="desc">{{ t('design.results.desc') }}</a-radio-button>
               <a-radio-button value="asc">{{ t('design.results.asc') }}</a-radio-button>
             </a-radio-group>
 
             <template v-if="scoreColumn">
-              <span class="results-filters__label">{{ scoreColumn.title }}</span>
+              <a-tooltip :title="isLowerBetterColumn(scoreColumn.key) ? t('design.results.lowerIsBetter') : t('design.results.higherIsBetter')">
+                <span class="results-filters__label">{{ scoreColumn.title }}</span>
+              </a-tooltip>
               <a-input-number
                 v-model:value="filters.scoreMin"
                 class="filter-control filter-control--num"
@@ -122,7 +134,13 @@
             <span class="results-filters__label">{{ t('design.results.scaffold.count', { count: scaffoldOptions.length }) }}</span>
           </div>
 
-          <div v-if="hasRangeFilters" class="results-filters__sliders" data-testid="results-range-filters">
+          <div class="results-filters__sort">
+            <a-button size="small" :disabled="!hasRo5Columns" data-testid="results-ro5-preset" @click="applyRo5Preset">{{ t('design.results.filters.ro5Preset') }}</a-button>
+            <a-button size="small" data-testid="results-toggle-filters" @click="filtersExpanded = !filtersExpanded">{{ t(filtersExpanded ? 'design.results.filters.toggleCollapse' : 'design.results.filters.toggleExpand') }}</a-button>
+            <a-checkbox v-model:checked="includeMissingInFilters" data-testid="results-include-missing-toggle">{{ t('design.results.includeMissingToggle') }}</a-checkbox>
+            <a-checkbox v-if="alertColumn" v-model:checked="excludeAlerts" data-testid="results-exclude-alerts">{{ t('design.results.filters.excludeAlerts') }}</a-checkbox>
+          </div>
+          <div v-if="hasRangeFilters" v-show="filtersExpanded" class="results-filters__sliders" data-testid="results-range-filters">
             <div v-if="mwColumn" class="filter-slider">
               <span class="results-filters__label">{{ mwColumn.title }}</span>
               <a-slider
@@ -132,10 +150,11 @@
                 :min="mwBounds.min"
                 :max="mwBounds.max"
                 :step="mwBounds.step"
+                :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, mwBounds.step))"
                 data-testid="results-mw-range"
               />
               <span class="filter-slider__readout">
-                {{ t('design.results.filters.range', { min: mwRange[0], max: mwRange[1] }) }}
+                {{ t('design.results.filters.range', { min: fmtByStep(mwRange[0], mwBounds.step), max: fmtByStep(mwRange[1], mwBounds.step) }) }}
               </span>
             </div>
 
@@ -148,10 +167,11 @@
                 :min="logpBounds.min"
                 :max="logpBounds.max"
                 :step="logpBounds.step"
+                :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, logpBounds.step))"
                 data-testid="results-logp-range"
               />
               <span class="filter-slider__readout">
-                {{ t('design.results.filters.range', { min: logpRange[0], max: logpRange[1] }) }}
+                {{ t('design.results.filters.range', { min: fmtByStep(logpRange[0], logpBounds.step), max: fmtByStep(logpRange[1], logpBounds.step) }) }}
               </span>
             </div>
 
@@ -164,10 +184,11 @@
                 :min="hbdBounds.min"
                 :max="hbdBounds.max"
                 :step="hbdBounds.step"
+                :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, hbdBounds.step))"
                 data-testid="results-hbd-range"
               />
               <span class="filter-slider__readout">
-                {{ t('design.results.filters.range', { min: hbdRange[0], max: hbdRange[1] }) }}
+                {{ t('design.results.filters.range', { min: fmtByStep(hbdRange[0], hbdBounds.step), max: fmtByStep(hbdRange[1], hbdBounds.step) }) }}
               </span>
             </div>
 
@@ -180,27 +201,39 @@
                 :min="hbaBounds.min"
                 :max="hbaBounds.max"
                 :step="hbaBounds.step"
+                :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, hbaBounds.step))"
                 data-testid="results-hba-range"
               />
               <span class="filter-slider__readout">
-                {{ t('design.results.filters.range', { min: hbaRange[0], max: hbaRange[1] }) }}
+                {{ t('design.results.filters.range', { min: fmtByStep(hbaRange[0], hbaBounds.step), max: fmtByStep(hbaRange[1], hbaBounds.step) }) }}
               </span>
             </div>
 
-            <div v-if="qedColumn" class="filter-slider filter-slider--inline">
-              <span class="results-filters__label">{{ t('design.results.filters.qedMin') }}</span>
-              <a-input-number
-                v-model:value="filters.qedMin"
-                class="filter-control filter-control--num"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                :placeholder="t('design.results.min')"
-                data-testid="results-qed-min"
-              />
+            <div v-if="tpsaColumn" class="filter-slider">
+              <span class="results-filters__label">{{ t('design.results.filters.tpsa') }}</span>
+              <a-slider v-model:value="tpsaRange" range class="filter-slider__control" :min="tpsaBounds.min" :max="tpsaBounds.max" :step="1" :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, 1))" data-testid="results-tpsa-range" />
+              <span class="filter-slider__readout">{{ t('design.results.filters.range', { min: fmtByStep(tpsaRange[0], 1), max: fmtByStep(tpsaRange[1], 1) }) }}</span>
             </div>
-          </div>
-        </section>
+            <div v-if="rotatableColumn" class="filter-slider">
+              <span class="results-filters__label">{{ t('design.results.filters.rotatableBonds') }}</span>
+              <a-slider v-model:value="rotatableRange" range class="filter-slider__control" :min="rotatableBounds.min" :max="rotatableBounds.max" :step="1" :tip-formatter="(v?: number) => (v === undefined ? '' : fmtByStep(v, 1))" data-testid="results-rotb-range" />
+              <span class="filter-slider__readout">{{ t('design.results.filters.range', { min: fmtByStep(rotatableRange[0], 1), max: fmtByStep(rotatableRange[1], 1) }) }}</span>
+            </div>
+
+              <div v-if="qedColumn" class="filter-slider filter-slider--inline">
+                <span class="results-filters__label">{{ t('design.results.filters.qedMin') }}</span>
+                <a-input-number
+                  v-model:value="filters.qedMin"
+                  class="filter-control filter-control--num"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                  :placeholder="t('design.results.min')"
+                  data-testid="results-qed-min"
+                />
+              </div>
+            </div>
+          </section>
 
         <section class="results-workbench" data-testid="results-workbench">
           <div class="results-list" data-testid="results-list">
@@ -228,7 +261,7 @@
                 :loading="handoffPending === 'admet'"
                 @click="sendToPipeline('admet')"
               >
-                {{ t('design.results.handoff.sendAdmet') }}
+                {{ t(selectedRows.length ? 'design.results.handoff.sendAdmetSelectedCount' : 'design.results.handoff.sendAdmetCount', { count: selectedRows.length ? selectedRows.length : saveableRows.length }) }}
               </a-button>
               <a-button
                 size="small"
@@ -236,7 +269,7 @@
                 :loading="handoffPending === 'screening'"
                 @click="sendToPipeline('screening')"
               >
-                {{ t('design.results.handoff.sendScreening') }}
+                {{ t(selectedRows.length ? 'design.results.handoff.sendScreeningSelectedCount' : 'design.results.handoff.sendScreeningCount', { count: selectedRows.length ? selectedRows.length : saveableRows.length }) }}
               </a-button>
               <a-button size="small" type="primary" data-testid="results-save-selected" @click="openSaveModal('selected')">
                 {{ t('design.results.saveSelected') }}
@@ -254,7 +287,7 @@
                 :loading="handoffPending === 'admet'"
                 @click="sendToPipeline('admet')"
               >
-                {{ t('design.results.handoff.sendAdmet') }}
+                {{ t(selectedRows.length ? 'design.results.handoff.sendAdmetSelectedCount' : 'design.results.handoff.sendAdmetCount', { count: selectedRows.length ? selectedRows.length : saveableRows.length }) }}
               </a-button>
               <a-button
                 size="small"
@@ -262,7 +295,7 @@
                 :loading="handoffPending === 'screening'"
                 @click="sendToPipeline('screening')"
               >
-                {{ t('design.results.handoff.sendScreening') }}
+                {{ t(selectedRows.length ? 'design.results.handoff.sendScreeningSelectedCount' : 'design.results.handoff.sendScreeningCount', { count: selectedRows.length ? selectedRows.length : saveableRows.length }) }}
               </a-button>
             </div>
 
@@ -441,14 +474,10 @@
                       <span v-else class="results-table__na">-</span>
                     </td>
                     <td v-if="showDruglikenessColumn" class="col-druglikeness">
-                      <a-rate
-                        v-if="starsForRow(row) !== null"
-                        :value="starsForRow(row) ?? 0"
-                        disabled
-                        class="results-table__rating"
-                        data-testid="molecule-row-rating"
-                      />
-                      <span v-else class="results-table__na">-</span>
+      <a-tag v-if="ro5Violations(row) !== null" :color="ro5TagColor(row)" data-testid="molecule-row-rating">
+        {{ ro5Badge(row) }}
+      </a-tag>
+      <span v-else class="results-table__na">-</span>
                     </td>
                   </tr>
                 </tbody>
@@ -471,13 +500,9 @@
                   <span class="molecule-card__index">
                     {{ t('design.results.moleculeIndex', { index: rowIndex(row) }) }}
                   </span>
-                  <a-rate
-                    v-if="starsForRow(row) !== null"
-                    :value="starsForRow(row) ?? 0"
-                    disabled
-                    class="molecule-card__rating"
-                    data-testid="molecule-card-rating"
-                  />
+                  <a-tag v-if="ro5Violations(row) !== null" :color="ro5TagColor(row)" class="molecule-card__rating" data-testid="molecule-card-rating">
+                    {{ ro5Badge(row) }}
+                  </a-tag>
                   <span class="molecule-card__marks" @click.stop>
                     <a-button
                       type="text"
@@ -628,14 +653,12 @@
                 </template>
 
                 <template v-if="activeHasLipinskiData">
-                  <a-rate
-                    :value="starsForRow(activeRow) ?? 0"
-                    disabled
-                    class="results-viewer__rating"
-                    data-testid="results-viewer-rating"
-                  />
+                  <a-tag v-if="ro5Violations(activeRow) !== null" :color="ro5TagColor(activeRow)" class="results-viewer__rating" data-testid="results-viewer-rating">
+                    {{ ro5Badge(activeRow) }}
+                  </a-tag>
 
-                  <h4 class="results-viewer__subtitle">{{ t('design.results.lipinskiTitle') }}</h4>
+                  <h4 class="results-viewer__subtitle">{{ t('design.results.druglikeness.combinedTitle') }}</h4>
+                  <p class="results-viewer__note">{{ t('design.results.druglikeness.veberNote') }}</p>
                   <ul class="lipinski-list" data-testid="results-lipinski-breakdown">
                     <li
                       v-for="rule in activeRules"
@@ -738,7 +761,7 @@
     createCandidateSet,
   } from '@/api/compounds'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
-  import { failureStatuses, getTaskStatusTextKey } from '@/domain/tasks'
+  import { failureStatuses, formatWaitSeconds, getTaskStatusTextKey, readTaskQueueInfo } from '@/domain/tasks'
   import { fetchProtectedFileText, saveBlobAsFile } from '@/utils/protected-file-access'
   import { splitSdfRecords } from '@/domain/tasks/sdf-result'
   import {
@@ -751,6 +774,7 @@
   import {
     classifyMetricTone,
     countLipinskiViolations,
+    countRo5Violations,
     druglikenessStars,
     evaluateLipinski,
     hasLipinskiData,
@@ -786,6 +810,8 @@
   const progressMessage = ref<string | null>(null)
 
   const taskDetail = ref<Task | null>(null)
+  const queueInfo = computed(() => readTaskQueueInfo(taskDetail.value))
+
 
   const filters = reactive<{
     scoreMin: number | null
@@ -798,6 +824,10 @@
     hbdMax: number | null
     hbaMin: number | null
     hbaMax: number | null
+    tpsaMin: number | null
+    tpsaMax: number | null
+    rotatableMin: number | null
+    rotatableMax: number | null
     qedMin: number | null
   }>({
     scoreMin: null,
@@ -810,6 +840,10 @@
     hbdMax: null,
     hbaMin: null,
     hbaMax: null,
+    tpsaMin: null,
+    tpsaMax: null,
+    rotatableMin: null,
+    rotatableMax: null,
     qedMin: null,
   })
 
@@ -839,6 +873,9 @@
 
   /** 骨架筛选：仅当结果表真的带 scaffold / murcko_scaffold 列时启用。 */
   const scaffoldFilter = ref('')
+  const filtersExpanded = ref(false)
+  const includeMissingInFilters = ref(false)
+  const excludeAlerts = ref(false)
 
   /** 多分子对比（最多 6 个）。 */
   const MAX_COMPARE = 6
@@ -887,6 +924,8 @@
   const hbdColumn = computed(() => findColumn([/^hbd$/i, /h_bond_donor/i, /氢键供体/i]))
   const hbaColumn = computed(() => findColumn([/^hba$/i, /h_bond_acceptor/i, /氢键受体/i]))
   const tpsaColumn = computed(() => findColumn([/tpsa/i, /极性表面积/i]))
+  const rotatableColumn = computed(() => findColumn([/rotatable/i, /rot_?bonds/i, /rotbonds/i, /可旋转键/i]))
+  const alertColumn = computed(() => findColumn([/pains/i, /alert/i, /警示/i]))
   const smilesColumn = computed(() => findColumn([/smiles/i]))
   const sequenceColumn = computed(() => findColumn([/sequence/i, /序列/i]))
   const moleculeIdColumn = computed(() => findColumn([/^(molecule_id|ligand_id|compound_id|id)$/i]))
@@ -910,7 +949,10 @@
 
   const numericColumns = computed(() => columns.value.filter((column) => column.numeric))
   const hasRangeFilters = computed(() =>
-    Boolean(mwColumn.value || logpColumn.value || hbdColumn.value || hbaColumn.value || qedColumn.value)
+    Boolean(mwColumn.value || logpColumn.value || hbdColumn.value || hbaColumn.value || qedColumn.value || tpsaColumn.value || rotatableColumn.value)
+  )
+  const hasRo5Columns = computed(() =>
+    Boolean(mwColumn.value || logpColumn.value || hbdColumn.value || hbaColumn.value)
   )
 
   const markFilterOptions = computed(() => [
@@ -956,6 +998,47 @@
     return Array.from(seen).sort((a, b) => a.localeCompare(b))
   })
 
+  const missingExcludedCount = computed(() => {
+    if (includeMissingInFilters.value) return 0
+    const active: Array<[string | undefined, boolean]> = [
+      [scoreColumn.value?.key, filters.scoreMin !== null || filters.scoreMax !== null],
+      [mwColumn.value?.key, filters.mwMin !== null || filters.mwMax !== null],
+      [logpColumn.value?.key, filters.logpMin !== null || filters.logpMax !== null],
+      [hbdColumn.value?.key, filters.hbdMin !== null || filters.hbdMax !== null],
+      [hbaColumn.value?.key, filters.hbaMin !== null || filters.hbaMax !== null],
+      [tpsaColumn.value?.key, filters.tpsaMin !== null || filters.tpsaMax !== null],
+      [rotatableColumn.value?.key, filters.rotatableMin !== null || filters.rotatableMax !== null],
+      [qedColumn.value?.key, filters.qedMin !== null],
+    ]
+    const activeKeys = active.filter(([, isActive]) => isActive).map(([key]) => key)
+    return rows.value.filter(row => activeKeys.some(key => numericValue(row, key) === null)).length
+  })
+
+  function applyRo5Preset(): void {
+    if (!hasRo5Columns.value) return
+    filters.mwMin = null; filters.mwMax = mwColumn.value ? 500 : null
+    filters.logpMin = null; filters.logpMax = logpColumn.value ? 5 : null
+    filters.hbdMin = null; filters.hbdMax = hbdColumn.value ? 5 : null
+    filters.hbaMin = null; filters.hbaMax = hbaColumn.value ? 10 : null
+    message.success(t('design.results.filters.ro5Applied'))
+  }
+
+  function isLowerBetterColumn(columnKey: string): boolean {
+    const column = columns.value.find(item => item.key === columnKey)
+    const text = `${column?.key ?? columnKey} ${column?.title ?? ''}`
+    return /vina|dock|affinity|energy|rmsd/i.test(text) || /结合能|对接/.test(text)
+  }
+
+  function onSortKeyChange(nextKey: string): void {
+    sortKey.value = nextKey
+    sortOrder.value = isLowerBetterColumn(nextKey) ? 'asc' : 'desc'
+  }
+
+  function isAlerted(row: DesignTableRow): boolean {
+    const value = (row[alertColumn.value?.key ?? ''] ?? '').trim().toLowerCase()
+    return Boolean(value) && !['0', 'false', 'no', 'none', 'clean', '-'].includes(value)
+  }
+
   function numericValue(row: DesignTableRow, key: string | undefined): number | null {
     if (!key) {
       return null
@@ -990,19 +1073,28 @@
   const hbdBounds = computed(() => numericBounds(hbdColumn.value, 0, 20, 1))
   const hbaBounds = computed(() => numericBounds(hbaColumn.value, 0, 30, 1))
 
+  const tpsaBounds = computed(() => numericBounds(tpsaColumn.value, 0, 250, 1))
+  const rotatableBounds = computed(() => numericBounds(rotatableColumn.value, 0, 20, 1))
+
+  function fmtByStep(v: number | undefined, step: number): string {
+    if (v === undefined || !Number.isFinite(v)) return ''
+    const d = step >= 1 ? 0 : Math.min(3, String(step).split('.')[1]?.length ?? 1)
+    return v.toFixed(d)
+  }
+
   function rangeModel(
-    minKey: 'mwMin' | 'logpMin' | 'hbdMin' | 'hbaMin',
-    maxKey: 'mwMax' | 'logpMax' | 'hbdMax' | 'hbaMax',
+    minKey: 'mwMin' | 'logpMin' | 'hbdMin' | 'hbaMin' | 'tpsaMin' | 'rotatableMin',
+    maxKey: 'mwMax' | 'logpMax' | 'hbdMax' | 'hbaMax' | 'tpsaMax' | 'rotatableMax',
     bounds: { value: { min: number; max: number; step: number } }
   ) {
     return computed<number[]>({
       get: () => [
-        filters[minKey] ?? bounds.value.min,
-        filters[maxKey] ?? bounds.value.max,
+        Math.min(bounds.value.max, Math.max(bounds.value.min, filters[minKey] ?? bounds.value.min)),
+        Math.min(bounds.value.max, Math.max(bounds.value.min, filters[maxKey] ?? bounds.value.max)),
       ],
       set: (value: number[]) => {
-        const min = value[0] ?? bounds.value.min
-        const max = value[1] ?? bounds.value.max
+        const min = Math.min(bounds.value.max, Math.max(bounds.value.min, value[0] ?? bounds.value.min))
+        const max = Math.min(bounds.value.max, Math.max(bounds.value.min, value[1] ?? bounds.value.max))
         filters[minKey] = min <= bounds.value.min ? null : min
         filters[maxKey] = max >= bounds.value.max ? null : max
       },
@@ -1013,6 +1105,8 @@
   const logpRange = rangeModel('logpMin', 'logpMax', logpBounds)
   const hbdRange = rangeModel('hbdMin', 'hbdMax', hbdBounds)
   const hbaRange = rangeModel('hbaMin', 'hbaMax', hbaBounds)
+  const tpsaRange = rangeModel('tpsaMin', 'tpsaMax', tpsaBounds)
+  const rotatableRange = rangeModel('rotatableMin', 'rotatableMax', rotatableBounds)
 
   const filteredRows = computed(() => {
     const keyword = search.value.trim().toLowerCase()
@@ -1031,18 +1125,26 @@
       const logp = numericValue(row, logpColumn.value?.key)
       const hbd = numericValue(row, hbdColumn.value?.key)
       const hba = numericValue(row, hbaColumn.value?.key)
+      const tpsa = numericValue(row, tpsaColumn.value?.key)
+      const rotatable = numericValue(row, rotatableColumn.value?.key)
       const qed = numericValue(row, qedColumn.value?.key)
-      if (filters.scoreMin !== null && (score === null || score < filters.scoreMin)) return false
-      if (filters.scoreMax !== null && (score === null || score > filters.scoreMax)) return false
-      if (filters.mwMin !== null && (mw === null || mw < filters.mwMin)) return false
-      if (filters.mwMax !== null && (mw === null || mw > filters.mwMax)) return false
-      if (filters.logpMin !== null && (logp === null || logp < filters.logpMin)) return false
-      if (filters.logpMax !== null && (logp === null || logp > filters.logpMax)) return false
-      if (filters.hbdMin !== null && (hbd === null || hbd < filters.hbdMin)) return false
-      if (filters.hbdMax !== null && (hbd === null || hbd > filters.hbdMax)) return false
-      if (filters.hbaMin !== null && (hba === null || hba < filters.hbaMin)) return false
-      if (filters.hbaMax !== null && (hba === null || hba > filters.hbaMax)) return false
-      if (filters.qedMin !== null && (qed === null || qed < filters.qedMin)) return false
+      if (excludeAlerts.value && isAlerted(row)) return false
+      const excludesMissing = !includeMissingInFilters.value
+      if (filters.scoreMin !== null && ((score === null && excludesMissing) || (score !== null && score < filters.scoreMin))) return false
+      if (filters.scoreMax !== null && ((score === null && excludesMissing) || (score !== null && score > filters.scoreMax))) return false
+      if (filters.mwMin !== null && ((mw === null && excludesMissing) || (mw !== null && mw < filters.mwMin))) return false
+      if (filters.mwMax !== null && ((mw === null && excludesMissing) || (mw !== null && mw > filters.mwMax))) return false
+      if (filters.logpMin !== null && ((logp === null && excludesMissing) || (logp !== null && logp < filters.logpMin))) return false
+      if (filters.logpMax !== null && ((logp === null && excludesMissing) || (logp !== null && logp > filters.logpMax))) return false
+      if (filters.hbdMin !== null && ((hbd === null && excludesMissing) || (hbd !== null && hbd < filters.hbdMin))) return false
+      if (filters.hbdMax !== null && ((hbd === null && excludesMissing) || (hbd !== null && hbd > filters.hbdMax))) return false
+      if (filters.hbaMin !== null && ((hba === null && excludesMissing) || (hba !== null && hba < filters.hbaMin))) return false
+      if (filters.hbaMax !== null && ((hba === null && excludesMissing) || (hba !== null && hba > filters.hbaMax))) return false
+      if (filters.tpsaMin !== null && ((tpsa === null && excludesMissing) || (tpsa !== null && tpsa < filters.tpsaMin))) return false
+      if (filters.tpsaMax !== null && ((tpsa === null && excludesMissing) || (tpsa !== null && tpsa > filters.tpsaMax))) return false
+      if (filters.rotatableMin !== null && ((rotatable === null && excludesMissing) || (rotatable !== null && rotatable < filters.rotatableMin))) return false
+      if (filters.rotatableMax !== null && ((rotatable === null && excludesMissing) || (rotatable !== null && rotatable > filters.rotatableMax))) return false
+      if (filters.qedMin !== null && ((qed === null && excludesMissing) || (qed !== null && qed < filters.qedMin))) return false
       return true
     })
   })
@@ -1275,6 +1377,23 @@
   function starsForRow(row: DesignTableRow): number | null {
     return druglikenessStars(propertiesForRow(row))
   }
+
+  function ro5Violations(row: DesignTableRow): number | null {
+    return countRo5Violations(propertiesForRow(row))
+  }
+
+  function ro5Badge(row: DesignTableRow): string {
+    const count = ro5Violations(row)
+    return count === 0
+      ? t('design.results.ro5PassBadge')
+      : t('design.results.ro5ViolationsBadge', { count })
+  }
+
+  function ro5TagColor(row: DesignTableRow): string {
+    const count = ro5Violations(row)
+    return count === 0 ? 'success' : count === 1 ? 'warning' : 'error'
+  }
+
 
   function lipinskiLabel(id: LipinskiRuleId): string {
     switch (id) {
@@ -1597,14 +1716,21 @@
     filters.hbdMax = null
     filters.hbaMin = null
     filters.hbaMax = null
+    filters.tpsaMin = null
+    filters.tpsaMax = null
+    filters.rotatableMin = null
+    filters.rotatableMax = null
     filters.qedMin = null
+    excludeAlerts.value = false
+    includeMissingInFilters.value = false
+    scaffoldFilter.value = ''
   }
 
   function initializeSort(): void {
-    if (sortKey.value) {
-      return
+    if (!sortKey.value) {
+      sortKey.value = scoreColumn.value?.key ?? numericColumns.value[0]?.key ?? ''
     }
-    sortKey.value = scoreColumn.value?.key ?? numericColumns.value[0]?.key ?? ''
+    sortOrder.value = isLowerBetterColumn(sortKey.value) ? 'asc' : 'desc'
   }
 
   function setActive(row: DesignTableRow): void {
@@ -1647,18 +1773,27 @@
       return
     }
     try {
-      const result = await getDesignGenerationResult(taskId.value)
+      const [result, taskResponse] = await Promise.all([
+        getDesignGenerationResult(taskId.value),
+        getTaskDetail(taskId.value).catch(() => null),
+      ])
       detail.value = result
+      if (taskResponse) {
+        taskDetail.value = taskResponse.data
+        progressPercent.value = Math.max(0, Math.min(100, Math.round(taskResponse.data.progress ?? 0)))
+        progressMessage.value = taskResponse.data.progress_message ?? null
+      }
       status.value = result.status
-      if (result.status === 'running' || result.status === 'pending') {
+      if (result.status === 'running' || result.status === 'pending' || result.status === 'queued') {
         startTracking()
         return
       }
       if (result.status === 'success') {
-        await Promise.all([loadTable(result), loadViewerTask()])
+        await Promise.all([loadTable(result), taskResponse ? Promise.resolve() : loadViewerTask()])
       }
     } catch {
       // 结果尚未生成时后端可能返回 404，转为追踪任务状态。
+      void loadViewerTask()
       startTracking()
     }
   }
@@ -1667,6 +1802,11 @@
     try {
       const response = await getTaskDetail(taskId.value)
       taskDetail.value = response.data
+      progressPercent.value = Math.max(0, Math.min(100, Math.round(response.data.progress ?? 0)))
+      progressMessage.value = response.data.progress_message ?? null
+      if (response.data.status === 'running' || response.data.status === 'pending' || response.data.status === 'queued') {
+        status.value = response.data.status
+      }
     } catch {
       taskDetail.value = null
     }
@@ -1733,6 +1873,7 @@
     pollTimer = setInterval(async () => {
       try {
         const response = await getTaskDetail(taskId.value)
+        taskDetail.value = response.data
         progressPercent.value = Math.max(0, Math.min(100, Math.round(response.data.progress ?? 0)))
         progressMessage.value = response.data.progress_message ?? null
         status.value = response.data.status
@@ -2270,6 +2411,9 @@
   .results-viewer {
     position: sticky;
     top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2322,7 +2466,8 @@
   }
 
   .results-viewer__rating {
-    font-size: 14px;
+    align-self: flex-start;
+    font-size: 13px;
   }
 
   .results-viewer__guidance {
@@ -2330,7 +2475,8 @@
   }
 
   .results-viewer__stage {
-    height: 480px;
+    flex: 0 0 auto;
+    height: min(42vh, 420px);
     overflow: hidden;
     border-radius: 8px;
   }
@@ -2553,13 +2699,15 @@
     color: @text-tertiary;
   }
 
-  @media (max-width: @screen-lg) {
+  @media (max-width: @screen-xl) {
     .results-workbench {
       grid-template-columns: minmax(0, 1fr);
     }
 
     .results-viewer {
       position: static;
+      max-height: none;
+      overflow: visible;
     }
 
     .results-viewer__stage {

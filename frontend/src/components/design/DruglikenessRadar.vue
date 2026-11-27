@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   countLipinskiViolations,
@@ -42,6 +42,8 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const isDarkTheme = ref(false)
+let themeObserver: MutationObserver | null = null
 
 const rules = computed(() => evaluateLipinski(props.properties))
 const violations = computed(() => countLipinskiViolations(props.properties))
@@ -98,8 +100,13 @@ function draw(): void {
     return [center + Math.cos(angle) * radius * ratio, center + Math.sin(angle) * radius * ratio]
   }
 
+  const dark = isDarkTheme.value
+  const gridColor = dark ? 'rgba(148, 163, 184, 0.34)' : 'rgba(100, 116, 139, 0.28)'
+  const labelColor = dark ? 'rgba(226, 232, 240, 0.92)' : 'rgba(51, 65, 85, 0.95)'
+  const tpsaColor = dark ? '#a78bfa' : '#7c3aed'
+
   // 背景网格（4 圈）
-  context.strokeStyle = 'rgba(148, 163, 184, 0.35)'
+  context.strokeStyle = gridColor
   context.lineWidth = 1
   for (const ring of [0.25, 0.5, 0.75, 1]) {
     context.beginPath()
@@ -115,11 +122,15 @@ function draw(): void {
   // 轴线
   for (let index = 0; index < count; index += 1) {
     const [x, y] = pointAt(index, 1)
+    const rule = rules.value[index]
     context.beginPath()
+    context.setLineDash(rule?.id === 'tpsa' ? [4, 3] : [])
+    context.strokeStyle = rule?.id === 'tpsa' ? tpsaColor : gridColor
     context.moveTo(center, center)
     context.lineTo(x, y)
     context.stroke()
   }
+  context.setLineDash([])
 
   // 数据多边形：有越界时整体偏红，否则偏青
   const hasViolation = rules.value.some(rule => rule.passed === false)
@@ -141,12 +152,11 @@ function draw(): void {
     const [x, y] = pointAt(index, rule.ratio)
     context.beginPath()
     context.arc(x, y, 2.4, 0, Math.PI * 2)
-    context.fillStyle = rule.passed === false ? '#ef4444' : '#38bdf8'
+    context.fillStyle = rule.id === 'tpsa' ? tpsaColor : rule.passed === false ? '#ef4444' : '#38bdf8'
     context.fill()
   })
 
   // 轴标签：按象限决定对齐方式，保证文字朝外展开、不压到多边形也不互相重叠。
-  context.fillStyle = 'rgba(100, 116, 139, 0.95)'
   context.font = `${labelFontSize}px sans-serif`
   rules.value.forEach((rule, index) => {
     const angle = -Math.PI / 2 + (index / count) * Math.PI * 2
@@ -156,11 +166,26 @@ function draw(): void {
     const y = center + dy * (radius + labelGap)
     context.textAlign = dx > 0.35 ? 'left' : dx < -0.35 ? 'right' : 'center'
     context.textBaseline = dy > 0.35 ? 'top' : dy < -0.35 ? 'bottom' : 'middle'
+    context.fillStyle = rule.id === 'tpsa' ? tpsaColor : labelColor
     context.fillText(axisLabel(rule.id), x, y)
   })
 }
 
-onMounted(draw)
+function updateTheme(): void {
+  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark'
+  draw()
+}
+
+onMounted(() => {
+  updateTheme()
+  themeObserver = new MutationObserver(updateTheme)
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
+})
 
 watch(
   () => [props.properties, props.size],

@@ -123,74 +123,65 @@
             </div>
           </div>
 
-          <div v-if="resourceWait" class="resource-wait-notice">
-            <a-alert type="info" show-icon>
-              <template #message>{{ t('tasks.resourceWait.title') }}</template>
-              <template #description>
-                <div>{{ resourceWaitText }}</div>
-                <div v-if="resourceWait.scope && resourceWait.dimension">
-                  {{ t('tasks.resourceWait.scopeDimension', {
-                    scope: resourceWaitScopeText,
-                    dimension: resourceWaitDimensionText
-                  }) }}
-                </div>
-                <div v-if="resourceWait.category === 'quota'" class="resource-wait-code">
-                  <a-typography-text code>{{ resourceWait.reason }}</a-typography-text>
-                </div>
-                <div v-if="queueInfo.queue">
-                  {{ t('tasks.queue.queue', { queue: queueInfo.queue }) }}
-                </div>
-                <div v-if="queueInfo.queuePosition !== null">
+          <!-- 资源等待 / 排队 / 资源预留合并成一张状态卡：三件事本质是「任务为什么还没跑」，
+               叠三条 alert 只会让用户在同一屏读到三份重复的队列位置 -->
+          <div v-if="showDispatchStatusCard" class="dispatch-status-card" data-testid="task-dispatch-status-card">
+            <h3 class="dispatch-status-card__title">{{ t('tasks.dispatchCard.title') }}</h3>
+            <div class="dispatch-status-card__row">
+              <span class="dispatch-status-card__label">{{ t('tasks.dispatchCard.stateLabel') }}</span>
+              <span class="dispatch-status-card__value" data-testid="task-dispatch-state">
+                <span>{{ dispatchStateText }}</span>
+                <span v-if="dispatchScopeText" class="dispatch-status-card__scope">{{ dispatchScopeText }}</span>
+              </span>
+            </div>
+            <div
+              v-if="showDispatchQueueRow"
+              class="dispatch-status-card__row"
+              :data-testid="dispatchWaiting ? 'task-pending-queue' : undefined"
+            >
+              <span class="dispatch-status-card__label">{{ t('tasks.dispatchCard.queueLabel') }}</span>
+              <span class="dispatch-status-card__value">
+                <span v-if="queueInfo.queuePosition !== null">
                   {{ t('tasks.queue.position', { position: queueInfo.queuePosition }) }}
-                </div>
-                <div v-if="queueInfo.estimatedWaitSeconds !== null">
+                </span>
+                <span v-if="queueInfo.estimatedWaitSeconds !== null">
                   {{ t('tasks.queue.estimatedWait', { time: queueWaitText }) }}
+                </span>
+                <span v-if="dispatchWaiting && queueInfo.queuePosition === null && queueInfo.estimatedWaitSeconds === null">
+                  {{ t('tasks.queue.generic') }}
+                </span>
+              </span>
+            </div>
+            <div class="dispatch-status-card__row">
+              <span class="dispatch-status-card__label">{{ t('tasks.dispatchCard.nextStepLabel') }}</span>
+              <span class="dispatch-status-card__value" data-testid="task-dispatch-next-step">{{ dispatchNextStepText }}</span>
+            </div>
+            <!-- 队列名、worker、释放原因这些是排障时才看的，收进折叠面板 -->
+            <a-collapse v-if="showDispatchTechDetails" ghost class="dispatch-status-card__tech" data-testid="task-dispatch-tech-details">
+              <a-collapse-panel key="tech" :header="t('tasks.dispatchCard.techDetails')">
+                <div class="dispatch-status-card__tech-body">
+                  <div v-if="dispatchQueueName">{{ t('tasks.queue.queue', { queue: dispatchQueueName }) }}</div>
+                  <div v-if="resourceReservation?.worker_id">
+                    {{ t('tasks.resourceReservation.worker', { worker: resourceReservation.worker_id }) }}
+                  </div>
+                  <div v-if="resourceReservation?.release_reason">
+                    {{ t('tasks.resourceReservation.releaseReason', { reason: resourceReservation.release_reason }) }}
+                  </div>
+                  <div v-if="resourceReservation?.release_error">
+                    {{ t('tasks.resourceReservation.releaseError', { error: resourceReservation.release_error }) }}
+                  </div>
+                  <div v-if="resourceWait">
+                    {{ t('tasks.resourceWait.retryCount', { count: resourceWait.retry_count }) }}
+                  </div>
+                  <div v-if="resourceWait?.next_attempt_at">
+                    {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
+                  </div>
+                  <div v-if="resourceWait?.reason" class="dispatch-status-card__reason">
+                    <a-typography-text code>{{ resourceWait.reason }}</a-typography-text>
+                  </div>
                 </div>
-                <div>{{ t('tasks.resourceWait.retryCount', { count: resourceWait.retry_count }) }}</div>
-                <div v-if="resourceWait.next_attempt_at">
-                  {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
-                </div>
-              </template>
-            </a-alert>
-          </div>
-
-          <div v-if="showStandaloneQueueNotice" class="queue-notice" data-testid="task-pending-queue">
-            <a-alert type="info" show-icon>
-              <template #message>{{ t('tasks.queue.title') }}</template>
-              <template #description>
-                <div v-if="queueInfo.queue">
-                  {{ t('tasks.queue.queue', { queue: queueInfo.queue }) }}
-                </div>
-                <div v-if="queueInfo.queuePosition !== null">
-                  {{ t('tasks.queue.position', { position: queueInfo.queuePosition }) }}
-                </div>
-                <div v-if="queueInfo.estimatedWaitSeconds !== null">
-                  {{ t('tasks.queue.estimatedWait', { time: queueWaitText }) }}
-                </div>
-                <div v-if="!hasQueueDetails">{{ t('tasks.queue.generic') }}</div>
-              </template>
-            </a-alert>
-          </div>
-
-          <div v-if="resourceReservation" class="reservation-notice">
-            <a-alert :type="resourceReservationAlertType" show-icon>
-              <template #message>{{ t('tasks.resourceReservation.title') }}</template>
-              <template #description>
-                <div>{{ t('tasks.resourceReservation.status', { status: resourceReservationStatusText }) }}</div>
-                <div v-if="resourceReservation.worker_id">
-                  {{ t('tasks.resourceReservation.worker', { worker: resourceReservation.worker_id }) }}
-                </div>
-                <div v-if="task.dispatch?.queue">
-                  {{ t('tasks.resourceReservation.queue', { queue: task.dispatch.queue }) }}
-                </div>
-                <div v-if="resourceReservation.release_reason">
-                  {{ t('tasks.resourceReservation.releaseReason', { reason: resourceReservation.release_reason }) }}
-                </div>
-                <div v-if="resourceReservation.release_error">
-                  {{ t('tasks.resourceReservation.releaseError', { error: resourceReservation.release_error }) }}
-                </div>
-              </template>
-            </a-alert>
+              </a-collapse-panel>
+            </a-collapse>
           </div>
 
           <!-- 主体内容 -->
@@ -542,12 +533,6 @@ const resourceWait = computed(() => {
 })
 const queueInfo = computed(() => readTaskQueueInfo(task.value))
 const queueWaitText = computed(() => formatWaitSeconds(queueInfo.value.estimatedWaitSeconds))
-const hasQueueDetails = computed(
-  () =>
-    queueInfo.value.queue !== null ||
-    queueInfo.value.queuePosition !== null ||
-    queueInfo.value.estimatedWaitSeconds !== null
-)
 const showStandaloneQueueNotice = computed(
   () =>
     (taskStatus.value === 'pending' || taskStatus.value === 'queued') &&
@@ -603,11 +588,52 @@ const resourceReservationStatusText = computed(() => {
   }
   return t(`tasks.resourceReservation.statuses.${statusKeys[status] || 'reserved'}`)
 })
-const resourceReservationAlertType = computed(() => {
-  if (resourceReservationStatus.value === 'release_failed') return 'warning'
-  if (['claimed', 'released'].includes(resourceReservationStatus.value)) return 'success'
-  return 'info'
+// 统一状态卡：等待 / 排队 / 预留三者只占一张卡，队列位置等信息各出现一次
+const dispatchWaiting = computed(
+  () => Boolean(resourceWait.value) || showStandaloneQueueNotice.value
+)
+const showDispatchStatusCard = computed(
+  () => dispatchWaiting.value || Boolean(resourceReservation.value)
+)
+const showDispatchQueueRow = computed(
+  () =>
+    queueInfo.value.queuePosition !== null ||
+    queueInfo.value.estimatedWaitSeconds !== null ||
+    dispatchWaiting.value
+)
+const dispatchStateText = computed(() => {
+  if (resourceWait.value) return resourceWaitText.value
+  if (showStandaloneQueueNotice.value) return t('tasks.queue.title')
+  return resourceReservationStatusText.value
 })
+const dispatchScopeText = computed(() =>
+  resourceWait.value?.scope && resourceWait.value?.dimension
+    ? t('tasks.resourceWait.scopeDimension', {
+        scope: resourceWaitScopeText.value,
+        dimension: resourceWaitDimensionText.value
+      })
+    : ''
+)
+const dispatchNextStepText = computed(() => {
+  if (resourceWait.value) return t('tasks.dispatchCard.nextStepWaitResource')
+  if (resourceReservationStatus.value === 'release_failed') {
+    return t('tasks.dispatchCard.nextStepReleaseError')
+  }
+  if (showStandaloneQueueNotice.value) return t('tasks.dispatchCard.nextStepQueued')
+  if (resourceReservation.value && resourceReservationStatus.value === 'reserved') {
+    return t('tasks.dispatchCard.nextStepReserved')
+  }
+  return t('tasks.dispatchCard.nextStepActive')
+})
+const dispatchQueueName = computed(() => queueInfo.value.queue || task.value?.dispatch?.queue || '')
+const showDispatchTechDetails = computed(
+  () =>
+    Boolean(dispatchQueueName.value) ||
+    Boolean(resourceReservation.value?.worker_id) ||
+    Boolean(resourceReservation.value?.release_reason) ||
+    Boolean(resourceReservation.value?.release_error) ||
+    Boolean(resourceWait.value)
+)
 
 // 方法
 const getStatusColor = getTaskStatusColor
@@ -886,12 +912,55 @@ onUnmounted(() => {
   margin-bottom: @spacing-xl;
 }
 
-.reservation-notice {
+// 资源等待 / 排队 / 预留的统一状态卡
+.dispatch-status-card {
+  .card();
   margin-bottom: @spacing-xl;
-}
 
-.queue-notice {
-  margin-bottom: @spacing-xl;
+  &__title {
+    margin: 0 0 @spacing-md;
+    font-size: 16px;
+    font-weight: @font-weight-semibold;
+  }
+
+  &__row {
+    display: flex;
+    align-items: baseline;
+    gap: @spacing-sm;
+    padding: @spacing-xs 0;
+
+    & + & {
+      border-top: 1px solid @border-color-light;
+    }
+  }
+
+  &__label {
+    flex: 0 0 auto;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  &__value {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-md;
+  }
+
+  &__scope {
+    color: @text-color-light-secondary;
+  }
+
+  &__tech {
+    margin-top: @spacing-sm;
+  }
+
+  &__tech-body {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
 }
 
 .progress-detail {

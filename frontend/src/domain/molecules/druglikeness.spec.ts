@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   classifyMetricTone,
   countLipinskiViolations,
+  countRo5Violations,
   druglikenessStars,
   evaluateLipinski,
   hasLipinskiData,
@@ -22,6 +23,12 @@ function props(overrides: Partial<LipinskiProperties> = {}): LipinskiProperties 
 }
 
 describe('Lipinski 五规则评估', () => {
+  it('Ro5 只统计四项经典阈值并忽略缺值', () => {
+    expect(countRo5Violations(props({ mw: 501, logp: 5, hbd: 6, hba: null, tpsa: 300 }))).toBe(2)
+    expect(countRo5Violations(props({ mw: null, logp: null, hbd: null, hba: null }))).toBeNull()
+    expect(countRo5Violations(props({ mw: 500, logp: 5, hbd: 5, hba: 10 }))).toBe(0)
+  })
+
   it('全部在上限内时通过，比例按上限归一化', () => {
     const rules = evaluateLipinski(props())
     expect(rules).toHaveLength(5)
