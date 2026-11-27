@@ -42,7 +42,8 @@ describe('ProjectList', () => {
   it('从工作台进入项目总览页，而不是直接进入研究会话页', () => {
     const wrapper = mountList(projects)
 
-    expect(wrapper.get('.project-row').attributes('href')).toBe('/projects/project-1')
+    expect(wrapper.get('.project-row .continue-action').attributes('href')).toBe('/projects/project-1')
+    expect(wrapper.find('.project-row a button').exists()).toBe(false)
     expect(wrapper.text()).toContain('项目总览')
   })
 

@@ -226,7 +226,8 @@ const deltaClass = computed(() => {
   if (delta === null || Math.abs(delta) < 0.0005) {
     return ''
   }
-  return delta > 0 ? 'affinity-kpi__value--good' : 'affinity-kpi__value--bad'
+  const betterThanMedian = comparison.value.lowerIsBetter ? delta < 0 : delta > 0
+  return betterThanMedian ? 'affinity-kpi__value--good' : 'affinity-kpi__value--bad'
 })
 
 const summary = computed(() => {
@@ -240,6 +241,7 @@ const summary = computed(() => {
   if (value.rank === 1) {
     return t('predict.result.affinitySummaryBest', {
       total: value.total,
+      direction: value.lowerIsBetter ? t('predict.result.affinityBelow') : t('predict.result.affinityAbove'),
       delta: formatNumber(Math.abs(value.deltaToMedian ?? 0))
     })
   }

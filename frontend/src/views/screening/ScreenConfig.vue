@@ -21,11 +21,11 @@ import { LDDM_GENERATION_TOOL_SLUG } from '@/types/design'
 import type { ScreeningParams } from '@/types/screening'
 import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
 import { listProjects } from '@/api/projects'
-import { getTarget, listStructures, listTargets } from '@/api/targets'
+import { getTarget, listPockets, listStructures, listTargets } from '@/api/targets'
 import { structureOptionLabel } from '@/domain/targets/structure-option'
 import type { CandidateSet } from '@/types/compounds'
 import type { ResearchProject } from '@/types/projects'
-import type { ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
+import type { PocketSummary, ProteinDetail, ProteinStructureDetail, TargetSummary } from '@/types/targets'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useRequestSequence } from '@/composables/useRequestSequence'
 import { buildInlineSmilesFile, escapeCsvCell, parseInlineSmiles, rewriteSdfRecordsWithTitle } from '@/domain/molecules/submission-smiles'
@@ -39,6 +39,7 @@ import {
 import {
   buildDefaultValues,
   normalizeParameters,
+  describeParameterError,
   validateParameters,
   type ParameterValues
 } from '@/domain/tools/parameterSchema'
@@ -196,13 +197,15 @@ watch(selectedProteinId, async id => {
 
 watch(candidateSetId, () => { if (ligandSource.value === 'candidate') countedLigands.value = selectedCandidateSet.value?.item_count ?? 0 })
 
+let applyingHandoff = false
 watch(ligandSource, source => {
+  if (applyingHandoff) return
   if (source !== 'upload') clearLigands()
   if (source !== 'candidate') candidateSetId.value = ''
   if (source !== 'inline') inlineText.value = ''
   preuploadedLigandFileId.value = ''
   preuploadedLigandFilename.value = ''
-})
+}, { flush: 'sync' })
 
 let appliedHandoffKey = ''
 function getHandoffKey(): string {
@@ -212,16 +215,22 @@ function applyQueryHandoff(): void {
   const key = getHandoffKey()
   if (key === appliedHandoffKey) return
   appliedHandoffKey = key
-  const candidateQuery = route.query.candidate_set_id
-  const fileQuery = route.query.file_id
-  const filenameQuery = route.query.filename
-  if (typeof candidateQuery === 'string' && candidateQuery) {
-    ligandSource.value = 'candidate'; candidateSetId.value = candidateQuery
-    preuploadedLigandFileId.value = ''; preuploadedLigandFilename.value = ''
-  } else if (typeof fileQuery === 'string' && fileQuery) {
-    ligandSource.value = 'upload'; preuploadedLigandFileId.value = fileQuery
-    preuploadedLigandFilename.value = typeof filenameQuery === 'string' ? filenameQuery : ''
-    ligandError.value = ''
+  const { candidate_set_id: candidate, file_id: file, filename } = route.query
+  const candidateId = typeof candidate === 'string' ? candidate : ''
+  const fileId = typeof file === 'string' ? file : ''
+  if (!candidateId && !fileId && !preuploadedLigandFileId.value) return
+  applyingHandoff = true
+  try {
+    clearLigands()
+    inlineText.value = ''
+    ligandSource.value = candidateId ? 'candidate' : 'upload'
+    candidateSetId.value = candidateId
+    if (!candidateId) {
+      preuploadedLigandFileId.value = fileId
+      preuploadedLigandFilename.value = typeof filename === 'string' ? filename : ''
+    }
+  } finally {
+    applyingHandoff = false
   }
 }
 watch(() => route.query, applyQueryHandoff)
@@ -252,6 +261,56 @@ const ligandCount = computed(() => ligandSource.value === 'inline' ? inlineParse
 const ligandError = ref('')
 const pocketFile = ref<File | null>(null)
 const pocketName = ref('')
+const vinaPocketAxes = ['x', 'y', 'z'] as const
+const vinaPocketBounds = { min: -999.999, max: 9999.999 }
+const vinaPocketCoordinates = reactive<Record<(typeof vinaPocketAxes)[number], number | null>>({ x: null, y: null, z: null })
+const vinaPocketOptions = ref<PocketSummary[]>([])
+const vinaPocketId = ref<string>()
+const canEncodePocketCoordinate = (value: number | null): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= vinaPocketBounds.min && value <= vinaPocketBounds.max
+const vinaPocketValues = computed(() => vinaPocketAxes.map(axis => vinaPocketCoordinates[axis]))
+const vinaPocketInvalid = computed(() => !pocketFile.value && vinaPocketValues.value.some(value => value != null) &&
+  !vinaPocketValues.value.every(canEncodePocketCoordinate))
+const vinaPocketSequence = useRequestSequence()
+
+function clearVinaPocket(): void {
+  pocketFile.value = null
+  pocketName.value = ''
+  vinaPocketId.value = undefined
+  for (const axis of vinaPocketAxes) vinaPocketCoordinates[axis] = null
+}
+
+function applyVinaPocket(id: string | undefined): void {
+  const center = vinaPocketOptions.value.find(pocket => pocket.id === id)?.center
+  clearVinaPocket()
+  vinaPocketId.value = id
+  for (const axis of vinaPocketAxes) vinaPocketCoordinates[axis] = center?.[axis] ?? null
+}
+
+watch([receptorSource, selectedStructureId, receptorFile], async ([source, structureId]) => {
+  clearVinaPocket()
+  vinaPocketOptions.value = []
+  const seq = vinaPocketSequence.next()
+  if (source !== 'project' || !structureId) return
+  try {
+    const { data } = await listPockets(structureId)
+    if (vinaPocketSequence.isCurrent(seq)) vinaPocketOptions.value = data.items.filter(pocket =>
+      pocket.center && vinaPocketAxes.every(axis => canEncodePocketCoordinate(pocket.center?.[axis] ?? null))
+    )
+  } catch { /* Manual coordinates and file upload remain available. */ }
+})
+
+function vinaPocketInput(): File | null {
+  if (pocketFile.value) return pocketFile.value
+  const values = vinaPocketValues.value
+  if (!values.every(canEncodePocketCoordinate)) return null
+  // The Vina binding_pocket slot obtains its center from the PDB atoms.
+  const coordinates = values.map(value => value.toFixed(3).padStart(8)).join('')
+  const pdb = `ATOM      1  CA  GLY A   1    ${coordinates}  1.00  0.00           C
+END
+`
+  return new File([pdb], 'pocket_center.pdb', { type: 'chemical/x-pdb' })
+}
 
 // LDDM 口袋对接与局部对接状态
 const dockLigandFile = ref<File | null>(null)
@@ -310,6 +369,7 @@ const dockAtomsErrorKey = computed(() =>
     : 'design.molecule.atomsToDockInvalid'
 )
 const dockActiveCenter = computed(() => dockPocketState.value.center)
+const unsupportedDockHandoff = computed(() => Boolean(preuploadedLigandFileId.value && /\.csv$/i.test(preuploadedLigandFilename.value.trim())))
 const dockCenterReady = computed(() => Boolean(dockActiveCenter.value))
 
 const LDDM_DOCK_PRIMARY_KEYS = ['n_samples']
@@ -358,7 +418,7 @@ const canSubmit = computed(() => {
   if (!receptorReady) return false
   if (isLddmDock.value) {
     if (dockLigandParsing.value || dockPocketState.value.parsing || dockLigandError.value) return false
-    const hasDockLigand = Boolean(dockLigandUpload.value || preuploadedLigandFileId.value)
+    const hasDockLigand = Boolean(dockLigandUpload.value || (preuploadedLigandFileId.value && !unsupportedDockHandoff.value))
     return (
       hasDockLigand &&
       !dockAtomsInvalid.value &&
@@ -366,6 +426,7 @@ const canSubmit = computed(() => {
       lddmParameterErrors.value.length === 0
     )
   }
+  if (vinaPocketInvalid.value) return false
   if (ligandSource.value === 'inline') return Boolean(inlineParsed.value.validRows.length)
   if (ligandSource.value === 'candidate') return Boolean(candidateSetId.value && selectedCandidateSet.value)
   if (preuploadedLigandFileId.value) return !ligandError.value
@@ -401,6 +462,7 @@ async function handleReceptorUpload(file: File): Promise<boolean> {
 }
 
 function handlePocketUpload(file: File): boolean {
+  clearVinaPocket()
   pocketFile.value = file
   pocketName.value = file.name
   return false
@@ -568,6 +630,10 @@ async function handleSubmit(): Promise<void> {
       formError.value = t('screening.config.needReceptor')
       return
     }
+    if (!dockLigandUpload.value && unsupportedDockHandoff.value) {
+      formError.value = t('screening.config.lddmCsvUnsupported')
+      return
+    }
     const ligandIdFallback = preuploadedLigandFileId.value
     if (!dockLigandUpload.value && !ligandIdFallback) {
       formError.value = t('screening.config.dockNeedLigand')
@@ -582,7 +648,7 @@ async function handleSubmit(): Promise<void> {
       return
     }
     if (lddmParameterErrors.value.length > 0) {
-      formError.value = t('design.molecule.invalidNum')
+      formError.value = describeParameterError(lddmSchema.value, lddmParameterErrors.value[0]!, t)
       return
     }
 
@@ -613,7 +679,7 @@ async function handleSubmit(): Promise<void> {
       const task = await submitToolTask({
         toolSlug: selectedSlug.value,
         projectId: projectId.value || undefined,
-        name: `LDDM 口袋对接 ${new Date().toISOString().slice(0, 10)}`,
+        name: `${t('screening.config.lddmDockModelName')} ${new Date().toISOString().slice(0, 10)}`,
         params: {
           ...normalizeParameters(lddmSchema.value, lddmEffectiveParams.value),
           generation_mode: 'dock',
@@ -634,6 +700,7 @@ async function handleSubmit(): Promise<void> {
     return
   }
 
+  if (vinaPocketInvalid.value) { formError.value = t('screening.config.vinaPocketCenterInvalid'); return }
   const snapshot = {
     receptorSource: receptorSource.value,
     receptorFile: receptorFile.value,
@@ -645,7 +712,7 @@ async function handleSubmit(): Promise<void> {
     files: [...ligandFiles.value],
     format: ligandFormat.value,
     inlineRows: [...inlineParsed.value.validRows],
-    pocketFile: pocketFile.value,
+    pocketFile: vinaPocketInput(),
     slug: selectedSlug.value,
     params: { ...params }
   }
@@ -676,7 +743,7 @@ async function handleSubmit(): Promise<void> {
     else if (snapshot.format === 'csv') uploads.ligand_smiles = (await uploadFile(await buildCsvPayload(snapshot.files))).data.id
     else uploads.ligand_sdf = (await uploadFile(await buildSdfPayload(snapshot.files))).data.id
     if (snapshot.pocketFile) uploads.binding_pocket = (await uploadFile(snapshot.pocketFile)).data.id
-    const task = await submitToolTask({ toolSlug: snapshot.slug, projectId: snapshot.projectId || undefined, name: `虚拟筛选 ${new Date().toISOString().slice(0, 10)}`, params: snapshot.params, standardInputUploads: uploads })
+    const task = await submitToolTask({ toolSlug: snapshot.slug, projectId: snapshot.projectId || undefined, name: `${t('screening.config.screeningTaskName')} ${new Date().toISOString().slice(0, 10)}`, params: snapshot.params, standardInputUploads: uploads })
     message.success(t('screening.config.success'))
     await router.push(`/tasks/${task.id}/screening`)
   } catch (error) {
@@ -937,7 +1004,7 @@ const paramFields = computed(() => [
               :disabled="submitting"
               @open-sketch="dockSketchOpen = true"
             />
-            <a-alert v-if="dockLigandError" type="warning" show-icon :message="dockLigandError" />
+            <a-alert v-if="dockLigandError || (unsupportedDockHandoff && !dockLigandUpload)" type="warning" show-icon :message="dockLigandError || t('screening.config.lddmCsvUnsupported')" />
             <div class="screen-config__atoms-field">
               <label class="screen-config__atoms-label" for="screen-dock-atoms">{{ t('design.molecule.atomsToDock') }}</label>
               <a-input
@@ -966,11 +1033,39 @@ const paramFields = computed(() => [
         </template>
 
         <a-form-item v-if="!isLddmDock" :label="t('screening.config.pocket')">
-          <a-upload :before-upload="handlePocketUpload" :max-count="1" accept=".pdb" :file-list="[]">
-            <a-button>{{ t('screening.config.chooseFile') }}</a-button>
-          </a-upload>
-          <span v-if="pocketName" class="screen-config__file">{{ pocketName }}</span>
-          <p class="screen-config__hint">{{ t('screening.config.pocketHint') }}</p>
+          <a-select
+            v-if="vinaPocketOptions.length"
+            :value="vinaPocketId"
+            :options="vinaPocketOptions.map((pocket, index) => ({ label: `${t('design.pocket.pocket')} ${pocket.rank ?? index + 1}`, value: pocket.id }))"
+            :placeholder="t('design.pocket.selectPlaceholder')"
+            :disabled="submitting"
+            allow-clear
+            @change="applyVinaPocket"
+          />
+          <a-row :gutter="8">
+            <a-col v-for="axis in vinaPocketAxes" :key="axis" :span="8">
+              <a-input-number
+                v-model:value="vinaPocketCoordinates[axis]"
+                :min="vinaPocketBounds.min"
+                :max="vinaPocketBounds.max"
+                :placeholder="axis.toUpperCase()"
+                :aria-label="t(`modelParams.labels.center_${axis}`)"
+                :disabled="submitting || Boolean(pocketFile)"
+                :status="vinaPocketInvalid ? 'error' : undefined"
+                style="width: 100%"
+                @change="vinaPocketId = undefined"
+              />
+            </a-col>
+          </a-row>
+          <a-space wrap>
+            <a-upload :before-upload="handlePocketUpload" :max-count="1" accept=".pdb" :file-list="[]" :disabled="submitting">
+              <a-button :disabled="submitting">{{ t('screening.config.chooseFile') }}</a-button>
+            </a-upload>
+            <span v-if="pocketName" class="screen-config__file">{{ pocketName }}</span>
+            <a-button v-if="pocketName" type="link" :disabled="submitting" @click="clearVinaPocket">{{ t('common.clear') }}</a-button>
+          </a-space>
+          <p class="screen-config__hint">{{ t('screening.config.vinaPocketCenterHint') }}</p>
+          <a-alert v-if="vinaPocketInvalid" type="warning" show-icon :message="t('screening.config.vinaPocketCenterInvalid')" />
         </a-form-item>
       </a-form>
     </a-card>

@@ -12,26 +12,23 @@ export type PocketScoreTone = 'strong' | 'medium' | 'weak'
 /** 缺少数值时的占位符。 */
 export const POCKET_PLACEHOLDER = '-'
 
-function toComparableScore(score: number | null | undefined): number {
-  return typeof score === 'number' && Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY
+function finitePocketScore(score: number | null | undefined): number | null {
+  return typeof score === 'number' && Number.isFinite(score) ? score : null
 }
 
 /**
- * 按 `score` 降序排序（不修改入参）。
- *
- * `score` 为 null/非有限值视作最低分排到末尾；同分时保持后端给的 `rank` 次序。
+ * Energy-style scores (negative) rank lower first, matching the score badges.
+ * Nonnegative scores have a different scale: preserve the model's rank there.
+ * Missing scores are always last.
  */
 export function sortPocketsByScore(pockets: readonly PocketSummary[]): PocketSummary[] {
   return [...pockets].sort((left, right) => {
-    const leftScore = toComparableScore(left.score)
-    const rightScore = toComparableScore(right.score)
-    if (leftScore !== rightScore) {
-      // 分数缺失（-Infinity）统一排到末尾；其余按数值降序。
-      return rightScore > leftScore ? 1 : -1
-    }
-    const leftRank = typeof left.rank === 'number' ? left.rank : Number.MAX_SAFE_INTEGER
-    const rightRank = typeof right.rank === 'number' ? right.rank : Number.MAX_SAFE_INTEGER
-    return leftRank - rightRank
+    const a = finitePocketScore(left.score)
+    const b = finitePocketScore(right.score)
+    if (a === null && b !== null) return 1
+    if (b === null && a !== null) return -1
+    if (a !== null && b !== null && (a < 0 || b < 0) && a !== b) return a - b
+    return (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER)
   })
 }
 

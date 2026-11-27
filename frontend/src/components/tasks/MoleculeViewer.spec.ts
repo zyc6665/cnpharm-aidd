@@ -235,7 +235,7 @@ describe('MoleculeViewer', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.viewer-mode').text()).toBe('protein')
+    expect(wrapper.find('.viewer-mode').text()).toBe('tasks.visualizationModes.protein')
     expect(wrapper.find('[data-testid="viewer-reset"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="viewer-representation-select"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="viewer-sequence-bar"]').exists()).toBe(false)
@@ -258,7 +258,7 @@ describe('MoleculeViewer', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.viewer-mode').text()).toBe('protein')
+    expect(wrapper.find('.viewer-mode').text()).toBe('tasks.visualizationModes.protein')
     expect(wrapper.find('[data-testid="viewer-representation-select"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="viewer-color-select"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="viewer-sequence-bar"]').exists()).toBe(true)
@@ -313,7 +313,7 @@ describe('MoleculeViewer', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.viewer-mode').text()).toBe('docking')
+    expect(wrapper.find('.viewer-mode').text()).toBe('tasks.visualizationModes.docking')
     expect(mockState.applyPreset).toHaveBeenCalledTimes(2)
     expect(mockState.applyPreset).toHaveBeenNthCalledWith(
       1,

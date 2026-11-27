@@ -12,7 +12,7 @@
       <button
         class="mobile-menu-btn"
         type="button"
-        :aria-label="t('common.expand')"
+        :aria-label="mobileNavOpen ? t('common.collapse') : t('common.expand')"
         :aria-expanded="mobileNavOpen"
         @click="mobileNavOpen = !mobileNavOpen"
       >
@@ -106,7 +106,6 @@
       <div class="sidebar-footer">
         <button
           class="nav-item nav-item-btn"
-          :class="{ active: isActive(['settings']) }"
           @click="toggleTheme"
           :aria-label="t('common.theme')"
           :title="collapsed ? t('common.theme') : undefined"
@@ -161,7 +160,7 @@
             免责声明），`mode="out-in"` 遇到 Fragment 根时会先移除旧页却永远
             不进场，表现为「URL 变了、页面全白，必须刷新」。
           -->
-          <div :key="route.path" class="shell-route">
+          <div :key="(route.meta.viewKey as string) || route.path" class="shell-route">
             <component :is="Component" />
           </div>
         </transition>
@@ -484,6 +483,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   display: flex;
   align-items: center;
   gap: @spacing-sm;
+  text-align: left;
   height: 36px;
   padding: 0 @spacing-sm;
   border-radius: @border-radius-md;

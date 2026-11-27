@@ -142,28 +142,28 @@ export const useTasksStore = defineStore('tasks', () => {
 
   const cancelTask = async (id: string) => {
     const res = await apiCancelTask(id)
-    // 更新列表中的任务状态
+    const updated = res.data ?? await fetchTaskDetail(id)
     const index = tasks.value.findIndex(t => t.id === id)
     if (index !== -1) {
-      tasks.value[index] = normalizeTaskSummary(res.data)
+      tasks.value[index] = normalizeTaskSummary(updated)
     }
     if (currentTask.value?.id === id) {
-      currentTask.value = res.data
+      currentTask.value = updated
     }
-    return res.data
+    return updated
   }
 
   const retryTask = async (id: string) => {
     const res = await apiRetryTask(id)
-    // 更新列表中的任务状态
+    const updated = res.data ?? await fetchTaskDetail(id)
     const index = tasks.value.findIndex(t => t.id === id)
     if (index !== -1) {
-      tasks.value[index] = normalizeTaskSummary(res.data)
+      tasks.value[index] = normalizeTaskSummary(updated)
     }
     if (currentTask.value?.id === id) {
-      currentTask.value = res.data
+      currentTask.value = updated
     }
-    return res.data
+    return updated
   }
 
   const deleteTask = async (id: string) => {
@@ -176,19 +176,23 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  const updateTaskProgress = (id: string, progress: number, status?: TaskStatus) => {
+  const updateTaskProgress = (id: string, progress: number, status?: TaskStatus, progressMessage?: string | null, errorMessage?: string | null) => {
     const task = tasks.value.find(t => t.id === id)
     if (task) {
       task.progress = progress
       if (status) {
         task.status = status
       }
+      if (progressMessage !== undefined) task.progress_message = progressMessage ?? undefined
+      if (errorMessage !== undefined) task.error_message = errorMessage ?? undefined
     }
     if (currentTask.value?.id === id) {
       currentTask.value.progress = progress
       if (status) {
         currentTask.value.status = status
       }
+      if (progressMessage !== undefined) currentTask.value.progress_message = progressMessage ?? undefined
+      if (errorMessage !== undefined) currentTask.value.error_message = errorMessage ?? undefined
     }
   }
 

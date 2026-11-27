@@ -29,7 +29,7 @@
       </div>
 
       <div class="viewer-toolbar" role="group" :aria-label="t('tasks.visualizationMode')">
-        <span class="viewer-mode" :aria-label="t('tasks.visualizationMode')">{{ viewerPreset.mode }}</span>
+        <span class="viewer-mode" :aria-label="t('tasks.visualizationMode')">{{ t(`tasks.visualizationModes.${viewerPreset.mode}`) }}</span>
 
         <template v-if="!isCompact">
           <select
@@ -67,18 +67,6 @@
               {{ colorThemeLabel(theme) }}
             </option>
           </select>
-
-          <button
-            class="viewer-tool-btn"
-            type="button"
-            data-testid="viewer-bg-toggle"
-            :disabled="loading || Boolean(error)"
-            :title="t('tasks.visualizationToggleBackground')"
-            :aria-label="t('tasks.visualizationToggleBackground')"
-            @click="toggleBackground"
-          >
-            {{ activeBackground === 'dark' ? t('tasks.visualizationBgDark') : t('tasks.visualizationBgWhite') }}
-          </button>
 
           <button
             class="viewer-tool-btn"
@@ -180,6 +168,18 @@
             {{ t('tasks.visualizationScreenshot') }}
           </button>
         </template>
+
+        <button
+          class="viewer-tool-btn"
+          type="button"
+          data-testid="viewer-bg-toggle"
+          :disabled="loading || Boolean(error)"
+          :title="t('tasks.visualizationToggleBackground')"
+          :aria-label="t('tasks.visualizationToggleBackground')"
+          @click="toggleBackground"
+        >
+          {{ activeBackground === 'dark' ? t('tasks.visualizationBgDark') : t('tasks.visualizationBgWhite') }}
+        </button>
 
         <button
           class="viewer-reset"
@@ -319,7 +319,7 @@ interface LoadedEntryRecord {
 }
 
 let viewer: MolstarViewer | null = null
-let viewerInitPromise: Promise<MolstarViewer> | null = null
+let viewerInitPromise: Promise<MolstarViewer | null> | null = null
 let renderSeq = 0
 let disposed = false
 let mutationQueue: Promise<void> = Promise.resolve()
@@ -1076,6 +1076,10 @@ async function ensureViewer(): Promise<MolstarViewer | null> {
       showControls: viewerPreset.value.showControls,
       backgroundColor: activeBackground.value === 'white' ? 0xffffff : 0x0b1a2e,
     }).then(created => {
+      if (disposed) {
+        disposeMolstarViewer(created)
+        return null
+      }
       viewer = created
       const layoutSub = created.plugin.layout.events.updated.subscribe(syncFullscreenLayout)
       removeLayoutSyncListener = () => layoutSub.unsubscribe()
@@ -1144,8 +1148,11 @@ async function renderScene() {
         const resource = entry.format === 'sdf'
           ? await createNormalizedSdfObjectUrl(entry.url, entry.sdfRecordIndex !== undefined && !entry.sdfRecordScoped ? { recordIndex: entry.sdfRecordIndex } : {})
           : await createProtectedObjectUrl(entry.url)
+        if (seq !== renderSeq || disposed) {
+          resource.revoke()
+          return
+        }
         entryResourcesRegistry.add(resource.revoke)
-        if (seq !== renderSeq || disposed) return
         const loaded = await loadEntryStructure(currentViewer, entry, resource.url)
         if (seq !== renderSeq || disposed) return
         if (loaded) loadedEntries.push(loaded)
@@ -1156,6 +1163,9 @@ async function renderScene() {
       if (!isCompact.value && sequenceChains.value.length) sequenceOpen.value = true
       currentViewer.handleResize()
     })
+    if (seq === renderSeq && !disposed && loadedEntries.length && props.focusResidue) {
+      await applyFocusResidue(props.focusResidue)
+    }
   } catch (cause) {
     if (seq === renderSeq) error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -1283,6 +1293,11 @@ onUnmounted(() => {
   font-weight: 600;
   text-transform: capitalize;
   backdrop-filter: blur(4px);
+}
+
+.viewer-select option {
+  background: #0b1a2e;
+  color: #e2e8f0;
 }
 
 .viewer-select,

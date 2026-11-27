@@ -266,7 +266,7 @@
           </template>
         </a-alert>
         <ParameterPresets
-          v-if="selectedOption?.parameterSchema"
+          v-if="selectedOption?.parameterSchema && userId"
           :schema="selectedOption.parameterSchema"
           :values="form.params"
           :storage-key="presetStorageKey"
@@ -340,6 +340,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useUserStore } from '@/stores/user'
   import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
@@ -376,6 +377,7 @@
     buildDefaultValues,
     normalizeParameters,
     validateParameters,
+    describeParameterError,
     type ParameterValues
   } from '@/domain/tools/parameterSchema'
   import type {
@@ -391,6 +393,7 @@
   const router = useRouter()
   const route = useRoute()
   const { t } = useI18n()
+  const userStore = useUserStore()
 
   const props = withDefaults(defineProps<{ initialProjectId?: string }>(), {
     initialProjectId: ''
@@ -640,8 +643,10 @@
       if (!fragmentSequence.isCurrent(seq)) return false
       const prepared = await parseAndNormalizeLigandUpload(file, text, { convertNonSdfToSdf: false })
       if (!fragmentSequence.isCurrent(seq)) return false
-      if (!prepared) {
-        fragmentError.value = 'design.molecule.fragmentUnreadable'
+      if (!prepared || (!prepared.molecule && /V3000/i.test(text))) {
+        fragmentError.value = /V3000/i.test(text)
+          ? 'design.molecule.fragmentV3000Unsupported'
+          : 'design.molecule.fragmentUnreadable'
         return false
       }
       fragmentCount.value = prepared.atomCount
@@ -675,6 +680,13 @@
     ...(supportsGenerationMode.value ? { generation_mode: generationMode.value } : {})
   }))
   const parameterErrors = computed(() => validateParameters(schema.value, effectiveParams.value))
+  const firstParameterError = computed(() => {
+    const [error] = parameterErrors.value
+    return error ? describeParameterError(schema.value, error, t) : ''
+  })
+  const structureMissingMessage = computed(() => t(activeProjectStructure.value?.structureId
+    ? 'design.molecule.pocketMissingFile'
+    : 'design.molecule.selectProteinStructure'))
 
   /** 提交成功后保留在当前页展示实时进度，而不是直接把用户踢到结果页。 */
   const submittedTaskId = ref<string | null>(null)
@@ -682,9 +694,9 @@
   /** 高频核心参数直接展示，采样超参统一收进「高级参数」。 */
   const PRIMARY_PARAM_KEYS = ['temperature', 'num_samples', 'n_samples']
 
-  const PARAM_STORAGE_PREFIX = 'design:molecule-params:'
-  const presetStorageKey = computed(() => `design:parameter-presets:${selectedSlug.value}`)
-  const paramStorageKey = computed(() => `${PARAM_STORAGE_PREFIX}${selectedSlug.value}`)
+  const userId = computed(() => userStore.userInfo?.id)
+  const presetStorageKey = computed(() => `design:u:${userId.value}:parameter-presets:${selectedSlug.value}`)
+  const paramStorageKey = computed(() => `design:u:${userId.value}:molecule-params:${selectedSlug.value}`)
 
   /** 参数来自上一次提交的记忆，且与当前 schema 默认值存在差异。 */
   const restoredFromMemory = ref(false)
@@ -708,7 +720,7 @@
   }
 
   function readStoredParams(): StoredMoleculeParams | null {
-    if (typeof localStorage === 'undefined') return null
+    if (!userId.value || typeof localStorage === 'undefined') return null
     try {
       const raw = localStorage.getItem(paramStorageKey.value)
       if (!raw) return null
@@ -726,7 +738,7 @@
   }
 
   function persistParams(): void {
-    if (typeof localStorage === 'undefined') return
+    if (!userId.value || typeof localStorage === 'undefined') return
     const storedParams: ParameterValues = {}
     for (const [key, value] of Object.entries(form.params)) {
       // 中心坐标来自当前口袋，不属于「用户配置」，不写入记忆。
@@ -792,7 +804,7 @@
   }
 
   function resetParams(): void {
-    if (typeof localStorage !== 'undefined') {
+    if (userId.value && typeof localStorage !== 'undefined') {
       try {
         localStorage.removeItem(paramStorageKey.value)
       } catch {
@@ -929,12 +941,12 @@
       return t('design.molecule.needProject')
     }
     if (!structureReady.value) {
-      return t('design.molecule.pocketMissingFile')
+      return structureMissingMessage.value
     }
     if (!hasCenter.value) {
       return pocketCenterMissingMessage.value
     }
-    if (parameterErrors.value.length > 0) return t('design.molecule.invalidNum')
+    if (parameterErrors.value.length > 0) return firstParameterError.value
     return null
   }
 
@@ -1254,7 +1266,8 @@
     {
       id: 'fragment-params',
       title: t('design.molecule.context.stepFragmentParams'),
-      done: (!needsLigandFile.value || Boolean(fragmentUpload.value)) && parameterErrors.value.length === 0
+      done: Boolean(resolvedTool.value && activeProjectId.value && structureReady.value && hasCenter.value) &&
+        (!needsLigandFile.value || Boolean(fragmentUpload.value)) && parameterErrors.value.length === 0
     }
   ])
 
@@ -1267,7 +1280,7 @@
       items.push({ id: 'project', label: t('design.molecule.needProject'), targetTestId: 'molecule-section-input' })
     }
     if (!structureReady.value) {
-      items.push({ id: 'structure', label: t('design.molecule.pocketMissingFile'), targetTestId: 'molecule-section-input' })
+      items.push({ id: 'structure', label: structureMissingMessage.value, targetTestId: 'molecule-section-input' })
     } else if (!hasCenter.value) {
       items.push({ id: 'center', label: pocketCenterMissingMessage.value, targetTestId: 'molecule-section-input' })
     }
@@ -1275,7 +1288,7 @@
       items.push({ id: 'fragment', label: t(fragmentIssue.value || 'design.molecule.fragmentRequired'), targetTestId: 'molecule-fragment-section' })
     }
     if (parameterErrors.value.length > 0) {
-      items.push({ id: 'params', label: t('design.molecule.invalidNum'), targetTestId: 'molecule-section-params' })
+      items.push({ id: 'params', label: firstParameterError.value, targetTestId: 'molecule-section-params' })
     }
     return items
   })
@@ -1291,7 +1304,7 @@
     void loadProjects()
   })
 
-  watch(selectedSlug, () => {
+  watch([selectedSlug, userId], () => {
     void loadTool()
   })
 </script>

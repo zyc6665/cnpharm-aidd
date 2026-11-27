@@ -1,7 +1,7 @@
 <template>
   <a-drawer
     :open="open"
-    :width="960"
+    :width="'min(960px, 96vw)'"
     placement="right"
     :title="t('design.results.compare.title')"
     :body-style="{ padding: '16px 20px 32px' }"
@@ -68,13 +68,6 @@
               </td>
             </tr>
 
-            <tr>
-              <th class="compare-table__label">{{ t('design.results.compare.rating') }}</th>
-              <td v-for="molecule in molecules" :key="molecule.key" data-testid="molecule-compare-rating">
-                <a-rate v-if="molecule.rating !== null" :value="molecule.rating" disabled />
-                <span v-else class="compare__na">-</span>
-              </td>
-            </tr>
 
             <tr>
               <th class="compare-table__label">{{ t('design.results.compare.violations') }}</th>
@@ -84,7 +77,10 @@
                 data-testid="molecule-compare-violations"
                 :data-violations="molecule.violations"
               >
-                {{ molecule.violations }}
+                <a-tag v-if="molecule.violations !== null" :color="molecule.violations === 0 ? 'success' : molecule.violations === 1 ? 'warning' : 'error'">
+                  {{ molecule.violations === 0 ? t('design.results.ro5PassBadge') : t('design.results.ro5ViolationsBadge', { count: molecule.violations }) }}
+                </a-tag>
+                <span v-else class="compare__na">-</span>
               </td>
             </tr>
 
@@ -122,8 +118,7 @@
     index: number
     smiles: string
     sequence: string
-    rating: number | null
-    violations: number
+    violations: number | null
     /** 已收藏（喜欢）标记，仅用于标题星标。 */
     favorite?: boolean
     metrics: CompareMetric[]
@@ -135,6 +130,7 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import { CopyOutlined } from '@ant-design/icons-vue'
+  import { copyToClipboard } from '@/utils/clipboard'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 
   const props = withDefaults(
@@ -182,7 +178,7 @@
   async function copySmiles(text: string): Promise<void> {
     if (!text) return
     try {
-      await navigator.clipboard.writeText(text)
+      await copyToClipboard(text)
       message.success(t('common.copySuccess'))
     } catch {
       message.warning(t('design.results.copyFailed'))

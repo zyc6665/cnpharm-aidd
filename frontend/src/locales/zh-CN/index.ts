@@ -1953,8 +1953,28 @@ export default {
           duration: '约 2 ~ 10 分钟',
           scenario: '结构与亲和力预测，适合先验证结合可能性'
         },
+        'autodock-vina': {
+          duration: '小批次为分钟级',
+          scenario: '在结合口袋中对接和筛选小分子'
+        },
+        'molp-pc': {
+          duration: '每批数秒至数分钟',
+          scenario: '预测小分子 ADMET 属性'
+        },
+        msign: {
+          duration: '每批数秒至数分钟',
+          scenario: '估算蛋白–配体亲和力'
+        },
+        gromacs: {
+          duration: '数小时至数天',
+          scenario: '模拟分子动力学并分析轨迹'
+        },
+        therapainter: {
+          duration: '每批为分钟级',
+          scenario: '预测多肽活性与毒性'
+        },
         generic: {
-          duration: '耗时取决于口袋规模与采样数量',
+          duration: '取决于输入规模、模型参数与队列',
           scenario: '按工具契约声明的能力执行'
         }
       }
@@ -2023,6 +2043,7 @@ export default {
       pocketLabel: '口袋',
       pocketCenter: '口袋中心',
       pocketBox: '口袋包围盒',
+      selectProteinStructure: '请先选择或上传蛋白结构。',
       pocketMissingFile: '该结构缺少可用的结构文件，请重新预测结构后再试',
       pocketMissingCenter: '请先定义口袋位置（选择项目口袋、参考配体或输入中心坐标）',
       sourceProject: '从项目结构选择',
@@ -2088,6 +2109,7 @@ export default {
       fragmentRequired: '请选择片段或配体结构文件后继续。',
       fragmentAtomCount: '首个结构：{count} 个原子（索引范围 0–{lastIndex}）',
       fragmentFileReady: '暂无法识别原子数。',
+      fragmentV3000Unsupported: '片段编辑器无法读取此 V3000 结构，请导出为 V2000 SDF 或 MOL 后重新上传。',
       fragmentUnreadable: '无法读取结构，请选择有效的 SDF、MOL、MOL2 或 PDB 文件。',
       moleculeSize: '目标分子大小',
       moleculeSizeHint: 'LDDM 支持按口袋尺寸自适应采样，或限定目标重原子数范围（Dock 模式忽略）。',
@@ -2214,7 +2236,7 @@ export default {
       deduplicate: '去重',
       projectRequired: '请先选择项目',
       sequenceTooShort: '多肽序列至少需要 4 个氨基酸',
-      sequenceTooLong: '多肽序列不能超过 20000 个字符',
+      sequenceTooLong: '单条多肽序列不能超过 200 个氨基酸',
       invalidBatchSize: '批大小需在 1 ~ 256 之间',
       numPeptides: '生成数量',
       lengthMin: '多肽长度下限',
@@ -2443,7 +2465,9 @@ export default {
       noCandidateSets: '当前项目暂无候选集',
       needProject: '缺少 project_id，无法加载候选集；可直接上传 SMILES CSV。',
       groups: '预测指标组',
-      groupsHint: '默认全选，可按需取消。',
+      groupsHint: '模型统一计算全部 ADMET 属性；结果页按属性分组展示。',
+      projectProteinSequence: '使用项目靶点蛋白序列（{count} aa）。',
+      projectProteinSequenceMissing: '此蛋白没有序列，请在模型参数中手动输入。',
       type: '预测类型',
       typeAdmet: 'ADMET 分子性质',
       typeAffinity: '结合亲和力',
@@ -2506,7 +2530,7 @@ export default {
       filterColumn: '筛选列',
       filterMin: '最小值',
       filterMax: '最大值',
-      affinityFilterLabel: '预测亲和力 ≥',
+      affinityFilterLabel: '预测亲和力 {operator}',
       filterCount: '显示 {shown} / {total} 个分子',
       filterRangeInvalid: '最小值不能大于最大值',
       resetFilter: '重置筛选',
@@ -2558,7 +2582,7 @@ export default {
       affinityQualityMiddle: '中等候选',
       affinityQualityLow: '低于多数候选',
       affinitySummarySingle: '当前结果只有 1 个候选，暂无同批比较。',
-      affinitySummaryBest: '在 {total} 个候选分子中排名第 1，预测亲和力高于候选中位数 {delta}。',
+      affinitySummaryBest: '在 {total} 个候选物中排名第 1，预测亲和力数值{direction}中位数 {delta}。',
       affinitySummary: '在 {total} 个候选分子中排名第 {rank}，比最优候选低 {gap}，{direction}候选中位数 {delta}。',
       affinityAbove: '高于',
       affinityBelow: '低于',
@@ -2571,6 +2595,7 @@ export default {
       affinityTechnical: '结构与预处理细节',
       detailTable: '列表视图',
       detailRadar: '雷达视图',
+      radarSafety: '{metric} 安全度（1 − 风险）',
       detailDownloadCsv: '下载 CSV',
       detailDownloadPdf: '下载 PDF',
       detailNoData: '该分子无可用数据。',
@@ -2687,6 +2712,10 @@ export default {
       lddmDockModelDesc: '基于 3D 扩散模型对单配体在蛋白口袋内生成绑定构象，支持全配体对接或固定核心仅重采样局部原子。',
       dockLigandTitle: '待对接配体（3D 结构）',
       dockLigandHint: '上传单个 3D 配体（.sdf / .mol / .mol2 / .pdb）；可通过下方画板框选部分原子做局部重对接，留空则全配体对接。',
+      lddmCsvUnsupported: 'LDDM 需要三维配体结构。请上传 SDF、MOL、MOL2 或 PDB，不要使用上游 CSV。',
+      vinaPocketCenterHint: '可选择已保存的口袋、输入中心坐标（Å）或上传口袋 PDB。不指定时，工具使用配体质心。',
+      vinaPocketCenterInvalid: '请填写全部三个口袋中心坐标，范围为 −999.999 至 9999.999 Å。',
+      screeningTaskName: '虚拟筛选',
       dockLigandUnreadable: '未能识别该配体文件，请确认是有效的 3D SDF / MOL / MOL2 / PDB。',
       dockLigandSingleOnly: 'LDDM 对接每次仅支持单个三维配体，请上传只包含 1 个分子的文件。',
       dockUseLigandCenter: '以当前配体质心作为口袋中心',
@@ -3225,6 +3254,7 @@ export default {
     visualizationFailed: '三维结果加载失败',
     visualizationResetView: '复位视角',
     visualizationMode: '当前视图模式',
+    visualizationModes: { molecule: '分子', protein: '蛋白', pocket: '口袋', docking: '对接' },
     visualizationProteinRepresentation: '蛋白表示',
     visualizationRepresentation: '表示方式',
     visualizationCartoon: '卡通',
@@ -3868,6 +3898,15 @@ export default {
     }
   },
   modelParams: {
+    validation: {
+      'required': '请填写{field}。',
+      'invalid-number': '请输入有效的{field}数值。',
+      'below-minimum': '{field}不能小于 {limit}。',
+      'above-maximum': '{field}不能大于 {limit}。',
+      'too-short': '{field}至少需要 {limit} 个字符。',
+      'too-long': '{field}最多允许 {limit} 个字符。',
+      'invalid-option': '请为{field}选择有效选项。',
+    },
     labels: {
       sequence: '序列',
       name: '名称',

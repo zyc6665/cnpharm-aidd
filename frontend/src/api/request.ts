@@ -162,7 +162,7 @@ request.interceptors.response.use(
         clearTokens()
         rejectRefreshSubscribers(refreshError)
         if (!originalRequest.skipAuthRedirect) {
-          redirectToLogin(window.location.pathname)
+          redirectToLogin(`${window.location.pathname}${window.location.search}${window.location.hash}`)
         }
         return Promise.reject(error)
       } finally {

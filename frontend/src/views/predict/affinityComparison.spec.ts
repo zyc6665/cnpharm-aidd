@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAffinityComparison } from './affinityComparison'
+import { affinityIsLowerBetter, buildAffinityComparison } from './affinityComparison'
 import type { CsvPreviewRow } from '@/domain/tasks/csv-result'
 
 function row(index: number, affinity: number, moleculeId: string, ligand = 0, pocket = 0): CsvPreviewRow {
@@ -43,6 +43,19 @@ describe('buildAffinityComparison', () => {
     expect(result.quality).toBe('low')
     expect(result.gapToBest).toBeCloseTo(-1.962)
     expect(result.current?.moleculeId).toBe('M4')
+  })
+
+  it('ranks lower Boltz-2 log(IC50) values first and leaves probabilities higher-is-better', () => {
+    const high = { __rowKey: '1', affinity_pred_value: '1.2', affinity_probability_binary: '0.95' }
+    const low = { __rowKey: '2', affinity_pred_value: '-1.3', affinity_probability_binary: '0.4' }
+    const comparison = buildAffinityComparison([high, low], low)
+    expect(comparison.lowerIsBetter).toBe(true)
+    expect(comparison.rank).toBe(1)
+    expect(comparison.candidates[1]?.row).toBe(high)
+    expect(affinityIsLowerBetter('affinity_probability_binary', 'log(IC50)')).toBe(false)
+    expect(affinityIsLowerBetter('predicted_affinity', 'log(IC50)')).toBe(true)
+    expect(affinityIsLowerBetter('predicted_affinity', 'kcal/mol')).toBe(true)
+    expect(affinityIsLowerBetter('predicted_affinity', 'pKi (dimensionless)')).toBe(false)
   })
 
   it('handles a single candidate without inventing a comparison', () => {

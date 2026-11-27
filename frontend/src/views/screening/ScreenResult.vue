@@ -16,6 +16,7 @@ import { uploadMoleculeHandoff, isValidHandoffSmiles } from '@/domain/molecules/
 import { SCREENING_RANKED_COLUMNS, SCREENING_RANKED_COLUMN_I18N } from '@/types/screening'
 import type { CsvPreviewRow } from '@/domain/tasks/csv-result'
 import type { Task } from '@/types/models'
+import { resolveMdProvenance } from './md-provenance'
 import ResultDisclaimer from '@/components/common/ResultDisclaimer.vue'
 
 const route = useRoute()
@@ -108,27 +109,6 @@ async function sendToAdmet(): Promise<void> {
     message.error(error instanceof Error ? error.message : t('screening.result.handoffFailed'))
   } finally { handoffBusy.value = false }
 }
-function nonEmptyString(value: unknown): string {
-  return typeof value === 'string' && value.trim() ? value.trim() : ''
-}
-function resolveMdProvenance(detail: Task | null, fallbackProjectId: string): Record<string, string> {
-  const projectId = nonEmptyString(detail?.project_id) || nonEmptyString(fallbackProjectId)
-  if (!projectId) return {}
-  const query: Record<string, string> = { project_id: projectId }
-  const receptorSnap = (detail?.input_snapshots ?? []).find(snap =>
-    /protein|receptor/i.test(String(snap.inputRole ?? '')) && snap.entityType === 'protein_structure'
-  )
-  const inputs = (detail?.inputs ?? {}) as Record<string, unknown>
-  const targetId = nonEmptyString(receptorSnap?.detail?.target_id) || nonEmptyString(inputs.target_id)
-  const proteinId = nonEmptyString(receptorSnap?.detail?.protein_id) || nonEmptyString(inputs.protein_id)
-  const snapFileId = nonEmptyString(receptorSnap?.fileId)
-  const rawStructureId = nonEmptyString(receptorSnap?.entityId) || nonEmptyString(receptorSnap?.detail?.structure_id) || nonEmptyString(inputs.structure_id)
-  const structureId = rawStructureId && rawStructureId !== snapFileId ? rawStructureId : ''
-  if (targetId) query.target_id = targetId
-  if (targetId && proteinId) query.protein_id = proteinId
-  if (targetId && proteinId && structureId) query.structure_id = structureId
-  return query
-}
 async function sendToMd(): Promise<void> {
   if (mdBusy.value) return
   mdBusy.value = true
@@ -207,7 +187,7 @@ watch(taskId, () => { void load() }, { immediate: true })
 <template>
   <main class="screen-result" data-testid="screen-result-page">
     <AppPageHeader :title="t('screening.result.title')" :subtitle="t('screening.result.subtitle')">
-      <template #actions><a-space>
+      <template #actions><a-space wrap>
         <a-button :disabled="!handoffRows.length" data-testid="screen-save-candidates" @click="openSaveModal">{{ selectedRowKeys.length ? t('screening.result.saveSelected', { count: handoffRows.length }) : t('screening.result.saveCandidates') }}</a-button>
         <a-button :disabled="!handoffRows.length" :loading="handoffBusy" data-testid="screen-send-admet" @click="sendToAdmet">{{ t('screening.result.sendAdmet', { count: handoffRows.length }) }}</a-button>
         <a-button :disabled="!rows.length" :loading="mdBusy" data-testid="screen-send-md" @click="sendToMd">{{ t('screening.result.useReceptorMd') }}</a-button>
@@ -239,8 +219,8 @@ watch(taskId, () => { void load() }, { immediate: true })
       </a-card>
     </template>
     <a-modal v-model:open="saveModalOpen" :title="t('screening.result.saveCandidates')" :confirm-loading="savingCandidates" :ok-text="t('screening.result.saveButton')" data-testid="screen-save-candidates-modal" @ok="handleSaveCandidates"><a-form layout="vertical"><a-form-item :label="t('screening.result.setName')" required><a-input v-model:value="saveSetName" :placeholder="t('screening.result.setNamePlaceholder')" /></a-form-item><p>{{ saveScopeText }}</p></a-form></a-modal>
+    <ResultDisclaimer />
   </main>
-  <ResultDisclaimer />
 </template>
 
 <style scoped lang="less">

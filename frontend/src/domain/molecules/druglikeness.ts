@@ -138,6 +138,7 @@ export type MetricKind =
   | 'qed'
   | 'violations'
   | 'rotatable'
+  | 'sa_score'
 
 interface MetricThresholdRule {
   kind: MetricKind
@@ -164,9 +165,14 @@ const METRIC_THRESHOLD_RULES: readonly MetricThresholdRule[] = [
     tone: value => upperBoundTone(value, 0, 1),
   },
   {
+    kind: 'sa_score',
+    matches: (raw, n) => n.includes('sascore') || n.includes('syntheticaccessibility') || raw.includes('合成难度') || raw.includes('合成可及性'),
+    tone: value => upperBoundTone(value, 4, 6),
+  },
+  {
     kind: 'rotatable',
     matches: (_raw, n) =>
-      n.includes('rotatable') || n.includes('rotbonds') || n.includes('rotors'),
+      n.includes('rotatable') || n === 'rotb' || n.includes('rotbonds') || n.includes('rotors'),
     tone: value => upperBoundTone(value, 10, 12),
   },
   {

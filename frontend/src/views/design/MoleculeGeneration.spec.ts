@@ -27,6 +27,7 @@ vi.mock('vue-i18n', () => ({
 }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('ant-design-vue', () => ({ message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/stores/user', () => ({ useUserStore: () => ({ userInfo: { id: 'test-user' } }) }))
 vi.mock('@/api/tools', () => ({ getToolList: mocks.listTools }))
 vi.mock('@/api/design', () => ({ resolveToolBySlug: mocks.resolve, submitDesignTask: mocks.submit }))
 vi.mock('@/api/files', () => ({ uploadFile: mocks.upload }))
@@ -87,7 +88,7 @@ const Alert = defineComponent({
   template: '<div class="alert-stub">{{ message }}<span class="alert-desc">{{ description }}</span><slot name="action" /></div>'
 })
 
-const paramStorageKey = (slug: string) => `design:molecule-params:${slug}`
+const paramStorageKey = (slug: string) => `design:u:test-user:molecule-params:${slug}`
 
 const molBlock = [
   'Methanol', '  Test', '', '  2  1  0  0  0  0            999 V2000',

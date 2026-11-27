@@ -1,9 +1,8 @@
 <template>
   <div v-if="projects.length" class="project-list">
-    <router-link
+    <div
       v-for="project in projects"
       :key="project.id"
-      :to="`/projects/${project.id}`"
       class="project-row"
     >
       <div class="project-main">
@@ -16,13 +15,13 @@
         </span>
         <time :datetime="project.updated_at">{{ formatUpdatedAt(project.updated_at) }}</time>
         <span class="project-actions">
-          <span class="continue-action">{{ t('workspace.openProject') }}</span>
+          <router-link :to="`/projects/${project.id}`" class="continue-action">{{ t('workspace.openProject') }}</router-link>
           <a-button
             v-if="canArchive(project)"
             type="link"
             size="small"
             class="project-action"
-            @click="handleAction('archive', project.id, $event)"
+            @click="emit('archive', project.id)"
           >
             {{ t('workspace.project.archive') }}
           </a-button>
@@ -34,11 +33,11 @@
             size="small"
             class="project-action"
             data-testid="project-unarchive-button"
-            @click="handleAction('unarchive', project.id, $event)"
+            @click="emit('unarchive', project.id)"
           >
             {{ t('workspace.project.unarchive') }}
           </a-button>
-          <span v-if="canDelete(project)" @click.prevent.stop>
+          <span v-if="canDelete(project)">
             <a-popconfirm
               :title="t('workspace.project.deleteConfirm')"
               :ok-text="t('common.delete')"
@@ -58,7 +57,7 @@
           </span>
         </span>
       </div>
-    </router-link>
+    </div>
   </div>
   <AppEmptyState
     v-else
@@ -89,24 +88,6 @@ const canArchive = (project: ResearchProject) =>
 const canUnarchive = (project: ResearchProject) =>
   project.status === 'archived' && canManage(project)
 const canDelete = (project: ResearchProject) => ['owner', 'admin'].includes(project.role)
-
-function stopAction(event?: Event) {
-  event?.preventDefault()
-  event?.stopPropagation()
-}
-
-function handleAction(
-  action: 'archive' | 'unarchive',
-  projectId: string,
-  event?: Event
-) {
-  stopAction(event)
-  if (action === 'archive') {
-    emit('archive', projectId)
-  } else {
-    emit('unarchive', projectId)
-  }
-}
 </script>
 
 <style scoped lang="less">
@@ -126,12 +107,12 @@ function handleAction(
 .status-completed { color: @accent-color; }
 .status-archived { color: @text-disabled; }
 .project-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: @spacing-xs; }
-.continue-action { color: @accent-color; font-size: @font-size-sm; }
+.continue-action { white-space: nowrap; color: @accent-color; font-size: @font-size-sm; }
 .project-action { height: 24px; padding: 0 4px; font-size: @font-size-xs; }
 
 @media (max-width: @screen-sm) {
-  .project-row { align-items: flex-start; }
-  .project-meta { grid-template-columns: auto; }
+  .project-row { flex-direction: column; align-items: stretch; gap: @spacing-sm; }
+  .project-meta { display: flex; flex-wrap: wrap; }
   .project-meta time { display: none; }
   .project-actions { justify-content: flex-start; flex-wrap: wrap; }
 }

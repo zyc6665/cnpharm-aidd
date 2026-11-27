@@ -105,9 +105,7 @@
           <h2 class="platform-title">{{ t('home.platform.title') }}</h2>
           <p class="platform-desc">{{ t('home.platform.desc') }}</p>
           <div class="platform-links">
-            <router-link to="/login">
-              <a-button type="primary" size="large">{{ t('home.platform.cta') }}</a-button>
-            </router-link>
+            <router-link to="/login" class="ant-btn ant-btn-primary ant-btn-lg">{{ t('home.platform.cta') }}</router-link>
           </div>
         </div>
       </div>
@@ -117,9 +115,7 @@
     <section class="cta">
       <h2 class="cta-title">{{ t('home.cta.title') }}</h2>
       <p class="cta-desc">{{ t('home.cta.description') }}</p>
-      <router-link to="/login">
-        <a-button type="primary" size="large">{{ t('home.cta.button') }}</a-button>
-      </router-link>
+      <router-link to="/login" class="ant-btn ant-btn-primary ant-btn-lg">{{ t('home.cta.button') }}</router-link>
     </section>
 
     <!-- Footer -->

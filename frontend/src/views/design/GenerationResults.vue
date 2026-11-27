@@ -50,7 +50,11 @@
     />
 
     <template v-if="isTerminal && !isFailure">
-      <section class="results-summary" data-testid="results-summary">
+      <section v-if="loadingTable" class="results-table-loading" role="status" aria-live="polite">
+        <a-skeleton active :paragraph="{ rows: 6 }" />
+        <span>{{ t('common.loading') }}</span>
+      </section>
+      <section v-else class="results-summary" data-testid="results-summary">
         <span class="results-summary__count">
           {{ isPeptideResult
             ? t('design.results.peptideCount', { count: rows.length })
@@ -735,6 +739,7 @@
 </template>
 
 <script setup lang="ts">
+  import { copyToClipboard } from '@/utils/clipboard'
   import { formatNumber } from '@/domain/common/format'
   import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
@@ -773,9 +778,7 @@
   } from '@/domain/tasks'
   import {
     classifyMetricTone,
-    countLipinskiViolations,
     countRo5Violations,
-    druglikenessStars,
     evaluateLipinski,
     hasLipinskiData,
     metricKind,
@@ -1026,7 +1029,7 @@
   function isLowerBetterColumn(columnKey: string): boolean {
     const column = columns.value.find(item => item.key === columnKey)
     const text = `${column?.key ?? columnKey} ${column?.title ?? ''}`
-    return /vina|dock|affinity|energy|rmsd/i.test(text) || /结合能|对接/.test(text)
+    return /vina|dock|affinity|energy|rmsd|sa_score|syntheticaccessibility|syntheticaccessibilityscore/i.test(text) || /结合能|对接|合成难度|合成可及性/.test(text)
   }
 
   function onSortKeyChange(nextKey: string): void {
@@ -1035,8 +1038,11 @@
   }
 
   function isAlerted(row: DesignTableRow): boolean {
-    const value = (row[alertColumn.value?.key ?? ''] ?? '').trim().toLowerCase()
-    return Boolean(value) && !['0', 'false', 'no', 'none', 'clean', '-'].includes(value)
+    const alertColumns = columns.value.filter(column => /pains|brenk|alert/i.test(`${column.key} ${column.title}`))
+    return alertColumns.some(column => {
+      const value = (row[column.key] ?? '').trim().toLowerCase()
+      return Boolean(value) && !['0', 'false', 'no', 'none', 'clean', '-'].includes(value)
+    })
   }
 
   function numericValue(row: DesignTableRow, key: string | undefined): number | null {
@@ -1374,10 +1380,6 @@
     }
   }
 
-  function starsForRow(row: DesignTableRow): number | null {
-    return druglikenessStars(propertiesForRow(row))
-  }
-
   function ro5Violations(row: DesignTableRow): number | null {
     return countRo5Violations(propertiesForRow(row))
   }
@@ -1423,27 +1425,9 @@
 
   async function copyText(text: string): Promise<void> {
     if (!text) return
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text)
-        message.success(t('common.copySuccess'))
-        return
-      } catch {
-        // HTTP 内网环境无 clipboard API 权限时回退到 execCommand('copy')。
-      }
-    }
     try {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.setAttribute('readonly', '')
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand('copy')
-      document.body.removeChild(textarea)
-      if (copied) message.success(t('common.copySuccess'))
-      else message.warning(t('design.results.copyFailed'))
+      await copyToClipboard(text)
+      message.success(t('common.copySuccess'))
     } catch {
       message.warning(t('design.results.copyFailed'))
     }
@@ -1641,8 +1625,7 @@
       index: rowIndex(row),
       smiles: rowSmiles(row),
       sequence: rowSequence(row),
-      rating: starsForRow(row),
-      violations: countLipinskiViolations(propertiesForRow(row)),
+      violations: ro5Violations(row),
       favorite: isFavorite(row),
       metrics: rowMetrics(row),
     }))
@@ -1728,7 +1711,8 @@
 
   function initializeSort(): void {
     if (!sortKey.value) {
-      sortKey.value = scoreColumn.value?.key ?? numericColumns.value[0]?.key ?? ''
+      sortKey.value = scoreColumn.value?.key ?? qedColumn.value?.key ??
+        numericColumns.value.find(column => !/(?:^|_)(?:id|index|rank)(?:_|$)/i.test(column.key))?.key ?? ''
     }
     sortOrder.value = isLowerBetterColumn(sortKey.value) ? 'asc' : 'desc'
   }

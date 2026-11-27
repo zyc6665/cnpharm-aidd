@@ -15,7 +15,7 @@ test('路由过渡的子节点是单个带 key 的元素，多根页面不会卡
   // 现场：`<transition mode="out-in">` 里直接放 `<component :is>`，而结果页有多个
   // 根节点（页头 + 内容 + 免责声明）。Vue 对 Fragment 根无法计算离场动画，
   // out-in 模式下旧页移除后新页永远不进场 —— URL 变了、主区全白、必须刷新。
-  // 现在固定包一层 `<div :key="route.path" class="shell-route">`。
+  // 现在固定包一层带路由视图 key 的 `<div class="shell-route">`。
   const source = readSource(shellPath)
 
   assert.match(source, /<transition[^>]*mode="out-in"/, '过渡仍在 out-in 模式')
@@ -23,7 +23,7 @@ test('路由过渡的子节点是单个带 key 的元素，多根页面不会卡
   const block = source.slice(source.indexOf('<transition'), source.indexOf('</transition>'))
   assert.match(
     block,
-    /<div :key="route\.path" class="shell-route">\s*<component :is="Component" \/>\s*<\/div>/,
+    /<div :key="\(route\.meta\.viewKey as string\) \|\| route\.path" class="shell-route">\s*<component :is="Component" \/>\s*<\/div>/,
     '过渡的直接子节点必须是包住页面组件的单个 keyed div'
   )
   assert.equal(
