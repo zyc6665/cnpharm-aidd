@@ -7,6 +7,7 @@ import { MOLECULE_GENERATION_TOOL_SLUG } from '@/types/design'
 const POCKET2MOL = 'pocket2mol-pocket-ligand-generation'
 const LDDM = 'lddm-pocket-ligand-generation'
 const mocks = vi.hoisted(() => ({
+  query: {} as Record<string, string>,
   listTools: vi.fn(),
   listProjects: vi.fn(),
   resolve: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock('vue-i18n', () => ({
     te: () => false
   })
 }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: mocks.query }), useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('ant-design-vue', () => ({ message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/stores/user', () => ({ useUserStore: () => ({ userInfo: { id: 'test-user' } }) }))
 vi.mock('@/api/tools', () => ({ getToolList: mocks.listTools }))
@@ -48,7 +49,17 @@ const ModelSelect = defineComponent({
   </select>`
 })
 const PocketPicker = defineComponent({
-  props: ['modelValue', 'defaultProjectId', 'projectId', 'hideProjectSelect', 'hidePocketSelect'],
+  props: [
+    'modelValue',
+    'defaultProjectId',
+    'projectId',
+    'initialTargetId',
+    'initialProteinId',
+    'initialStructureId',
+    'initialPocketId',
+    'hideProjectSelect',
+    'hidePocketSelect'
+  ],
   emits: ['update:modelValue', 'structure-change'],
   setup() { return { pocket } },
   template: '<button data-testid="pick-pocket" @click="$emit(\'update:modelValue\', pocket)">Pick</button>'
@@ -151,6 +162,7 @@ async function chooseFragment(file: File) {
 
 beforeEach(async () => {
   localStorage.clear()
+  mocks.query = {}
   vi.resetAllMocks()
   mocks.listTools.mockResolvedValue({ data: { items: [
     model(POCKET2MOL, { num_samples: { type: 'integer', default: 20 } }),
@@ -580,5 +592,26 @@ describe('MoleculeGeneration', () => {
     await flushPromises()
 
     expect(hidden('params-restored-hint')).toBe(true)
+  })
+
+  it('forwards pocket hierarchy query parameters to PocketPicker on handoff', async () => {
+    wrapper.unmount()
+    mocks.query = {
+      project_id: 'project',
+      target_id: 't-1',
+      protein_id: 'pr-1',
+      structure_id: 's-1',
+      pocket_id: 'pk-2'
+    }
+
+    wrapper = mountPage()
+    await flushPromises()
+
+    const picker = wrapper.getComponent(PocketPicker)
+    expect(picker.props('projectId')).toBe('project')
+    expect(picker.props('initialTargetId')).toBe('t-1')
+    expect(picker.props('initialProteinId')).toBe('pr-1')
+    expect(picker.props('initialStructureId')).toBe('s-1')
+    expect(picker.props('initialPocketId')).toBe('pk-2')
   })
 })

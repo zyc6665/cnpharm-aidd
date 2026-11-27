@@ -13,6 +13,7 @@ import ModelSelect from '@/components/design/ModelSelect.vue'
 import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import { useModelOptions } from '@/composables/useModelOptions'
+import { useParameterMemory } from '@/composables/useParameterMemory'
 import { useRequestSequence } from '@/composables/useRequestSequence'
 import { buildInlineSmilesFile as makeInlineSmilesFile, parseInlineSmiles } from '@/domain/molecules/submission-smiles'
 import {
@@ -136,6 +137,17 @@ const affinityCandidateSetId = ref('')
 
 const admetSchema = computed(() => admetSelected.value?.parameterSchema ?? null)
 const affinitySchema = computed(() => affinitySelected.value?.parameterSchema ?? null)
+const admetMemory = useParameterMemory({
+  scope: 'predict-admet',
+  slug: selectedSlug,
+  schema: admetSchema
+})
+const affinityMemory = useParameterMemory({
+  scope: 'predict-affinity',
+  slug: affinitySlug,
+  schema: affinitySchema,
+  omitKeys: ['sequence']
+})
 const usesProjectSequence = computed(() => affinitySlug.value === 'boltz2-affinity-prediction' && affinitySource.value === 'project')
 const projectSequence = computed(() => proteins.value.find(item => item.id === selectedProteinId.value)?.sequence?.trim() ?? '')
 const effectiveAffinityParams = computed(() => usesProjectSequence.value && projectSequence.value
@@ -191,7 +203,7 @@ const affinityCanSubmit = computed(() => {
 watch(
   admetSchema,
   schema => {
-    admetParams.value = buildDefaultValues(schema)
+    admetParams.value = admetMemory.restore(schema).values
   },
   { immediate: true }
 )
@@ -199,7 +211,7 @@ watch(
 watch(
   affinitySchema,
   schema => {
-    affinityParams.value = buildDefaultValues(schema)
+    affinityParams.value = affinityMemory.restore(schema).values
   },
   { immediate: true }
 )
@@ -508,11 +520,13 @@ async function handleAffinitySubmit(): Promise<void> {
         standardInputUploads.ligand_smiles = (await uploadFile(snapshot.ligandSmilesFile)).data.id
       }
     }
+    const normalizedAffinity = normalizeParameters(snapshot.schema, snapshot.params)
+    affinityMemory.persist(normalizedAffinity)
     const task = await submitToolTask({
       toolSlug: snapshot.toolSlug,
       projectId: snapshot.projectId,
       name: `亲和力预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: normalizeParameters(snapshot.schema, snapshot.params),
+      params: normalizedAffinity,
       standardInputUploads
     })
     message.success(t('predict.submit.success'))
@@ -639,11 +653,13 @@ async function handleSubmit(): Promise<void> {
   submitting.value = true
   try {
     const fileId = await resolveMoleculesFileId(snapshot)
+    const normalizedAdmet = normalizeParameters(snapshot.schema, snapshot.params)
+    admetMemory.persist(normalizedAdmet)
     const task = await submitToolTask({
       toolSlug: snapshot.toolSlug,
       projectId: snapshot.projectId,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: normalizeParameters(snapshot.schema, snapshot.params),
+      params: normalizedAdmet,
       standardInputUploads: { smiles_csv: fileId }
     })
     message.success(t('predict.submit.success'))
