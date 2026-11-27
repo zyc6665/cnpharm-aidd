@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { reactive } from 'vue'
 import i18n from '@/locales'
 
 const push = vi.fn()
+const route = reactive({ params: { id: 't1' } })
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: 't1' } }),
+  useRoute: () => route,
   useRouter: () => ({ push }),
 }))
 vi.mock('@/api/tasks', () => ({ getTaskDetail: vi.fn() }))
@@ -55,6 +57,8 @@ async function mountResult() {
 describe('task result dispatcher', () => {
   beforeEach(() => {
     push.mockReset()
+    route.params.id = 't1'
+    vi.mocked(getTaskDetail).mockReset()
   })
 
   it('renders the structure result view for a structure task', async () => {
@@ -80,5 +84,28 @@ describe('task result dispatcher', () => {
     const wrapper = await mountResult()
     expect(wrapper.text()).toContain('任务正在运行')
     expect(wrapper.find('[data-testid="stub-structure"]').exists()).toBe(false)
+  })
+
+  it('reloads task data when route task id changes while the view instance is reused', async () => {
+    vi.mocked(getTaskDetail).mockImplementation(async (id: string) => ({
+      data: {
+        id,
+        status: 'success',
+        progress: 100,
+        tool_slug: id === 't2' ? 'lvpocket-pocket-prediction' : 'boltz2-structure-prediction',
+        outputs: null,
+      },
+    }) as never)
+
+    const wrapper = await mountResult()
+    expect(getTaskDetail).toHaveBeenCalledWith('t1', { silent: true })
+    expect(wrapper.find('[data-testid="stub-structure"]').exists()).toBe(true)
+
+    route.params.id = 't2'
+    await flushPromises()
+
+    expect(getTaskDetail).toHaveBeenCalledWith('t2', { silent: true })
+    expect(wrapper.find('[data-testid="stub-structure"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stub-pocket"]').exists()).toBe(true)
   })
 })

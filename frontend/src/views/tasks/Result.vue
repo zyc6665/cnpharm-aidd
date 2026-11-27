@@ -112,6 +112,7 @@
   const runningHint = computed(() => t('tasks.resultPage.runningHint'))
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let loadSeq = 0
 
   function stopPolling(): void {
     if (pollTimer) {
@@ -129,11 +130,14 @@
   }
 
   async function loadTask(silent = false): Promise<void> {
-    if (!taskId.value) return
+    const targetId = taskId.value
+    if (!targetId) return
+    const seq = ++loadSeq
     if (!silent) loading.value = true
     loadError.value = false
     try {
-      const response = await getTaskDetail(taskId.value, { silent: true })
+      const response = await getTaskDetail(targetId, { silent: true })
+      if (seq !== loadSeq || taskId.value !== targetId) return
       task.value = response.data
       if (
         response.data?.project_id &&
@@ -141,14 +145,14 @@
         typeof router.replace === 'function'
       ) {
         void router.replace(
-          `/projects/${encodeURIComponent(response.data.project_id)}/tasks/${encodeURIComponent(taskId.value)}/result`
+          `/projects/${encodeURIComponent(response.data.project_id)}/tasks/${encodeURIComponent(targetId)}/result`
         )
       }
       syncPolling()
     } catch {
-      if (!task.value) loadError.value = true
+      if (seq === loadSeq && taskId.value === targetId && !task.value) loadError.value = true
     } finally {
-      loading.value = false
+      if (seq === loadSeq) loading.value = false
     }
   }
 
@@ -162,6 +166,13 @@
   }
 
   watch(isActive, syncPolling)
+  watch(taskId, (nextId, prevId) => {
+    if (!nextId || nextId === prevId) return
+    stopPolling()
+    task.value = null
+    loadError.value = false
+    void loadTask()
+  })
   onMounted(() => void loadTask())
   onUnmounted(stopPolling)
 </script>
