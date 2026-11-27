@@ -384,6 +384,14 @@ def _load_head_models() -> dict[str, dict]:
     vina["version"] = vina_v11_mod.NEW_VERSION
     vina["changelog"] = vina_v11_mod.NEW_CHANGELOG
 
+    # 20261127_02：Vina 补 center_x/y/z 与 box_size 口径（暂停改动 MD 契约，避免与近期主线调整重叠）。
+    align_mod = _load_migration_module("20261127_02_tool_schema_scientific_alignment.py")
+    vina_cfg = models["autodock-vina-docking"]["config"]
+    align_mod.patch_vina_schema(vina_cfg.get("parameters_schema"), forward=True)
+    vina_manifest = vina_cfg.get("tool_package_manifest")
+    if isinstance(vina_manifest, dict):
+        align_mod.patch_vina_schema(vina_manifest.get("parameters_schema"), forward=True)
+
     return models
 
 
