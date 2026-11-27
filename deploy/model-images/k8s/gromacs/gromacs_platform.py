@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
-"""GROMACS molecular-dynamics entry for the SCIMINER Kubernetes runtime.
+"""GROMACS molecular-dynamics entry for the AIDD Kubernetes runtime.
 
-Input
-  protein_structure@1 -> structure_file (PDB; protein or protein/peptide complex.
-                          Small-molecule ligands must be parameterised before MD and
-                          are intentionally out of scope for this tool.)
+Inputs
+  protein_structure@1 -> protein_pdb (PDB protein / receptor structure)
+  ligand_structure@1  -> ligand_sdf (optional SDF/MOL/MOL2/PDB ligand for complex MD;
+                         parameterised via GAFF2/acpype when no custom ITP/GRO is supplied)
+  custom_itp / custom_gro / custom_prm / custom_zip (optional Mode 0 user topology bundle)
 
 Output (result.v2)
-  md_trajectory@1 : topology_pdb (starting structure), trajectory_dcd, analysis_csv,
-                    rmsf_csv (per-residue RMSF), metadata_json
+  md_trajectory@1 : topology_pdb, trajectory_dcd, analysis_csv,
+                    rmsf_csv (per-residue RMSF), contacts_csv (interaction summary),
+                    interactions_json (timeline & residue network), metadata_json
   run_report@1    : report_json
 
-analysis.csv 是逐帧时间序列（time_ps / temperature_k / potential_kj_mol /
-rmsd_nm / rg_nm）；RMSF 是时间平均后的逐残基涨落，单独放在 rmsf.csv
-（residue_seq / residue_name / rmsf_nm），不混进时间序列。
-
-The pipeline follows the standard GROMACS recipe: pdb2gmx -> editconf -> solvate ->
-genion -> energy minimisation -> NVT -> NPT -> production.  GPU is used when the
-container has a CUDA device, otherwise it falls back to CPU automatically.
+The pipeline runs ``pdb2gmx`` -> (optional ligand GAFF2/Mode-0 merge & topology patch)
+-> ``editconf`` -> ``solvate`` -> ``genion`` -> EM -> NVT -> NPT -> production MD ->
+PBC centering -> trajectory/RMSF/interactions analysis.
 """
 
 from __future__ import annotations
@@ -35,6 +33,10 @@ from pathlib import Path
 from typing import Any
 
 GMX = os.environ.get("GMX_BIN", "gmx")
+
+_LIGAND_EXTS = (".sdf", ".mol", ".mol2", ".pdb")
+_PROTEIN_EXTS = (".pdb", ".cif")
+_CUSTOM_EXTS = (".zip", ".itp", ".gro", ".prm", ".rtp")
 
 
 def sha256_file(path: Path) -> str:
@@ -68,17 +70,121 @@ def resolve_input(input_dir: Path, value: str) -> Path:
     raise SystemExit(f"input file not found: {value}")
 
 
-def pick_protein(files: dict[str, str], input_dir: Path) -> Path:
+def _try_resolve_input(input_dir: Path, value: str) -> Path | None:
+    for candidate in (Path(value), input_dir / value, input_dir / Path(value).name, input_dir.parent / value):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def collect_input_slots(
+    input_dir: Path,
+    params: dict[str, Any],
+    manifest_path: Path | None = None,
+) -> dict[str, list[Path]]:
+    """Collect non-metadata candidate files grouped by input slot name."""
+    slots: dict[str, list[Path]] = {}
+
+    def _add(slot: str, path: Path | None) -> None:
+        if path is None or not path.is_file():
+            return
+        if path.suffix.lower() == ".json" or path.name.endswith(".metadata_json.json"):
+            return
+        bucket = slots.setdefault(slot, [])
+        resolved = path.resolve()
+        if resolved not in bucket:
+            bucket.append(resolved)
+
+    mpath = manifest_path if manifest_path is not None else (input_dir / "manifest.json")
+    if mpath.is_file():
+        staged = json.loads(mpath.read_text(encoding="utf-8"))
+        for entry in staged:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            rel = entry.get("path")
+            if not name or not rel or entry.get("role") == "metadata_json":
+                continue
+            _add(str(name), _try_resolve_input(input_dir, str(rel)))
+
+    for key, value in (params.get("input_files") or {}).items():
+        if isinstance(value, str) and value.strip():
+            _add(str(key), _try_resolve_input(input_dir, value))
+
+    return slots
+
+
+def pick_protein(files: dict[str, str] | dict[str, list[Path]], input_dir: Path) -> Path:
+    """Resolve protein PDB/CIF input while staying backward compatible with dict[str, str]."""
     for key, value in files.items():
         low = key.lower()
+        if any(word in low for word in ("ligand", "custom", "topology_zip")):
+            continue
         if any(word in low for word in ("protein", "structure", "receptor", "pdb")):
-            candidate = resolve_input(input_dir, value)
-            if candidate.suffix.lower() in (".pdb", ".cif"):
-                return candidate
+            candidates = value if isinstance(value, list) else [resolve_input(input_dir, value)]
+            for candidate in candidates:
+                if candidate.suffix.lower() in _PROTEIN_EXTS:
+                    return candidate
     for path in sorted(input_dir.rglob("*")):
-        if path.is_file() and path.suffix.lower() in (".pdb", ".cif"):
+        low = path.as_posix().lower()
+        if any(word in low for word in ("/ligand", "/custom")):
+            continue
+        if path.is_file() and path.suffix.lower() in _PROTEIN_EXTS:
             return path
     raise SystemExit("cannot find a protein PDB input")
+
+
+def pick_ligand_inputs(
+    slots: dict[str, list[Path]],
+    input_dir: Path,
+    protein_path: Path,
+) -> dict[str, Path | None]:
+    """Extract optional ligand SDF/MOL/MOL2/PDB and Mode-0 custom topology paths."""
+    resolved_protein = protein_path.resolve()
+    result: dict[str, Path | None] = {
+        "ligand_sdf": None,
+        "custom_itp": None,
+        "custom_prm": None,
+        "custom_gro": None,
+        "custom_zip": None,
+    }
+
+    def _first_matching(keys: tuple[str, ...], exts: tuple[str, ...]) -> Path | None:
+        for slot_name, paths in slots.items():
+            low = slot_name.lower()
+            if not any(token in low for token in keys):
+                continue
+            for path in paths:
+                if path.resolve() == resolved_protein:
+                    continue
+                if path.suffix.lower() in exts:
+                    return path
+        return None
+
+    result["ligand_sdf"] = _first_matching(("ligand_sdf", "ligand_structure", "ligand"), _LIGAND_EXTS)
+    result["custom_zip"] = _first_matching(("custom_zip", "topology_zip", "ligand_topology", "custom"), (".zip",))
+    result["custom_itp"] = _first_matching(("custom_itp", "ligand_itp", "ligand_topology", "itp"), (".itp",))
+    result["custom_prm"] = _first_matching(("custom_prm", "ligand_prm", "ligand_topology", "prm", "rtp"), (".prm", ".rtp"))
+    result["custom_gro"] = _first_matching(("custom_gro", "ligand_gro", "ligand_topology", "gro"), (".gro",))
+
+    # Avoid passing a Mode-0 custom_itp zip folder's files twice if ligand_sdf matched nothing
+    if result["ligand_sdf"] is None:
+        for path in sorted(input_dir.rglob("*")):
+            if not path.is_file() or path.resolve() == resolved_protein:
+                continue
+            if path.suffix.lower() in (".sdf", ".mol", ".mol2"):
+                result["ligand_sdf"] = path.resolve()
+                break
+            if path.suffix.lower() == ".zip" and result["custom_zip"] is None:
+                result["custom_zip"] = path.resolve()
+            elif path.suffix.lower() == ".itp" and result["custom_itp"] is None:
+                result["custom_itp"] = path.resolve()
+            elif path.suffix.lower() == ".gro" and result["custom_gro"] is None:
+                result["custom_gro"] = path.resolve()
+            elif path.suffix.lower() in (".prm", ".rtp") and result["custom_prm"] is None:
+                result["custom_prm"] = path.resolve()
+
+    return result
 
 
 def run(cmd: list[str], cwd: Path, stdin_text: str | None = None) -> str:
@@ -214,7 +320,7 @@ def xvg_legends(path: Path) -> dict[int, str]:
     return legends
 
 
-def write_analysis_csv(work: Path, out_csv: Path) -> None:
+def write_analysis_csv(work: Path, out_csv: Path, trajectory_name: str = "md.xtc") -> None:
     energy_xvg = work / "energy.xvg"
     run(
         [GMX, "energy", "-f", "md.edr", "-o", "energy.xvg"],
@@ -229,7 +335,7 @@ def write_analysis_csv(work: Path, out_csv: Path) -> None:
     rmsd: dict[float, float] = {}
     try:
         run(
-            [GMX, "rms", "-s", "md.tpr", "-f", "md.xtc", "-o", "rmsd.xvg"],
+            [GMX, "rms", "-s", "md.tpr", "-f", trajectory_name, "-o", "rmsd.xvg"],
             work,
             stdin_text="Backbone\nBackbone\n",
         )
@@ -243,7 +349,7 @@ def write_analysis_csv(work: Path, out_csv: Path) -> None:
     gyration: dict[float, float] = {}
     try:
         run(
-            [GMX, "gyrate", "-s", "md.tpr", "-f", "md.xtc", "-o", "gyrate.xvg"],
+            [GMX, "gyrate", "-s", "md.tpr", "-f", trajectory_name, "-o", "gyrate.xvg"],
             work,
             stdin_text="Backbone\n",
         )
@@ -279,7 +385,7 @@ def backbone_residues(pdb: Path) -> list[tuple[str, str, str]]:
     return residues
 
 
-def write_rmsf_csv(work: Path, out_csv: Path, topology: Path) -> bool:
+def write_rmsf_csv(work: Path, out_csv: Path, topology: Path, trajectory_name: str = "md.xtc") -> bool:
     """写逐残基 RMSF 表。RMSF 是「时间平均后的每残基涨落」，
 
     不是逐帧量，所以它不能塞进 analysis.csv 的时间序列里——这一列过去一直
@@ -288,7 +394,7 @@ def write_rmsf_csv(work: Path, out_csv: Path, topology: Path) -> bool:
     """
     try:
         run(
-            [GMX, "rmsf", "-s", "md.tpr", "-f", "md.xtc", "-o", "rmsf.xvg", "-res"],
+            [GMX, "rmsf", "-s", "md.tpr", "-f", trajectory_name, "-o", "rmsf.xvg", "-res"],
             work,
             stdin_text="Backbone\n",
         )
@@ -315,6 +421,153 @@ def write_rmsf_csv(work: Path, out_csv: Path, topology: Path) -> bool:
     return True
 
 
+def _stage_ligand_topology_into_work(work: Path, param_lig: Any) -> tuple[str | None, str, str | None]:
+    """Copy delivered ligand ITP/posre files into ``work/`` so topol.top resolves them locally."""
+    atomtypes_name: str | None = None
+    if param_lig.atomtypes_itp is not None and Path(param_lig.atomtypes_itp).is_file():
+        target = work / "ligand_atomtypes.itp"
+        shutil.copyfile(param_lig.atomtypes_itp, target)
+        atomtypes_name = target.name
+
+    ligand_target = work / "ligand.itp"
+    shutil.copyfile(param_lig.ligand_itp, ligand_target)
+
+    posre_name: str | None = None
+    if param_lig.posre_itp is not None and Path(param_lig.posre_itp).is_file():
+        posre_target = work / "posre_ligand.itp"
+        shutil.copyfile(param_lig.posre_itp, posre_target)
+        posre_name = posre_target.name
+
+    return atomtypes_name, ligand_target.name, posre_name
+
+
+def center_pbc_trajectory(work: Path) -> tuple[Path, Path]:
+    """Run ``gmx trjconv -pbc mol -center`` so complex/protein stays whole and centered.
+
+    Falls back cleanly to raw ``md.xtc`` / ``md.gro`` if centering fails (e.g. non-standard groups).
+    """
+    xtc_out = work / "md_pbc.xtc"
+    gro_out = work / "md_pbc.gro"
+    try:
+        run(
+            [GMX, "trjconv", "-s", "md.tpr", "-f", "md.xtc", "-o", str(xtc_out.name), "-pbc", "mol", "-center"],
+            work,
+            stdin_text="Protein\nSystem\n",
+        )
+        run(
+            [GMX, "trjconv", "-s", "md.tpr", "-f", "md.gro", "-o", str(gro_out.name), "-pbc", "mol", "-center"],
+            work,
+            stdin_text="Protein\nSystem\n",
+        )
+        if xtc_out.is_file() and gro_out.is_file():
+            return xtc_out, gro_out
+    except SystemExit as exc:
+        print(f"[gromacs] PBC centering skipped, using raw trajectory: {exc}", flush=True)
+    return work / "md.xtc", work / "md.gro"
+
+
+def run_interactions_postprocess(
+    topology_pdb: Path,
+    trajectory_path: Path,
+    out_dir: Path,
+    *,
+    ligand_resname: str = "LIG",
+    ligand_template_sdf: Path | None = None,
+    stride: int = 1,
+    water_resname: str | None = None,
+) -> dict[str, Any]:
+    """Run ``interactions_analysis.analyze_trajectory`` and emit ``contacts.csv`` + ``interactions.json``.
+
+    Degrades gracefully if post-processing fails so a completed GROMACS trajectory is preserved.
+    """
+    try:
+        try:
+            from interactions_analysis import InteractionConfig, analyze_trajectory
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from interactions_analysis import InteractionConfig, analyze_trajectory
+
+        cfg = InteractionConfig(
+            ligand_resname=ligand_resname,
+            stride=max(1, int(stride)),
+            water_resname=(water_resname or None),
+        )
+        return analyze_trajectory(
+            topology_pdb,
+            trajectory_path,
+            output_contacts_csv=out_dir / "contacts.csv",
+            output_summary_json=out_dir / "interactions.json",
+            config=cfg,
+            ligand_template_sdf=ligand_template_sdf,
+        )
+    except Exception as exc:  # noqa: BLE001 - never discard a finished MD trajectory
+        print(f"[gromacs] interaction postprocess skipped: {exc}", flush=True)
+        return {
+            "mode": "skipped",
+            "engine": "skipped",
+            "summary": {"total_interactions": 0},
+            "warnings": [f"interaction analysis failed: {exc}"],
+        }
+
+
+def ensure_pdb_elements(
+    pdb_path: Path,
+    element_symbols: list[str],
+    *,
+    ligand_resname: str | None = None,
+    ligand_elements: list[str] | None = None,
+) -> bool:
+    """Populate blank PDB columns 77-78 so MDAnalysis/ProLIF see atomic elements."""
+    lines = pdb_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    atom_indices = [
+        idx for idx, line in enumerate(lines)
+        if line[:6].strip() in ("ATOM", "HETATM")
+    ]
+    if not atom_indices or len(atom_indices) != len(element_symbols):
+        return False
+
+    lig_map: dict[int, str] = {}
+    if ligand_resname and ligand_elements:
+        target = ligand_resname.strip().upper()
+        lig_line_indices = [
+            idx for idx in atom_indices
+            if lines[idx][17:20].strip().upper() == target
+        ]
+        if len(lig_line_indices) == len(ligand_elements):
+            lig_map = dict(zip(lig_line_indices, ligand_elements))
+
+    changed = False
+    for pos, line_idx in enumerate(atom_indices):
+        line = lines[line_idx]
+        existing = line[76:78].strip() if len(line) >= 78 else ""
+        sym = (lig_map.get(line_idx) or element_symbols[pos] or "").strip()
+        if not sym or sym.upper() == "VS":
+            continue
+        if not existing or line_idx in lig_map:
+            padded = line.ljust(76)[:76]
+            formatted_sym = (sym[0].upper() + sym[1:].lower()) if len(sym) > 1 else sym.upper()
+            tail = line[78:] if len(line) > 78 else ""
+            lines[line_idx] = f"{padded}{formatted_sym:>2}{tail}".rstrip()
+            changed = True
+
+    if changed:
+        pdb_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
+def _ligand_elements_from_sdf(template_sdf: Path | None) -> list[str] | None:
+    if template_sdf is None or not Path(template_sdf).is_file():
+        return None
+    try:
+        from rdkit import Chem
+    except ImportError:
+        return None
+    mol = Chem.MolFromMolFile(str(template_sdf), removeHs=False, sanitize=False)
+    if mol is None:
+        return None
+    return [atom.GetSymbol().strip() for atom in mol.GetAtoms()]
+
+
 def run_pipeline(
     protein: Path,
     work: Path,
@@ -326,6 +579,12 @@ def run_pipeline(
     dt: float,
     temperature: float,
     device: str,
+    ligand_sdf: Path | None = None,
+    custom_itp: Path | None = None,
+    custom_prm: Path | None = None,
+    custom_gro: Path | None = None,
+    custom_zip: Path | None = None,
+    ligand_config: Any | None = None,
 ) -> dict[str, Any]:
     clean = work / "protein_clean.pdb"
     sanitize_pdb(protein, clean)
@@ -333,8 +592,51 @@ def run_pipeline(
     progress(5, "pdb2gmx")
     run([GMX, "pdb2gmx", "-f", str(clean), "-o", "processed.gro", "-water", water_model,
          "-ff", force_field, "-ignh"], work)
+
+    param_lig = None
+    start_gro = "processed.gro"
+    if any(item is not None for item in (ligand_sdf, custom_itp, custom_zip)):
+        progress(10, "parameterize ligand")
+        try:
+            from ligand_parameterizer import (
+                LigandPrepConfig,
+                merge_gro_files,
+                parameterize_ligand,
+                patch_topol_top,
+            )
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from ligand_parameterizer import (
+                LigandPrepConfig,
+                merge_gro_files,
+                parameterize_ligand,
+                patch_topol_top,
+            )
+
+        prep_cfg = ligand_config if ligand_config is not None else LigandPrepConfig()
+        param_lig = parameterize_ligand(
+            work / "ligand_prep",
+            config=prep_cfg,
+            ligand_sdf=ligand_sdf,
+            custom_itp=custom_itp,
+            custom_prm=custom_prm,
+            custom_gro=custom_gro,
+            custom_zip=custom_zip,
+        )
+        atomtypes_name, ligand_itp_name, posre_name = _stage_ligand_topology_into_work(work, param_lig)
+        merge_gro_files(work / "processed.gro", param_lig.ligand_gro, work / "complex.gro")
+        patch_topol_top(
+            work / "topol.top",
+            ligand_itp_name=ligand_itp_name,
+            moleculetype_name=param_lig.moleculetype or param_lig.ligand_resname,
+            atomtypes_itp_name=atomtypes_name,
+            posre_itp_name=posre_name,
+            ligand_count=1,
+        )
+        start_gro = "complex.gro"
+
     progress(15, "editconf")
-    run([GMX, "editconf", "-f", "processed.gro", "-o", "boxed.gro", "-c", "-d", str(box_distance), "-bt", "cubic"], work)
+    run([GMX, "editconf", "-f", start_gro, "-o", "boxed.gro", "-c", "-d", str(box_distance), "-bt", "cubic"], work)
     progress(20, "solvate")
     run([GMX, "solvate", "-cp", "boxed.gro", "-cs", "spc216.gro", "-o", "solvated.gro", "-p", "topol.top"], work)
 
@@ -364,14 +666,29 @@ def run_pipeline(
     run([GMX, "grompp", "-f", "md.mdp", "-c", "npt.gro", "-t", "npt.cpt", "-p", "topol.top", "-o", "md.tpr", "-maxwarn", "2"], work)
     run_mdrun(work, device)
 
-    progress(88, "convert trajectory")
+    progress(86, "convert trajectory")
+    xtc_path, gro_path = center_pbc_trajectory(work)
     # GROMACS trjconv 不直接写 DCD；用 mdtraj 把 XTC 转为标准 DCD。
     import mdtraj as _mdtraj
 
-    _traj = _mdtraj.load(str(work / "md.xtc"), top=str(work / "md.gro"))
+    _traj = _mdtraj.load(str(xtc_path), top=str(gro_path))
     _traj.save_dcd(str(work / "trajectory.dcd"))
-    run([GMX, "trjconv", "-s", "md.tpr", "-f", "md.gro", "-o", "topology.pdb"], work, stdin_text="0\n")
-    return {"duration_ns": nsteps * dt / 1000.0}
+    run([GMX, "trjconv", "-s", "md.tpr", "-f", gro_path.name, "-o", "topology.pdb"], work, stdin_text="0\n")
+    _elements = [
+        str(getattr(getattr(atom, "element", None), "symbol", "") or "")
+        for atom in _traj.topology.atoms
+    ]
+    ensure_pdb_elements(
+        work / "topology.pdb",
+        _elements,
+        ligand_resname=param_lig.ligand_resname if param_lig is not None else None,
+        ligand_elements=_ligand_elements_from_sdf(param_lig.template_sdf if param_lig is not None else None),
+    )
+    return {
+        "duration_ns": nsteps * dt / 1000.0,
+        "trajectory_xtc": str(xtc_path),
+        "ligand": param_lig,
+    }
 
 
 def main() -> int:
@@ -392,17 +709,8 @@ def main() -> int:
     work = work / "md"
 
     params = json.loads(Path(args.params_json).read_text(encoding="utf-8"))
-    files = params.get("input_files") or {}
-    manifest_path = input_dir / "manifest.json"
-    if manifest_path.is_file():
-        staged = json.loads(manifest_path.read_text(encoding="utf-8"))
-        files = {
-            entry["name"]: str((input_dir.parent / entry["path"]).resolve())
-            for entry in staged
-            if entry.get("name") and entry.get("path") and entry.get("role") != "metadata_json"
-            and not str(entry.get("path", "")).endswith(".metadata_json.json")
-        }
-    run_params = params.get("params") or {}
+    slots = collect_input_slots(input_dir, params)
+    run_params = params.get("params") or params.get("parameters") or {}
     force_field = str(run_params.get("force_field") or "amber99sb-ildn")
     water_model = str(run_params.get("water_model") or "tip3p")
     box_distance = float(run_params.get("box_distance") or 1.0)
@@ -410,7 +718,32 @@ def main() -> int:
     dt = float(run_params.get("dt") or 0.002)
     temperature = float(run_params.get("temperature") or 300.0)
 
-    protein = pick_protein(files, input_dir)
+    ligand_mode = str(run_params.get("ligand_mode") or "auto")
+    ligand_resname = str(run_params.get("ligand_resname") or "LIG").strip().upper() or "LIG"
+    charge_method = str(run_params.get("charge_method") or "bcc").strip().lower() or "bcc"
+    raw_charge = run_params.get("net_charge")
+    net_charge = int(raw_charge) if raw_charge not in (None, "") else None
+    analysis_stride = max(1, int(run_params.get("analysis_stride") or 1))
+    water_resname = str(run_params.get("water_resname") or "").strip() or None
+
+    protein = pick_protein(slots, input_dir)
+    ligand_inputs = pick_ligand_inputs(slots, input_dir, protein)
+
+    ligand_config = None
+    if any(ligand_inputs.values()):
+        try:
+            from ligand_parameterizer import LigandPrepConfig
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from ligand_parameterizer import LigandPrepConfig
+        ligand_config = LigandPrepConfig(
+            mode=ligand_mode,
+            ligand_resname=ligand_resname,
+            net_charge=net_charge,
+            charge_method=charge_method,
+            amber_root=os.environ.get("AMBER_ROOT", "/opt/amber"),
+        )
+
     work.mkdir(parents=True, exist_ok=True)
     progress(1, "prepare")
     info = run_pipeline(
@@ -423,23 +756,50 @@ def main() -> int:
         dt=dt,
         temperature=temperature,
         device=args.device,
+        ligand_sdf=ligand_inputs["ligand_sdf"],
+        custom_itp=ligand_inputs["custom_itp"],
+        custom_prm=ligand_inputs["custom_prm"],
+        custom_gro=ligand_inputs["custom_gro"],
+        custom_zip=ligand_inputs["custom_zip"],
+        ligand_config=ligand_config,
     )
 
     out = output_dir / "artifacts"
     shutil.copyfile(work / "topology.pdb", out / "topology.pdb")
     shutil.copyfile(work / "trajectory.dcd", out / "trajectory.dcd")
-    write_analysis_csv(work, out / "analysis.csv")
-    rmsf_written = write_rmsf_csv(work, out / "rmsf.csv", work / "topology.pdb")
+    xtc_path = Path(info.get("trajectory_xtc") or (work / "md.xtc"))
+    traj_rel_name = xtc_path.name if xtc_path.parent == work else "md.xtc"
+    write_analysis_csv(work, out / "analysis.csv", trajectory_name=traj_rel_name)
+    rmsf_written = write_rmsf_csv(work, out / "rmsf.csv", work / "topology.pdb", trajectory_name=traj_rel_name)
+
+    progress(94, "interaction analysis")
+    param_lig = info.get("ligand")
+    effective_resname = param_lig.ligand_resname if param_lig is not None else ligand_resname
+    interaction_summary = run_interactions_postprocess(
+        work / "topology.pdb",
+        xtc_path,
+        out,
+        ligand_resname=effective_resname,
+        ligand_template_sdf=param_lig.template_sdf if param_lig is not None else None,
+        stride=analysis_stride,
+        water_resname=water_resname,
+    )
 
     metadata = {
         "source_task_id": args.task_id,
         "force_field": force_field,
         "duration_ns": info["duration_ns"],
+        # Matches mdp_text() nstxout-compressed = 500 output frequency (frame 0 + nsteps/500).
         "frames": nsteps // 500 + 1,
         "temperature_k": temperature,
         "engine": "GROMACS 2024.1",
         "water_model": water_model,
         "device": args.device,
+        "complex_mode": bool(param_lig is not None),
+        "ligand_mode": param_lig.mode if param_lig is not None else "protein_only",
+        "ligand_resname": effective_resname if param_lig is not None else None,
+        "interaction_mode": interaction_summary.get("mode"),
+        "interaction_engine": interaction_summary.get("engine"),
     }
     write_json(out / "metadata.json", metadata)
     report = {
@@ -451,21 +811,31 @@ def main() -> int:
         "nsteps": nsteps,
         "dt_ps": dt,
         "temperature_k": temperature,
+        "ligand_mode": metadata["ligand_mode"],
+        "ligand_resname": metadata["ligand_resname"],
+        "interaction_mode": interaction_summary.get("mode"),
+        "interaction_engine": interaction_summary.get("engine"),
+        "contacts_count": int((interaction_summary.get("summary") or {}).get("total_interactions") or 0),
     }
     write_json(out / "report.json", report)
+
+    trajectory_files: dict[str, dict[str, str]] = {
+        "topology_pdb": file_ref(output_dir, "artifacts/topology.pdb"),
+        "trajectory_dcd": file_ref(output_dir, "artifacts/trajectory.dcd"),
+        "analysis_csv": file_ref(output_dir, "artifacts/analysis.csv"),
+        "metadata_json": file_ref(output_dir, "artifacts/metadata.json"),
+        **({"rmsf_csv": file_ref(output_dir, "artifacts/rmsf.csv")} if rmsf_written else {}),
+        **({"contacts_csv": file_ref(output_dir, "artifacts/contacts.csv")} if (out / "contacts.csv").is_file() else {}),
+        **({"interactions_json": file_ref(output_dir, "artifacts/interactions.json")}
+           if (out / "interactions.json").is_file() else {}),
+    }
 
     result = {
         "result_version": "aidd.platform/result",
         "artifacts": {
             "trajectory": {
                 "type": "md_trajectory@1",
-                "files": {
-                    "topology_pdb": file_ref(output_dir, "artifacts/topology.pdb"),
-                    "trajectory_dcd": file_ref(output_dir, "artifacts/trajectory.dcd"),
-                    "analysis_csv": file_ref(output_dir, "artifacts/analysis.csv"),
-                    "metadata_json": file_ref(output_dir, "artifacts/metadata.json"),
-                    **({"rmsf_csv": file_ref(output_dir, "artifacts/rmsf.csv")} if rmsf_written else {}),
-                },
+                "files": trajectory_files,
                 "metadata": {"source_task_id": args.task_id},
             },
             "report": {
@@ -474,7 +844,12 @@ def main() -> int:
                 "metadata": {"source_task_id": args.task_id},
             },
         },
-        "metrics": {"duration_ns": info["duration_ns"], "nsteps": nsteps, "temperature_k": temperature},
+        "metrics": {
+            "duration_ns": info["duration_ns"],
+            "nsteps": nsteps,
+            "temperature_k": temperature,
+            "contacts_count": report["contacts_count"],
+        },
     }
     write_json(output_dir / "result.json", result)
     progress(100, "done")
