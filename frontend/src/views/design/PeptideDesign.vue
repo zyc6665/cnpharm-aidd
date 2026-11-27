@@ -63,6 +63,7 @@
   import ModelSelect from '@/components/design/ModelSelect.vue'
   import ModelParameterForm from '@/components/design/ModelParameterForm.vue'
   import { useModelOptions } from '@/composables/useModelOptions'
+  import { useParameterMemory } from '@/composables/useParameterMemory'
   import { listDesignProjects, resolveToolBySlug, submitDesignTask } from '@/api/design'
   import {
     buildDefaultValues,
@@ -102,6 +103,13 @@
   } = useModelOptions('peptide_design', { defaultSlug: PEPTIDE_DESIGN_TOOL_SLUG })
 
   const form = reactive<{ params: ParameterValues }>({ params: {} })
+  const peptideSchema = computed(() => selectedOption.value?.parameterSchema ?? null)
+  const parameterMemory = useParameterMemory({
+    scope: 'peptide',
+    slug: selectedSlug,
+    schema: peptideSchema,
+    omitKeys: ['sequence']
+  })
 
   const projectOptions = computed(() =>
     projects.value.map(project => ({ value: project.id, label: project.name }))
@@ -161,12 +169,14 @@
     }
     submitting.value = true
     try {
+      const normalized = normalizeParameters(selectedOption.value?.parameterSchema ?? null, form.params)
+      parameterMemory.persist(normalized)
       const response = await submitDesignTask({
         name: t('design.peptide.taskName'),
         projectId: projectId.value,
         toolId: resolvedTool.value.tool.id,
         toolVersionId: resolvedTool.value.version.id,
-        params: normalizeParameters(selectedOption.value?.parameterSchema ?? null, form.params)
+        params: normalized
       })
       message.success(t('design.peptide.submitted'))
       await router.push({ name: 'GenerationResults', params: { id: response.data.id } })
@@ -180,7 +190,7 @@
   watch(
     selectedOption,
     option => {
-      form.params = buildDefaultValues(option?.parameterSchema ?? null)
+      form.params = parameterMemory.restore(option?.parameterSchema ?? null).values
     },
     { immediate: true }
   )

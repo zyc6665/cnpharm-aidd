@@ -67,6 +67,10 @@
                     v-model="pocketSelection"
                     :default-project-id="defaultProjectId"
                     :project-id="uploadProjectId"
+                    :initial-target-id="initialTargetId"
+                    :initial-protein-id="initialProteinId"
+                    :initial-structure-id="initialStructureId"
+                    :initial-pocket-id="initialPocketId"
                     hide-project-select
                     :hide-pocket-select="activePocketMode !== 'project'"
                     @structure-change="handleProjectStructureChange"
@@ -341,7 +345,7 @@
 
 <script setup lang="ts">
   import { useUserStore } from '@/stores/user'
-  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
@@ -399,10 +403,24 @@
     initialProjectId: ''
   })
 
+  const queryString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
   const defaultProjectId = computed(() => {
     if (props.initialProjectId) return props.initialProjectId
-    return typeof route.query.project_id === 'string' ? route.query.project_id : ''
+    return queryString(route.query.project_id)
   })
+  const initialTargetId = computed(() => queryString(route.query.target_id))
+  const initialProteinId = computed(() => queryString(route.query.protein_id))
+  const initialStructureId = computed(() => queryString(route.query.structure_id))
+  const initialPocketId = computed(() => queryString(route.query.pocket_id))
+  const hasPocketHandoffQuery = computed(() =>
+    Boolean(
+      initialTargetId.value ||
+        initialProteinId.value ||
+        initialStructureId.value ||
+        initialPocketId.value
+    )
+  )
 
   const resolving = ref(false)
   const submitting = ref(false)
@@ -796,9 +814,10 @@
     const explicit = defaultProjectId.value
     if (stored) {
       if (!explicit && stored.uploadProjectId) uploadProjectId.value = stored.uploadProjectId
-      if (!explicit) sourceMode.value = stored.sourceMode
+      if (!explicit && !hasPocketHandoffQuery.value) sourceMode.value = stored.sourceMode
     }
     if (explicit) uploadProjectId.value = explicit
+    if (hasPocketHandoffQuery.value) sourceMode.value = 'project'
     form.params = { ...defaults, ...restored, ...queryParamHints() }
     resetGeneration()
   }
@@ -1299,7 +1318,51 @@
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  function parseQueryCoord(value: unknown): number | null {
+    const raw = Array.isArray(value) ? value[0] : value
+    if (typeof raw !== 'string' || raw.trim() === '') return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  let appliedPocketQueryKey = ''
+  async function applyPocketQueryHandoff(): Promise<void> {
+    const cx = parseQueryCoord(route.query.center_x)
+    const cy = parseQueryCoord(route.query.center_y)
+    const cz = parseQueryCoord(route.query.center_z)
+    const hasCoords = cx !== null && cy !== null && cz !== null
+    const key = [
+      defaultProjectId.value,
+      initialTargetId.value,
+      initialProteinId.value,
+      initialStructureId.value,
+      initialPocketId.value,
+      hasCoords ? `${cx},${cy},${cz}` : ''
+    ].join('|')
+    if (key === appliedPocketQueryKey) return
+    if (!hasPocketHandoffQuery.value && !hasCoords) return
+    appliedPocketQueryKey = key
+
+    if (defaultProjectId.value) uploadProjectId.value = defaultProjectId.value
+    if (hasPocketHandoffQuery.value) {
+      sourceMode.value = 'project'
+      if (initialPocketId.value) {
+        pocketDefineMode.value = 'project'
+        return
+      }
+    }
+    if (hasCoords) {
+      await nextTick()
+      pocketPanelRef.value?.setCoordinates({ x: cx, y: cy, z: cz })
+    }
+  }
+
+  watch(() => route.query, () => {
+    void applyPocketQueryHandoff()
+  })
+
   onMounted(() => {
+    void applyPocketQueryHandoff()
     void loadModels().then(() => loadTool())
     void loadProjects()
   })
