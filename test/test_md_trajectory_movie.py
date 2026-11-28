@@ -1650,9 +1650,10 @@ def test_gro_topology_accepts_chain_boundary_merged_by_gro(tmp_path: Path):
     assert stats["written"] is True
 
 
-def test_gro_topology_accepts_legal_residue_renumbering(tmp_path: Path):
-    """A GRO file may number residues 1..N while topology.pdb keeps the original
-    numbering; that is not an atom-order mismatch and must not be rejected."""
+def test_gro_topology_rejects_renumbering_without_atom_serial_proof(tmp_path: Path):
+    """Residue numbers alone cannot prove atom order after a renumbering: a clean
+    1..N rewrite would also accept two same-resname residues swapped in place.
+    Without matching atom serials the movie must be skipped, not rendered."""
     pdb = tmp_path / "topology.pdb"
     pdb.write_text(
         "\n".join(
@@ -1674,12 +1675,12 @@ def test_gro_topology_accepts_legal_residue_renumbering(tmp_path: Path):
         _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2),
     ]
     trajectory = _two_frame_trajectory(gro_atoms)
-    stats = movie.export_desolvated_pdb_movie(
-        pdb, xtc, tmp_path / "movie.pdb",
-        topology_gro=gro,
-        trajectory_loader=lambda top, traj: trajectory,
-    )
-    assert stats["written"] is True
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
 
 
 def test_gro_topology_rejects_numbered_same_resname_residue_swap(tmp_path: Path):
@@ -1846,3 +1847,159 @@ def test_gro_topology_rejects_serial_swap_of_same_resname_residues(tmp_path: Pat
             topology_gro=gro,
             trajectory_loader=lambda top, traj: swapped_traj,
         )
+
+
+def test_gro_topology_rejects_partial_serial_swap_of_identical_atom_names(tmp_path: Path):
+    """One missing serial must not disable the comparison of the remaining ones:
+    swapping two identically named atoms still shows up at the known positions."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CA", "ALA", "A", 2, element="C"),
+                _pdb_line(3, "CA", "ALA", "A", 3, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=2, serial=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=3),
+    ]
+    swapped_traj = _two_frame_trajectory(swapped_atoms)
+    with pytest.raises(ValueError, match="atom serials"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: swapped_traj,
+        )
+
+
+def test_gro_topology_accepts_non_contiguous_renumbering_with_serial_proof(tmp_path: Path):
+    """After de-solvation the kept residues need not be a clean 1..N run: atom
+    serials that match at every kept position prove the order, so 42/43 -> 1/3
+    is legal even though it is not a contiguous renumbering."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(5, "CA", "ALA", "A", 42, element="C"),
+                _pdb_line(9, "CB", "ALA", "A", 43, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=5),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=3, serial=9),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_rejects_renumbering_when_serials_repeat(tmp_path: Path):
+    """GROMACS writers store serial % 100000, so repeated serials cannot identify
+    atoms. They must not be treated as proof for a changed residue numbering."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 42, element="C"),
+                _pdb_line(1, "CB", "ALA", "A", 43, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_accepts_case_preserved_atom_names(tmp_path: Path):
+    """MDTraj looks atom names up case-sensitively against the upper-case XML, so
+    a raw ``h1`` stays ``h1``. Upper-casing only the template would map it to
+    ``H`` and falsely reject a trajectory that also carries ``h1``."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        _pdb_line(1, "h1", "ALA", "A", 1, element="H") + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n1\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [_NamedGroAtom("h1", "H", "ALA", resindex=0, resseq=1)]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_nme_water_and_unmapped_residue_tables(tmp_path: Path):
+    """NME and HOH have their own per-residue overrides; CYM/ASH are absent from
+    pdbNames.xml and must stay untouched on both sides."""
+    pdb_lines = [
+        _pdb_line(1, "HH31", "NME", "A", 1, element="H"),
+        _pdb_line(2, "OW", "HOH", "A", 2, element="O"),
+        _pdb_line(3, "HW1", "HOH", "A", 2, element="H"),
+        _pdb_line(4, "SG", "CYM", "A", 3, element="S"),
+        _pdb_line(5, "HD2", "ASH", "A", 4, element="H"),
+    ]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text("\n".join(pdb_lines) + "\n", encoding="utf-8")
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n5\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("H1", "H", "NME", resindex=0, resseq=1),
+        _NamedGroAtom("O", "O", "HOH", resindex=1, resseq=2),
+        _NamedGroAtom("H1", "H", "HOH", resindex=1, resseq=2),
+        _NamedGroAtom("SG", "S", "CYM", resindex=2, resseq=3),
+        _NamedGroAtom("HD2", "H", "ASH", resindex=3, resseq=4),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True

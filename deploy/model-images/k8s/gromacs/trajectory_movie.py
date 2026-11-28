@@ -579,7 +579,14 @@ _GRO_OTHER_RESNAMES = frozenset({"HOH"})
 
 
 def _canonical_gro_resname(resname: str) -> str:
-    name = (resname or "").strip().upper()
+    """Residue name exactly as MDTraj 1.10.3's GRO reader rewrites it.
+
+    Both the replacement map and the per-residue atom tables are keyed by the
+    raw XML names (upper case); MDTraj looks the raw record up without changing
+    case, so ``ala`` stays ``ala`` and gets no atom replacements. Upper-casing
+    here would apply a table the reader never applied.
+    """
+    name = (resname or "").strip()
     return _GRO_RESIDUE_ALIASES.get(name, name)
 
 
@@ -587,12 +594,15 @@ def _mdtraj_gro_atom_name(atom_name: str, resname: str = "") -> str:
     """Return the atom name MDTraj 1.10.3's GRO reader emits for a raw PDB name.
 
     The reader renames the residue first, then looks the raw atom name up in the
-    merged table for that residue. Residues outside pdbNames.xml are untouched.
-    Compare the result against the trajectory name as MDTraj returned it -- never
-    normalise both sides, or a canonical name such as ``H1`` would be mapped a
-    second time (ACE ``HH31`` -> ``H1`` -> ``H``).
+    merged table for that residue. Lookups are case-sensitive: the XML keys are
+    upper case, so a lower-case ``h1`` is emitted unchanged and must be compared
+    as ``h1`` instead of being silently rewritten to ``H``/``H1``. Residues
+    outside pdbNames.xml are untouched. Compare the result against the
+    trajectory name as MDTraj returned it -- never normalise both sides, or a
+    canonical name such as ``H1`` would be mapped a second time (ACE ``HH31`` ->
+    ``H1`` -> ``H``).
     """
-    name = (atom_name or "").strip().upper()
+    name = (atom_name or "").strip()
     res = _canonical_gro_resname(resname)
     if res in _GRO_PROTEIN_RESNAMES:
         base: dict[str, str] = _GRO_PROTEIN_ATOM_ALIASES
@@ -623,6 +633,25 @@ def _atom_serial(atom: Any) -> int | None:
     return serial if serial > 0 else None
 
 
+def _trusted_serial_positions(serials: Sequence[int | None]) -> dict[int, int]:
+    """Positions whose serial uniquely identifies an atom in this file.
+
+    GROMACS PDB and GRO writers both store ``serial % 100000`` (PDB columns
+    7-11 / GRO atom-number columns), so atom 100000 is written as 0 and atom
+    100001 repeats 1. Zeros arrive here as ``None``; any value that repeats in
+    the same file is ambiguous for the same reason and is dropped as well.
+    """
+    counts: dict[int, int] = {}
+    for serial in serials:
+        if serial is not None:
+            counts[serial] = counts.get(serial, 0) + 1
+    return {
+        position: serial
+        for position, serial in enumerate(serials)
+        if serial is not None and counts.get(serial) == 1
+    }
+
+
 def _template_residue_runs(
     templates: Sequence[AtomTemplate],
 ) -> tuple[list[int], list[tuple[str, str]]]:
@@ -636,7 +665,8 @@ def _template_residue_runs(
     runs: list[tuple[str, str]] = []
     last_key: tuple[str, str] | None = None
     for template in templates:
-        key = ((template.resname or "").strip().upper(), (template.resseq or "").strip())
+        # MDTraj compares the raw resname/resSeq pair before any replacement.
+        key = ((template.resname or "").strip(), (template.resseq or "").strip())
         if key != last_key:
             runs.append(key)
             last_key = key
@@ -655,7 +685,9 @@ def _trajectory_residue_runs(
     for atom in traj_atoms:
         residue = getattr(atom, "residue", None)
         index = getattr(residue, "index", None)
-        name = (getattr(residue, "name", "") or "").strip().upper()
+        # MDTraj already applied its case-sensitive residue replacement; keep the
+        # name exactly as returned and never normalise it a second time.
+        name = (getattr(residue, "name", "") or "").strip()
         seq = getattr(residue, "resSeq", None)
         if index is not None:
             key: tuple[Any, ...] = ("index", index)
@@ -707,41 +739,43 @@ def _validate_trajectory_topology(
         # A whole-residue swap of the same residue type keeps every ordinal and
         # atom name. Atom serials are the per-atom identity both writers preserve
         # for a shared TPR (PDB columns 7-11, GRO atom-number columns), so compare
-        # them whenever both sides prove one: they accept a legal renumbering
-        # (42.. -> 1..) and still reject an in-place swap.
+        # every position both sides can prove: a partial proof still exposes an
+        # in-place swap, and a full proof accepts a legal renumbering (42.. -> 1..).
         kept_order = sorted(kept)
         expected_serials = [templates[index].serial for index in kept_order]
         traj_serials = [_atom_serial(traj_atoms[index]) for index in kept_order]
-        if all(serial is not None for serial in expected_serials) and all(
-            serial is not None for serial in traj_serials
-        ):
-            for expected_serial, traj_serial in zip(expected_serials, traj_serials):
-                if expected_serial != traj_serial:
-                    raise ValueError(
-                        "GRO trajectory atom serials differ from topology PDB; refusing to render"
-                    )
-        else:
-            # No trustworthy serials (e.g. an injected topology): fall back to the
-            # residue numbers. Only two cases are provably in order -- identical
-            # numbering, or a clean 1..N renumbering, which is what a rebuilt
-            # topology emits. Anything else cannot prove the order and is refused.
-            expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
-            traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
-            numbers_known = (
-                all(number is not None for number in expected_numbers)
-                and all(number is not None for number in traj_numbers)
+        expected_trusted = _trusted_serial_positions(expected_serials)
+        traj_trusted = _trusted_serial_positions(traj_serials)
+        comparable = set(expected_trusted) & set(traj_trusted)
+        for position in sorted(comparable):
+            if expected_trusted[position] != traj_trusted[position]:
+                raise ValueError(
+                    "GRO trajectory atom serials differ from topology PDB; refusing to render"
+                )
+        serials_prove_order = len(comparable) == len(kept_order)
+        # Residue numbers are the fallback identity, but a rebuilt topology may
+        # legitimately renumber (42.. -> 1..) or drop solvent residues (1, 3).
+        # Only two cases are provably in order: identical numbering, or a changed
+        # numbering backed by an atom-serial match at every kept position.
+        # Otherwise the movie is skipped instead of risking an atom-order mismatch.
+        expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
+        traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
+        numbers_known = (
+            all(number is not None for number in expected_numbers)
+            and all(number is not None for number in traj_numbers)
+        )
+        if numbers_known and expected_numbers != traj_numbers and not serials_prove_order:
+            raise ValueError(
+                "GRO trajectory residue numbering differs from topology PDB "
+                "without atom-serial proof; refusing to render"
             )
-            if numbers_known and expected_numbers != traj_numbers:
-                clean_renumbering = traj_numbers == list(range(1, len(traj_numbers) + 1))
-                if not clean_renumbering:
-                    raise ValueError(
-                        "GRO trajectory residue numbering differs from topology PDB; refusing to render"
-                    )
     for index, (template, traj_atom) in enumerate(zip(templates, traj_atoms)):
         if index not in kept:
             continue
         if using_gro:
-            traj_raw = (getattr(traj_atom, "name", "") or "").strip().upper()
+            # Case-sensitive: MDTraj leaves an unknown-case name untouched, so
+            # upper-casing only this side would compare ``h1`` against ``H``.
+            traj_raw = (getattr(traj_atom, "name", "") or "").strip()
             if traj_raw:
                 # MDTraj already normalised its own name; normalise only the raw
                 # PDB template, or a canonical name would be mapped twice.

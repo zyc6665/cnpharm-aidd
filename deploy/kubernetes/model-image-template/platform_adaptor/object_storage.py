@@ -182,10 +182,13 @@ def _resolve_output_result(
     declared = _declared_output_paths(result_payload)
     files: list[Path] = []
     for path in sorted(output_dir.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
         relative_path = path.relative_to(output_dir).as_posix()
+        # Exclude by path first: an undeclared residual movie may be unreadable
+        # (permission denied on stat), and probing it must not abort the upload
+        # before result.json is published.
         if relative_path in UNDECLARED_OPTIONAL_OUTPUTS and relative_path not in declared:
+            continue
+        if not path.is_file() or path.is_symlink():
             continue
         files.append(path)
     return output_dir, result_path, files

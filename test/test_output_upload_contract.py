@@ -107,3 +107,30 @@ def test_upload_keeps_other_undeclared_files(tmp_path: Path):
         prefix="executions/t1",
     )
     assert any(key.endswith("artifacts/extra.csv") for key in uploaded)
+
+
+def test_upload_skips_residual_movie_even_when_it_cannot_be_stat_ed(tmp_path: Path, monkeypatch):
+    """An undeclared residual movie may be unreadable (ACL denied). The uploader
+    must exclude it by path before probing the file type, so result.json still
+    gets published instead of aborting on PermissionError."""
+    output_dir = _write_outputs(tmp_path, declare_movie=False)
+    movie_path = output_dir / "artifacts" / "trajectory_movie.pdb"
+    real_is_file = Path.is_file
+
+    def guarded_is_file(self: Path) -> bool:
+        if self == movie_path:
+            raise PermissionError("permission denied")
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", guarded_is_file)
+    storage = _FakeStorage()
+    uploaded = object_storage.upload_output_directory(
+        output_dir=output_dir,
+        result_path=output_dir / "result.json",
+        storage=storage,
+        bucket="bucket",
+        prefix="executions/t1",
+    )
+    assert not any(key.endswith("trajectory_movie.pdb") for key in uploaded)
+    assert any(key.endswith("artifacts/topology.pdb") for key in uploaded)
+    assert uploaded[-1].endswith("result.json")
