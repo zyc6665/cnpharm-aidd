@@ -32,6 +32,11 @@ file_roles:
     allowed_formats: [json]
     content_types: [application/json]
     recommended_name: interactions.json
+  - role: trajectory_movie_pdb
+    required: false
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: trajectory_movie.pdb
   - role: metadata_json
     required: true
     allowed_formats: [json]
@@ -58,5 +63,21 @@ metadata_schema:
       type: boolean
     note:
       type: string
+    movie_frames:
+      type: integer
+    movie_stride:
+      type: integer
+    movie_desolvated:
+      type: boolean
+    movie_aligned:
+      type: boolean
+    movie_time_ps:
+      type: array
+      items:
+        type: number
+    movie_warnings:
+      type: array
+      items:
+        type: string
 validators:
   - md_trajectory_v1_core
