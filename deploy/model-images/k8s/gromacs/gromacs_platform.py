@@ -24,6 +24,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -510,6 +511,144 @@ def run_interactions_postprocess(
         }
 
 
+_INTEGER_RE = re.compile(r"[+-]?\d+(?:\.0+)?")
+
+
+def _strict_int(value: Any, *, minimum: int, warnings: list[str], label: str, maximum: int | None = None) -> int | None:
+    """Parse one movie setting without ``float()`` (which rounds ``1024.000…01``
+    and raises ``OverflowError`` on ``10**400``): bool is rejected, int passes
+    through, float must be finite and integral, str must match a strict integer
+    pattern, then the range bounds are enforced."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        warnings.append(f"{label} rejected non-numeric {value!r}")
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float):
+        if not (math.isfinite(value) and value.is_integer()):
+            warnings.append(f"{label} ignored non-integer {value!r}")
+            return None
+        number = int(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if _INTEGER_RE.fullmatch(text) is None:
+            warnings.append(f"{label} ignored invalid {value!r}")
+            return None
+        try:
+            number = int(text.split(".", 1)[0])
+        except (ValueError, OverflowError):
+            warnings.append(f"{label} ignored out-of-range {value!r}")
+            return None
+    else:
+        warnings.append(f"{label} ignored invalid {value!r}")
+        return None
+    if number < minimum or (maximum is not None and number > maximum):
+        warnings.append(f"{label} out of range: {number} (min {minimum}, max {maximum})")
+        return None
+    return number
+
+
+def _movie_file_ready(path: Path, summary: dict[str, Any]) -> bool:
+    """True only when the movie was declared written *and* the file is non-empty."""
+    if summary.get("written") is not True:
+        return False
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _movie_metadata_fields(summary: dict[str, Any]) -> dict[str, Any]:
+    """Metadata keys the result page reads; ``movie_time_ps`` is a per-MODEL list."""
+    frames = int(summary.get("movie_frames") or 0)
+    try:
+        times = [float(value) for value in (summary.get("frame_times_ps") or [])]
+    except (TypeError, ValueError):
+        times = []
+    if not all(math.isfinite(value) for value in times):
+        times = []
+    return {
+        "movie_frames": frames,
+        "movie_stride": int(summary.get("movie_stride") or 1),
+        "movie_desolvated": bool(summary.get("desolvated")),
+        "movie_aligned": bool(summary.get("aligned")),
+        "movie_time_ps": times if (summary.get("written") and frames and len(times) == frames) else [],
+    }
+
+
+def _safe_movie_ref(
+    output_dir: Path, movie_target: Path, movie_summary: dict[str, Any], warnings: list[str],
+) -> dict[str, str] | None:
+    """SHA-256 reference for a written movie, or ``None``. Hashing/IO failures
+    (e.g. ``PermissionError``) must never abort a finished MD result."""
+    if not _movie_file_ready(movie_target, movie_summary):
+        return None
+    try:
+        return file_ref(output_dir, "artifacts/trajectory_movie.pdb")
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 - a broken/missing movie ref must not lose the MD result
+        warnings.append(f"trajectory movie reference failed: {exc}")
+        return None
+
+
+def run_trajectory_movie_postprocess(
+    topology_pdb: Path, trajectory_path: Path, out_dir: Path, *,
+    ligand_resname: str = "LIG", ligand_template_sdf: Path | None = None,
+    ligand_itp: Path | None = None, water_resname: str | None = None,
+    run_params: dict[str, Any] | None = None, topology_gro: Path | None = None,
+    superpose: bool = True,
+) -> dict[str, Any]:
+    """Export ``trajectory_movie.pdb`` isolated from the MD run.  Every movie
+    setting is parsed inside this guard (run params -> env -> default) so a bad
+    value only records a warning; a finished trajectory is never discarded."""
+    warnings: list[str] = []
+    try:
+        try:
+            import trajectory_movie
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import trajectory_movie
+        params = run_params if isinstance(run_params, dict) else {}
+        movie_target = Path(out_dir) / "trajectory_movie.pdb"
+        movie_target.unlink(missing_ok=True)  # drop a stale movie inside the guard
+
+        def _pick(key: str, env: str, minimum: int, maximum: int | None = None) -> int | None:
+            found = _strict_int(params.get(key), minimum=minimum, maximum=maximum, warnings=warnings, label=key)
+            if found is not None:
+                return found
+            return _strict_int(os.environ.get(env), minimum=minimum, maximum=maximum, warnings=warnings, label=env)
+
+        max_frames = _pick("movie_max_frames", "MD_MOVIE_MAX_FRAMES",
+                           trajectory_movie.MIN_MOVIE_MAX_FRAMES, trajectory_movie.MAX_MOVIE_MAX_FRAMES)
+        stride = _pick("movie_stride", "MD_MOVIE_STRIDE", 1)
+        max_bytes = _pick("movie_max_bytes", "MD_MOVIE_MAX_BYTES", trajectory_movie.MIN_MOVIE_MAX_BYTES)
+        cfg = trajectory_movie.TrajectoryMovieConfig(
+            max_frames=trajectory_movie.DEFAULT_MOVIE_MAX_FRAMES if max_frames is None else max_frames,
+            stride=stride, max_bytes=trajectory_movie.DEFAULT_MOVIE_MAX_BYTES if max_bytes is None else max_bytes,
+            ligand_resname=ligand_resname, water_resname=water_resname, superpose=bool(superpose),
+        )
+        summary = trajectory_movie.export_desolvated_pdb_movie(
+            topology_pdb, trajectory_path, movie_target,
+            config=cfg, ligand_template_sdf=ligand_template_sdf, ligand_itp=ligand_itp, topology_gro=topology_gro,
+        )
+        summary["warnings"] = [*warnings, *(summary.get("warnings") or [])]
+        if summary.get("written") is True and not _movie_file_ready(movie_target, summary):
+            summary["written"] = False
+            summary["warnings"].append("trajectory movie file missing or empty after export")
+        return summary
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 - never discard a finished MD trajectory
+        print(f"[gromacs] trajectory movie skipped: {exc}", flush=True)
+        return {
+            "written": False, "movie_frames": 0, "total_source_frames": 0, "movie_stride": 1,
+            "frame_indices": [], "frame_times_ps": [], "atom_count": 0, "desolvated": False,
+            "aligned": False, "conect_count": 0, "size_bytes": 0,
+            "warnings": [*warnings, f"trajectory movie failed: {exc}"],
+        }
+
+
 def ensure_pdb_elements(
     pdb_path: Path,
     element_symbols: list[str],
@@ -687,6 +826,7 @@ def run_pipeline(
     return {
         "duration_ns": nsteps * dt / 1000.0,
         "trajectory_xtc": str(xtc_path),
+        "trajectory_gro": str(gro_path),
         "ligand": param_lig,
     }
 
@@ -785,6 +925,43 @@ def main() -> int:
         water_resname=water_resname,
     )
 
+    progress(96, "trajectory movie")
+    # Reuse only the ITP this task actually produced; never a stale file left in work/.
+    ligand_itp_path: Path | None = None
+    if param_lig is not None:
+        candidates = [work / "ligand.itp", Path(getattr(param_lig, "ligand_itp", "") or "")]
+        ligand_itp_path = next((path for path in candidates if path.is_file()), None)
+    gro_path = Path(info.get("trajectory_gro") or (work / "md.gro"))
+    movie_target = out / "trajectory_movie.pdb"
+    movie_summary = run_trajectory_movie_postprocess(
+        work / "topology.pdb",
+        xtc_path,
+        out,
+        ligand_resname=effective_resname,
+        ligand_template_sdf=param_lig.template_sdf if param_lig is not None else None,
+        ligand_itp=ligand_itp_path,
+        water_resname=water_resname,
+        run_params=run_params,
+        topology_gro=gro_path if gro_path.is_file() else None,
+    )
+    movie_warnings = list(movie_summary.get("warnings") or [])
+    # Resolve the optional movie reference before metadata.json so a hashing or
+    # permission failure only warns; the completed MD result is still registered.
+    movie_ref = _safe_movie_ref(output_dir, movie_target, movie_summary, movie_warnings)
+    effective_movie_summary = (
+        movie_summary
+        if movie_ref is not None
+        else {
+            **movie_summary,
+            "written": False,
+            "movie_frames": 0,
+            "movie_stride": 1,
+            "desolvated": False,
+            "aligned": False,
+            "frame_times_ps": [],
+        }
+    )
+
     metadata = {
         "source_task_id": args.task_id,
         "force_field": force_field,
@@ -800,6 +977,8 @@ def main() -> int:
         "ligand_resname": effective_resname if param_lig is not None else None,
         "interaction_mode": interaction_summary.get("mode"),
         "interaction_engine": interaction_summary.get("engine"),
+        **_movie_metadata_fields(effective_movie_summary),
+        **({"movie_warnings": movie_warnings} if movie_warnings else {}),
     }
     write_json(out / "metadata.json", metadata)
     report = {
@@ -816,6 +995,7 @@ def main() -> int:
         "interaction_mode": interaction_summary.get("mode"),
         "interaction_engine": interaction_summary.get("engine"),
         "contacts_count": int((interaction_summary.get("summary") or {}).get("total_interactions") or 0),
+        "movie_frames": metadata["movie_frames"],
     }
     write_json(out / "report.json", report)
 
@@ -828,6 +1008,7 @@ def main() -> int:
         **({"contacts_csv": file_ref(output_dir, "artifacts/contacts.csv")} if (out / "contacts.csv").is_file() else {}),
         **({"interactions_json": file_ref(output_dir, "artifacts/interactions.json")}
            if (out / "interactions.json").is_file() else {}),
+        **({"trajectory_movie_pdb": movie_ref} if movie_ref is not None else {}),
     }
 
     result = {

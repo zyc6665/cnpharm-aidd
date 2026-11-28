@@ -57,6 +57,8 @@ COPY platform_adaptor /opt/aidd/platform_adaptor
 COPY gromacs_platform.py /opt/aidd/gromacs/gromacs_platform.py
 COPY mmpbsa_platform.py /opt/aidd/gromacs/mmpbsa_platform.py
 COPY interactions_analysis.py /opt/aidd/gromacs/interactions_analysis.py
+COPY trajectory_movie_pdb.py /opt/aidd/gromacs/trajectory_movie_pdb.py
+COPY trajectory_movie.py /opt/aidd/gromacs/trajectory_movie.py
 COPY ligand_parameterizer.py /opt/aidd/gromacs/ligand_parameterizer.py
 RUN chmod +x /opt/aidd/platform_adaptor/*.sh /opt/aidd/gromacs/*.py
 
