@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import numbers
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -807,18 +808,11 @@ def _validate_trajectory_topology(
             _atom_serial(traj_atoms[position]) for position in kept_order
         ]
 
-        def _identifies_every_atom(serials: Sequence[int | None]) -> bool:
-            known = [serial for serial in serials if serial is not None]
-            return len(known) == len(serials) and len(set(known)) == len(known)
-
-        # Unique, positionally equal serials prove the order of the rendered
-        # solute even when water repeats those values file-wide. That is the
-        # evidence a folded residue number needs; a *changed* numbering below
-        # asks for the stricter whole-file proof, because a rebuilt topology
-        # may legitimately rewrite serials altogether.
-        kept_serials_identify = (
-            _identifies_every_atom(kept_expected_serials)
-            and _identifies_every_atom(kept_traj_serials)
+        kept_expected_counts = Counter(
+            serial for serial in kept_expected_serials if serial is not None
+        )
+        kept_traj_counts = Counter(
+            serial for serial in kept_traj_serials if serial is not None
         )
         serial_mismatches = [
             (position, expected_serial, traj_serial)
@@ -836,6 +830,19 @@ def _validate_trajectory_topology(
         proven_mismatch = any(
             position in expected_trusted and position in traj_trusted
             for position, _, _ in serial_mismatches
+        )
+        # A pure reorder preserves the multiset of serials and moves the values
+        # between positions; a rebuilt topology rewrites them. Comparing the
+        # multisets separates the two even when a filtered solvent atom repeats
+        # one of the kept values, which whole-file uniqueness cannot see.
+        complete_kept_serials = (
+            len(kept_expected_counts) == len(kept_order)
+            and len(kept_traj_counts) == len(kept_order)
+        )
+        kept_serial_permutation = (
+            complete_kept_serials
+            and kept_expected_counts == kept_traj_counts
+            and kept_expected_serials != kept_traj_serials
         )
         # A serial unique in the whole file additionally proves the kept order
         # when a rebuilt topology legitimately renumbers (42.. -> 1..).
@@ -864,32 +871,66 @@ def _validate_trajectory_topology(
         # file-wide: a same-value duplicate cannot explain why residue identity
         # stayed congruent while the serials moved. Only an exact renumbering
         # may ignore such a mismatch.
-        if serial_mismatches and (folded or proven_mismatch):
+        if serial_mismatches and (folded or proven_mismatch or kept_serial_permutation):
             raise ValueError(
                 "GRO trajectory atom serials differ from topology PDB; refusing to render"
             )
-        # A fold is provable in two ways. Unique kept serials identify every
-        # rendered atom; or, with every kept number readable, each truncated
-        # class occurs exactly once among the kept residues, so any same-class
-        # swap would have to be the identity (this is what accepts a hybrid-36
-        # 100000 against GRO 0 even when its serial wrapped to 0). Otherwise an
-        # in-place swap of two identical residues is indistinguishable from a
-        # legal reset/wrap -- both writers truncate -- so refuse instead of
-        # guessing. An unreadable field also lands here: the missing
-        # correspondence could hide a cycle while the readable pairs look
-        # congruent. A false rejection is visible and recoverable; a silently
+        # A fold is provable only when every kept atom carries evidence that
+        # cannot describe any other kept atom. A serial pins its position when
+        # both files agree and the value occurs once among the kept atoms; a
+        # residue number pins its run when the retained number matches no other
+        # retained number. Deciding per position (instead of demanding a
+        # complete serial set or globally unique truncated classes) accepts a
+        # hybrid-36 100000 against GRO 0 next to a wrapped serial 0, while
+        # still refusing a swap of two same-name residues. An unreadable field
+        # pins nothing, so a cycle could hide behind it -- refuse rather than
+        # guess. A false rejection is visible and recoverable; a silently
         # swapped movie is not.
-        kept_classes = [
-            number % _PDB_RESSEQ_MODULUS
-            for number in expected_numbers
-            if number is not None
-        ]
-        classes_prove_order = (
-            len(pairs) == len(expected_numbers)
-            and not numbering_changed
-            and len(set(kept_classes)) == len(kept_classes)
+        kept_run_slots = {run: slot for slot, run in enumerate(kept_runs)}
+        actual_number_counts = Counter(
+            number for number in traj_numbers if number is not None
         )
-        if folded and not (kept_serials_identify or classes_prove_order):
+        actual_class_counts = Counter(
+            number % _PDB_RESSEQ_MODULUS
+            for number in traj_numbers
+            if number is not None
+        )
+
+        def _serial_pins(slot: int) -> bool:
+            expected_serial = kept_expected_serials[slot]
+            traj_serial = kept_traj_serials[slot]
+            return (
+                expected_serial is not None
+                and expected_serial == traj_serial
+                and kept_expected_counts[expected_serial] == 1
+                and kept_traj_counts[traj_serial] == 1
+            )
+
+        def _number_pins(run_slot: int) -> bool:
+            expected_number = expected_numbers[run_slot]
+            actual_number = traj_numbers[run_slot]
+            if (
+                expected_number is None
+                or actual_number is None
+                or not _residue_numbers_match(expected_number, actual_number)
+            ):
+                return False
+            if 0 <= expected_number < _PDB_RESSEQ_MODULUS:
+                # Any retained number with this truncated class could hide here.
+                return actual_class_counts[expected_number] == 1
+            if expected_number < 0:
+                # A negative field only ever matches by exact equality.
+                return actual_number_counts[expected_number] == 1
+            # A full number only matches its own value or its GRO-wrapped image.
+            compatible = {expected_number, expected_number % _GRO_RESNR_MODULUS}
+            return sum(actual_number_counts[value] for value in compatible) == 1
+
+        kept_positions_identified = all(
+            _serial_pins(slot)
+            or _number_pins(kept_run_slots[expected_positions[position]])
+            for slot, position in enumerate(kept_order)
+        )
+        if folded and not kept_positions_identified:
             raise ValueError(
                 "GRO trajectory residue numbering differs from topology PDB "
                 "without atom-serial proof; refusing to render"
