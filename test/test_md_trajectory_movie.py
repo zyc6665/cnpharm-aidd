@@ -2655,6 +2655,72 @@ def test_gro_topology_accepts_same_number_with_distinct_atom_names(tmp_path: Pat
     assert stats["written"] is True
 
 
+def test_gro_topology_rejects_blank_resnames_with_duplicate_numbers(tmp_path: Path):
+    """Blank trajectory residue names skip the per-run name check, so two runs
+    that share number 1 and differ only in their PDB names could exchange
+    unnoticed. Signature grouping must fall back to whole-class uniqueness and
+    refuse instead of trusting names the output never compares."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CA", "GLY", "B", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    # Run 0 carries the residue written as GLY (10001), run 1 the ALA (1).
+    swapped = [
+        _NamedGroAtom("CA", "C", "", resindex=0, resseq=10001, serial=0),
+        _NamedGroAtom("CA", "C", "", resindex=1, resseq=1, serial=0),
+    ]
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: _two_frame_trajectory(swapped),
+        )
+
+
+def test_gro_topology_rejects_blank_atom_names_with_serial_permutation(tmp_path: Path):
+    """CA/CB inside ALA1 trade serials 2/1 while the trajectory atom names are
+    blank. The same-residue exemption needs the name check to bind the atoms;
+    with only element C on both sides it cannot, so the swap is refused."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(2, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(1, "CB", "ALA", "A", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped = [
+        _NamedGroAtom("", "C", "ALA", resindex=0, resseq=10001, serial=1),
+        _NamedGroAtom("", "C", "ALA", resindex=0, resseq=10001, serial=2),
+    ]
+    with pytest.raises(ValueError, match="atom serials differ"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: _two_frame_trajectory(swapped),
+        )
+
+
 def test_gro_topology_accepts_unique_global_residue_number_matching(tmp_path: Path):
     """PDB 0/A000 (0/10000) against GRO 20000/10000. Truncated 0 fits both GRO
     numbers by itself, but full 10000 can only take GRO 10000, which leaves

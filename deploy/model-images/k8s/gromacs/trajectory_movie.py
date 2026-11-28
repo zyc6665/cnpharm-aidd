@@ -952,6 +952,13 @@ def _validate_trajectory_topology(
                 }
             )
             == len(serial_mismatches)
+            # The exemption relies on the name check below binding every atom.
+            # A blank trajectory name makes that check fall back to the element,
+            # which no longer tells same-element atoms apart.
+            and all(
+                (getattr(traj_atoms[position], "name", "") or "").strip()
+                for position, _, _ in serial_mismatches
+            )
         )
         serials_reordered = serial_permutation and not permutation_within_one_residue
         # A serial unique in the whole file additionally proves the kept order
@@ -1034,6 +1041,24 @@ def _validate_trajectory_topology(
             )
             for run in kept_runs
         ]
+        # Signature grouping is only sound while the name checks actually
+        # compare names. A blank residue name on either side skips the per-run
+        # check, and a blank trajectory atom name falls back to the element, so
+        # two differently named runs could then exchange without detection.
+        # Fall back to one shared group -- the old whole-class uniqueness -- for
+        # those malformed inputs instead of trusting the signatures.
+        names_bind_run_order = all(
+            _canonical_gro_resname(expected_runs[run][0])
+            and _canonical_gro_resname(traj_runs[run][0])
+            and all(
+                (getattr(traj_atoms[position], "name", "") or "").strip()
+                for position in run_positions[run]
+            )
+            for run in kept_runs
+        )
+        uniqueness_signatures = (
+            run_signatures if names_bind_run_order else [("", ())] * len(kept_runs)
+        )
         kept_run_slots = {run: slot for slot, run in enumerate(kept_runs)}
         pinned_run_slots = {
             kept_run_slots[run]
@@ -1081,7 +1106,7 @@ def _validate_trajectory_topology(
         if remaining_slots:
             if remaining_consistent:
                 if not _residue_number_matching_is_forced(
-                    expected_numbers, traj_numbers, remaining_slots, run_signatures
+                    expected_numbers, traj_numbers, remaining_slots, uniqueness_signatures
                 ):
                     raise ValueError(
                         "GRO trajectory residue numbering differs from topology PDB "
