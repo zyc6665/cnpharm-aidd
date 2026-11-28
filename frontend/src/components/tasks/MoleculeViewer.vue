@@ -376,6 +376,8 @@ const emit = defineEmits<{
   'residue-focus-result': [status: 'focused' | 'not-found' | 'ambiguous']
   'frame-change': [frameIndex: number]
   'export-movie': []
+  /** `fallbackOnFailure` 条目加载失败（空文件/404/内容损坏）时通知上层换个候选。 */
+  'entry-unavailable': [entryKey: string]
 }>()
 
 const { t } = useI18n()
@@ -462,6 +464,8 @@ interface TrajectoryModelTarget {
   modelRef: string
   /** 由该 model 派生出的 structure 节点 ref，用于检查换帧后是否进入 error cell。 */
   structureRefKey: string
+  /** 该结构的 representation 节点 ref；换帧后任一进入 error 也算本次换帧失败。 */
+  representationRefs: string[]
   frameCount: number
 }
 
@@ -471,6 +475,8 @@ interface LoadedEntryRecord {
   isPrimaryTarget: boolean
   /** `ModelFromTrajectory` 节点 ref（多帧原地 remap 用）；单帧/无轨迹时为 undefined。 */
   modelRef?: string
+  /** 该结构的 representation 节点 ref；换帧后任一进入 error 也算本次换帧失败。 */
+  representationRefs: string[]
   /** 该结构实际帧数（从 trajectory.obj.data.frameCount 读取，容错缺省 1）。 */
   frameCount: number
   /** 上层是否显式标记该条目为多帧 movie（严格 `=== true`）。 */
@@ -651,6 +657,23 @@ async function applyRepresentationToStructureRef(
   )
 }
 
+/**
+ * 收集 `hierarchy.applyPreset` 返回的 representation 节点 ref。
+ * 表示预设返回 `representation: { name: selector }`；selector 的 `.ref` 是状态树
+ * 节点 key。换帧时 structure 更新会级联重算这些节点，其中任一个进入 error
+ * 都说明新帧没有完整渲染出来，不能只检查 model/structure 两个节点。
+ */
+function collectRepresentationRefs(preset: unknown): string[] {
+  const representations = (preset as { representation?: unknown } | null | undefined)?.representation
+  if (!representations || typeof representations !== 'object') return []
+  const refs: string[] = []
+  for (const value of Object.values(representations as Record<string, unknown>)) {
+    const ref = (value as { ref?: unknown } | null | undefined)?.ref
+    if (typeof ref === 'string' && ref) refs.push(ref)
+  }
+  return refs
+}
+
 async function loadEntryStructure(
   currentViewer: MolstarViewer,
   entry: VisualizationScene['entries'][number],
@@ -684,6 +707,7 @@ async function loadEntryStructure(
           structureRefKey: ref,
           isPrimaryTarget: false,
           modelRef: preset?.model?.ref,
+          representationRefs: collectRepresentationRefs(preset),
           frameCount,
           preferComplexRepresentation: false,
           preferComplexRepresentationForCartoon: false,
@@ -738,6 +762,7 @@ async function loadEntryStructure(
         structureRefKey,
         isPrimaryTarget: primaryTarget,
         modelRef: preset?.model?.ref,
+        representationRefs: collectRepresentationRefs(preset),
         frameCount,
         preferComplexRepresentation,
         preferComplexRepresentationForCartoon,
@@ -1412,6 +1437,8 @@ async function applyFrameIndex(request: FrameRequest) {
         })
         updatedRefs.push(trajectoryModel.modelRef)
         if (trajectoryModel.structureRefKey) updatedRefs.push(trajectoryModel.structureRefKey)
+        // representation 节点由 structure 更新级联重算；任一报错说明该帧没有完整渲染。
+        updatedRefs.push(...trajectoryModel.representationRefs)
       }
       await PluginCommands.State.Update(currentViewer.plugin, {
         state,
@@ -1420,6 +1447,10 @@ async function applyFrameIndex(request: FrameRequest) {
       })
       const failedCells = hasFailedUpdateCells(currentViewer, updatedRefs)
       if (disposed || epoch !== sceneEpoch) return false
+      if (failedCells) {
+        // 自动播放遇到持续失败的帧只会一遍遍重试同一位置，直接停下并停在最后成功帧。
+        stopPlayback()
+      }
       // 无论是目标 cell 报错（modelIndex 已被写入，不回写会导致重选同帧被 Mol* 短路），
       // 还是在途自动帧已被暂停/调速/关循环，都需要立刻把状态树写回最后一次已提交帧。
       if (failedCells || isAutoFrameRequestStale(request)) {
@@ -1440,7 +1471,9 @@ async function applyFrameIndex(request: FrameRequest) {
     currentFrameIndex.value = target
     emit('frame-change', target)
   } catch {
-    // 帧切换失败不终止播放控制：帧号保持最后一次成功值，用户可再次选择同一帧重试。
+    // 自动帧抛错时停止播放，避免定时器对同一失败位置反复重试；帧号保持最后一次成功值，
+    // 用户仍可再次选择同一帧手动重试。
+    if (request.source === 'auto') stopPlayback()
     if (!hasActivePendingFrameRequest()) syncSliderToCommittedFrame()
   } finally {
     frameUpdateInFlight = false
@@ -1529,6 +1562,7 @@ function resetTrajectoryStateFromEntries() {
   activeTrajectoryModels = playableRecords.map(record => ({
     modelRef: record.modelRef as string,
     structureRefKey: record.structureRefKey,
+    representationRefs: record.representationRefs,
     frameCount: record.frameCount,
   }))
   const primaryPlayableRecord =
@@ -1581,17 +1615,30 @@ async function renderScene() {
       if (seq !== renderSeq || disposed) return
       setMolstarBackgroundColor(currentViewer, activeBackground.value)
       for (const entry of props.scene.entries) {
-        const resource = entry.format === 'sdf'
-          ? await createNormalizedSdfObjectUrl(entry.url, entry.sdfRecordIndex !== undefined && !entry.sdfRecordScoped ? { recordIndex: entry.sdfRecordIndex } : {})
-          : await createProtectedObjectUrl(entry.url)
-        if (seq !== renderSeq || disposed) {
-          resource.revoke()
-          return
+        try {
+          const resource = entry.format === 'sdf'
+            ? await createNormalizedSdfObjectUrl(entry.url, entry.sdfRecordIndex !== undefined && !entry.sdfRecordScoped ? { recordIndex: entry.sdfRecordIndex } : {})
+            : await createProtectedObjectUrl(entry.url)
+          if (seq !== renderSeq || disposed) {
+            resource.revoke()
+            return
+          }
+          entryResourcesRegistry.add(resource.revoke)
+          const loaded = await loadEntryStructure(currentViewer, entry, resource.url)
+          if (seq !== renderSeq || disposed) return
+          if (loaded) {
+            loadedEntries.push(loaded)
+          } else if (entry.fallbackOnFailure) {
+            // 解析成功但拿不到 structure ref：同样视为该候选不可用。
+            emit('entry-unavailable', entry.key)
+          }
+        } catch (cause) {
+          if (seq !== renderSeq || disposed) return
+          // 允许回退的条目（如 PDB-movie → topology）单条失败不得中断整场景，
+          // 由上层把该文件标记失败并换下一个候选；其他条目保持原有整场景报错语义。
+          if (!entry.fallbackOnFailure) throw cause
+          emit('entry-unavailable', entry.key)
         }
-        entryResourcesRegistry.add(resource.revoke)
-        const loaded = await loadEntryStructure(currentViewer, entry, resource.url)
-        if (seq !== renderSeq || disposed) return
-        if (loaded) loadedEntries.push(loaded)
       }
       if (props.voxelGrid?.boxes.length) await addVoxelGrid(currentViewer, props.voxelGrid)
       if (seq !== renderSeq || disposed) return

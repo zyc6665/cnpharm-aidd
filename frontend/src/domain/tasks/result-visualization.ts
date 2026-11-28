@@ -39,6 +39,11 @@ export interface VisualizationSceneEntry {
    * 避免 `polymer-cartoon` 把配体/小分子隐藏。缺省 undefined/false，对现有调用方零影响。
    */
   preferComplexRepresentation?: boolean
+  /**
+   * 单条加载失败时是否允许回退到下一个候选文件（而不是让整块画布报错/留白）。
+   * 仅由有多级候选的预览（如 MD 影片 → 拓扑）设置；缺省 false 保持原有整场景报错语义。
+   */
+  fallbackOnFailure?: boolean
 }
 
 export interface VisualizationScene {

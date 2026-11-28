@@ -68,6 +68,10 @@ function formatPsTime(time: number): string {
 /**
  * 播放下标帧标签，如 `3 / 100`；若提供 `frameTimesPs` 则追加物理时间，如 `3 / 100 · 12.5 ps`。
  * 展示用 1 基（用户看到的「第几帧」），内部 `index` 仍是 0 基。
+ *
+ * 物理时间只在**整组时间与帧数一一对应且全部是有限数值**时才展示：长度不一致
+ * （例如 movie 换了、旧时间数组残留）或含 `null`/字符串/`NaN` 时一律退回纯帧号，
+ * 避免把别的轨迹的时间贴到当前帧上。
  */
 export function formatTrajectoryFrameLabel(
   index: number,
@@ -77,7 +81,11 @@ export function formatTrajectoryFrameLabel(
   const count = Math.max(1, Math.floor(Number(frameCount) || 1))
   const clamped = clampFrameIndex(index, count)
   const base = `${clamped + 1} / ${count}`
-  const time = Array.isArray(frameTimesPs) ? frameTimesPs[clamped] : undefined
+  const timesAligned =
+    Array.isArray(frameTimesPs) &&
+    frameTimesPs.length === count &&
+    frameTimesPs.every(time => typeof time === 'number' && Number.isFinite(time))
+  const time = timesAligned ? frameTimesPs[clamped] : undefined
   if (typeof time === 'number' && Number.isFinite(time)) {
     return `${base} · ${formatPsTime(time)} ps`
   }

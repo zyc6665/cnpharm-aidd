@@ -2980,6 +2980,7 @@ export default {
       downloadMovie: 'Download multi-frame PDB (Movie)',
       movieNotice: 'A multi-frame PDB-movie is available — play the trajectory directly in the 3D viewer below, or download trajectory_movie.pdb to view it locally.',
       moviePreviewNote: 'Play the multi-frame PDB-movie below; drag the playback bar or press play to inspect the trajectory.',
+      movieFallbackNotice: 'The multi-frame PDB-movie failed to load; showing the static topology PDB preview instead. Download trajectory_movie.pdb to view the trajectory locally.',
       structurePreview: 'Structure preview',
       noTopology: 'No topology structure',
       chartEmpty: 'No data',
@@ -3924,7 +3925,11 @@ export default {
     fileSize: 'Size',
     mdTrajectory: {
       notice: 'Trajectory files (e.g. DCD) are download-only; a static topology preview is shown here. See the task MD result page for RMSD/RMSF curves.',
-      movieNotice: 'A multi-frame PDB-movie is available — play the trajectory directly in the 3D viewer below, or export/download trajectory_movie.pdb to view it locally.'
+      movieNotice: 'A multi-frame PDB-movie is available — play the trajectory directly in the 3D viewer below, or export/download trajectory_movie.pdb to view it locally.',
+      movieFallbackNotice: 'The multi-frame PDB-movie failed to load; showing the static topology PDB preview instead. Download trajectory_movie.pdb to view the trajectory locally.'
+    },
+    structurePreview: {
+      unavailable: 'The structure preview failed to load. Download the file to view it locally.'
     },
     compoundSet: {
       notice: 'Compound set artifact: download member files here, or manage them on the candidates page.',

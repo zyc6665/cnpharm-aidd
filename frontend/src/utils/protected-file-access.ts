@@ -35,6 +35,17 @@ interface ProtectedFileReference {
 interface ProtectedObjectUrlResource {
   url: string
   revoke: () => void
+  /** 受保护请求读到的字节数；浏览器本地对象地址（blob:/data:）无法预知时为 undefined。 */
+  size?: number
+}
+
+export interface ProtectedFileDownloadOptions {
+  /**
+   * 为 true 时跳过预签名直链，改用受保护请求读取完整内容：
+   * 预签名地址只证明「拿到了 URL」，不证明对象存在；对必须确认可读的产物
+   * （如 PDB-movie 影片，可能是上一次失败残留的空文件）要验证实际响应。
+   */
+  requireContent?: boolean
 }
 
 const API_PREFIX = '/api/v1'
@@ -167,7 +178,8 @@ export async function createProtectedObjectUrl(
 
   return {
     url: objectUrl,
-    revoke: () => objectUrlApi.revokeObjectURL(objectUrl)
+    revoke: () => objectUrlApi.revokeObjectURL(objectUrl),
+    size: blob.size
   }
 }
 
@@ -183,24 +195,32 @@ export async function fetchProtectedFileText(
  * 所有受保护文件下载的唯一出口。每次调用都会登记进全局下载记录
  * （`download-history.ts`），侧栏「下载」入口可以看到状态并重试失败项；
  * 异常仍然抛给调用方，各页面原有的错误提示保持不变。
+ *
+ * `options.requireContent` 用于必须确认「文件真的可读」的产物（如影片）：
+ * 跳过无法证明对象存在的预签名直链，并在内容为空时按失败处理。
  */
 export async function triggerProtectedFileDownload(
   file: ProtectedFileReference,
-  dependencies: ProtectedFileAccessDependencies = {}
+  dependencies: ProtectedFileAccessDependencies = {},
+  options: ProtectedFileDownloadOptions = {}
 ): Promise<void> {
-  await trackDownload(resolveDownloadName(file), () => performProtectedFileDownload(file, dependencies))
+  await trackDownload(resolveDownloadName(file), () =>
+    performProtectedFileDownload(file, dependencies, options)
+  )
 }
 
 async function performProtectedFileDownload(
   file: ProtectedFileReference,
-  dependencies: ProtectedFileAccessDependencies
+  dependencies: ProtectedFileAccessDependencies,
+  options: ProtectedFileDownloadOptions = {}
 ): Promise<void> {
   if (!file.url) {
     throw new Error('缺少文件下载地址')
   }
 
   const dom = dependencies.dom || defaultDownloadDomApi
-  const fileId = resolveProtectedFileId(file.url)
+  // 预签名直链只回 URL，不验证对象是否存在；需要校验内容时走受保护读取。
+  const fileId = options.requireContent ? null : resolveProtectedFileId(file.url)
 
   if (fileId) {
     try {
@@ -223,15 +243,21 @@ async function performProtectedFileDownload(
   }
 
   const resource = await createProtectedObjectUrl(file.url, dependencies)
-  const anchor = dom.createAnchor()
 
   try {
-    anchor.href = resource.url
-    anchor.download = resolveDownloadName(file)
-    dom.appendAnchor(anchor)
-    anchor.click()
+    if (options.requireContent && resource.size === 0) {
+      throw new Error('下载内容为空')
+    }
+    const anchor = dom.createAnchor()
+    try {
+      anchor.href = resource.url
+      anchor.download = resolveDownloadName(file)
+      dom.appendAnchor(anchor)
+      anchor.click()
+    } finally {
+      anchor.remove()
+    }
   } finally {
-    anchor.remove()
     resource.revoke()
   }
 }

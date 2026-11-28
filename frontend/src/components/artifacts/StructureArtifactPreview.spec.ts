@@ -3,14 +3,20 @@ import { describe, expect, it, vi } from 'vitest'
 import StructureArtifactPreview from './StructureArtifactPreview.vue'
 import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
 
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => key,
+  }),
+}))
+
 vi.mock('@/components/tasks/MoleculeViewer.vue', () => ({
   __esModule: true,
   default: {
     name: 'MoleculeViewer',
     props: ['scene', 'mode', 'frameTimesPs', 'canExportMovie'],
-    emits: ['export-movie'],
+    emits: ['export-movie', 'entry-unavailable'],
     template:
-      '<div data-testid="molecule-viewer" :data-mode="mode" :data-prefer-complex="scene.entries[0].preferComplexRepresentation" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" @click="$emit(\'export-movie\')">{{ scene.entries[0].url }}</div>',
+      '<div data-testid="molecule-viewer" :data-mode="mode" :data-prefer-complex="scene.entries[0].preferComplexRepresentation" :data-fallback="String(scene.entries[0].fallbackOnFailure)" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" @click="$emit(\'export-movie\')">{{ scene.entries[0].url }}<button data-testid="fail-entry" @click.stop="$emit(\'entry-unavailable\', scene.entries[0].key)">fail</button></div>',
   },
 }))
 
@@ -134,5 +140,69 @@ describe('StructureArtifactPreview', () => {
     expect(viewer.attributes('data-prefer-complex')).toBe('false')
     expect(viewer.attributes('data-can-export')).toBe('false')
     expect(viewer.text()).toContain('/api/v1/files/topology_pdb/download')
+  })
+
+  it('marks entries fallback-capable so one broken file cannot blank the viewer', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', [
+          makeFile('topology_pdb', 'topology.pdb', true),
+        ]),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').attributes('data-fallback')).toBe('true')
+  })
+
+  it('falls back to the topology file and reports movie unavailable when the movie fails', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', [
+          makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+          makeFile('topology_pdb', 'topology.pdb'),
+        ]),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+        frameTimesPs: [0, 2, 4],
+        canExportMovie: true,
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+
+    const viewer = wrapper.get('[data-testid="molecule-viewer"]')
+    expect(viewer.text()).toContain('/api/v1/files/topology_pdb/download')
+    expect(viewer.attributes('data-prefer-complex')).toBe('false')
+    expect(wrapper.emitted('movie-unavailable')).toHaveLength(1)
+  })
+
+  it('shows an unavailable alert when every candidate file fails', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', [
+          makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+          makeFile('topology_pdb', 'topology.pdb'),
+        ]),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="molecule-viewer"]').exists()).toBe(false)
+    expect(
+      wrapper.get('[data-testid="structure-preview-unavailable"]').attributes('message')
+    ).toBe('artifactAssets.structurePreview.unavailable')
   })
 })

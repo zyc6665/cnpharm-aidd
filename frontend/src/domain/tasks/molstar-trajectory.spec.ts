@@ -73,13 +73,27 @@ describe('formatTrajectoryFrameLabel', () => {
     expect(formatTrajectoryFrameLabel(4, 100)).toBe('5 / 100')
   })
 
-  it('appends physical time when frameTimesPs is provided', () => {
-    expect(formatTrajectoryFrameLabel(0, 10, [0, 2, 4, 6])).toBe('1 / 10 · 0 ps')
-    expect(formatTrajectoryFrameLabel(1, 10, [0, 12.5, 25])).toBe('2 / 10 · 12.5 ps')
+  it('appends physical time when frameTimesPs aligns with every frame', () => {
+    const times = Array.from({ length: 10 }, (_, index) => index * 2.5)
+    expect(formatTrajectoryFrameLabel(0, 10, times)).toBe('1 / 10 · 0 ps')
+    expect(formatTrajectoryFrameLabel(1, 10, times)).toBe('2 / 10 · 2.5 ps')
   })
 
-  it('handles out-of-range indices and missing time entries', () => {
-    expect(formatTrajectoryFrameLabel(999, 10)).toBe('10 / 10')
+  it('ignores a time array whose length does not match the frame count', () => {
+    expect(formatTrajectoryFrameLabel(0, 10, [0, 2, 4, 6])).toBe('1 / 10')
     expect(formatTrajectoryFrameLabel(2, 10, [0])).toBe('3 / 10')
+  })
+
+  it('ignores the whole time array when any entry is not a finite number', () => {
+    const withNaN = Array.from({ length: 10 }, (_, index) => index * 2)
+    withNaN[3] = Number.NaN
+    expect(formatTrajectoryFrameLabel(0, 10, withNaN)).toBe('1 / 10')
+    const withString = Array.from({ length: 10 }, (_, index) => index * 2) as unknown as number[]
+    ;(withString as unknown[])[9] = '20'
+    expect(formatTrajectoryFrameLabel(9, 10, withString)).toBe('10 / 10')
+  })
+
+  it('handles out-of-range indices', () => {
+    expect(formatTrajectoryFrameLabel(999, 10)).toBe('10 / 10')
   })
 })

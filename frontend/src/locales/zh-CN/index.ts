@@ -2965,6 +2965,7 @@ export default {
       downloadMovie: '下载多帧 PDB (Movie)',
       movieNotice: '已生成多帧 PDB-movie，可在下方三维视图中直接播放轨迹；也可下载 trajectory_movie.pdb 在本地查看。',
       moviePreviewNote: '下方为多帧 PDB-movie 在线播放；拖动播放条或点击播放按钮查看轨迹变化。',
+      movieFallbackNotice: '多帧 PDB-movie 加载失败，已回退为拓扑 PDB 静态预览；请下载 trajectory_movie.pdb 在本地查看轨迹。',
       structurePreview: '结构预览',
       noTopology: '暂无拓扑结构',
       chartEmpty: '暂无数据',
@@ -3901,7 +3902,11 @@ export default {
     fileSize: '大小',
     mdTrajectory: {
       notice: '轨迹文件（如 DCD）仅提供下载；此处展示拓扑结构的静态预览，RMSD/RMSF 曲线请到任务 MD 结果页查看。',
-      movieNotice: '已生成多帧 PDB-movie，可在下方三维视图中直接播放轨迹；也可导出/下载 trajectory_movie.pdb 在本地查看。'
+      movieNotice: '已生成多帧 PDB-movie，可在下方三维视图中直接播放轨迹；也可导出/下载 trajectory_movie.pdb 在本地查看。',
+      movieFallbackNotice: '多帧 PDB-movie 加载失败，已回退为拓扑 PDB 静态预览；可下载 trajectory_movie.pdb 在本地查看轨迹。'
+    },
+    structurePreview: {
+      unavailable: '结构预览加载失败，请下载文件后在本地查看。'
     },
     compoundSet: {
       notice: '化合物集合产物：可直接下载成员文件，或前往候选物页面管理。',

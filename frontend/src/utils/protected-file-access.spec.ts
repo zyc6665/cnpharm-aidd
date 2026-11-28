@@ -98,4 +98,64 @@ describe('protected-file-access', () => {
     })
     expect(clicks).toEqual([{ href: 'https://signed.example/file', download: 'a.sdf' }])
   })
+
+  it('requireContent skips the presigned url and downloads the protected body', async () => {
+    const clicks: Array<{ href: string; download: string }> = []
+    const revokeObjectURL = vi.fn()
+    requestGet.mockResolvedValue(new Blob(['MODEL'], { type: 'chemical/x-pdb' }))
+
+    await triggerProtectedFileDownload(
+      { url: '/api/v1/files/file-4/download', filename: 'trajectory_movie.pdb' },
+      {
+        dom: {
+          appendAnchor: () => undefined,
+          createAnchor: () => ({
+            href: '',
+            download: '',
+            click() {
+              clicks.push({ href: this.href, download: this.download })
+            },
+            remove: () => undefined,
+          }),
+        },
+        objectUrl: {
+          createObjectURL: () => 'blob:movie',
+          revokeObjectURL,
+        },
+      },
+      { requireContent: true }
+    )
+
+    expect(requestGet).toHaveBeenCalledTimes(1)
+    expect(requestGet).toHaveBeenCalledWith('/files/file-4/download', {
+      headers: {},
+      responseType: 'blob',
+      silent: true,
+    })
+    expect(clicks).toEqual([{ href: 'blob:movie', download: 'trajectory_movie.pdb' }])
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:movie')
+  })
+
+  it('requireContent rejects an empty body without starting a download', async () => {
+    const click = vi.fn()
+    requestGet.mockResolvedValue(new Blob([], { type: 'chemical/x-pdb' }))
+
+    await expect(
+      triggerProtectedFileDownload(
+        { url: '/api/v1/files/file-5/download', filename: 'trajectory_movie.pdb' },
+        {
+          dom: {
+            appendAnchor: () => undefined,
+            createAnchor: () => ({ href: '', download: '', click, remove: () => undefined }),
+          },
+          objectUrl: {
+            createObjectURL: () => 'blob:empty',
+            revokeObjectURL: vi.fn(),
+          },
+        },
+        { requireContent: true }
+      )
+    ).rejects.toThrow('下载内容为空')
+    expect(click).not.toHaveBeenCalled()
+  })
 })
