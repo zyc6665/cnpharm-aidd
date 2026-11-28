@@ -1398,10 +1398,10 @@ def test_gro_topology_allows_halogen_and_protein_aliases_but_rejects_swapped_sam
 
 
 class _NamedGroAtom:
-    def __init__(self, name: str, symbol: str, resname: str = ""):
+    def __init__(self, name: str, symbol: str, resname: str = "", resindex: int | None = None):
         self.name = name
         self.element = types.SimpleNamespace(symbol=symbol)
-        self.residue = types.SimpleNamespace(name=resname)
+        self.residue = types.SimpleNamespace(name=resname, index=resindex)
 
 
 def test_gro_topology_accepts_digit_prefixed_terminal_hydrogen(tmp_path: Path):
@@ -1485,6 +1485,81 @@ def test_gro_topology_rejects_ligand_oxygen_alias_swap(tmp_path: Path):
         movie.export_desolvated_pdb_movie(
             pdb, xtc, tmp_path / "bad.pdb",
             config=movie.TrajectoryMovieConfig(ligand_resname="LIG"),
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: swapped_traj,
+        )
+
+
+def test_gro_topology_rejects_cross_residue_same_name_swap(tmp_path: Path):
+    """Two residues can expose the same atom name (``CA``): an atom-name-only check
+    accepts a swapped ALA/GLY order and writes coordinates onto the wrong residue,
+    so the residue name and ordinal must match as well."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CA", "GLY", "A", 2, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped_atoms = [
+        _NamedGroAtom("CA", "C", "GLY", resindex=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0),
+    ]
+    swapped_traj = _TopologyTrajectory(
+        [[[0.1 * i, 0.0, 0.0] for i in range(2)], [[0.1 * i, 0.1, 0.0] for i in range(2)]],
+        [0.0, 10.0],
+        types.SimpleNamespace(atoms=swapped_atoms),
+    )
+    with pytest.raises(ValueError, match="GRO trajectory residue order"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: swapped_traj,
+        )
+
+
+def test_gro_topology_rejects_same_resname_residue_swap(tmp_path: Path):
+    """Same residue name and same atom name in both residues: only the residue
+    ordinal distinguishes them, and a swap must still be refused."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CA", "ALA", "A", 2, element="C"),
+                _pdb_line(3, "CB", "ALA", "A", 2, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1),
+    ]
+    swapped_traj = _TopologyTrajectory(
+        [[[0.1 * i, 0.0, 0.0] for i in range(3)], [[0.1 * i, 0.1, 0.0] for i in range(3)]],
+        [0.0, 10.0],
+        types.SimpleNamespace(atoms=swapped_atoms),
+    )
+    with pytest.raises(ValueError, match="GRO trajectory residue order"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
             topology_gro=gro,
             trajectory_loader=lambda top, traj: swapped_traj,
         )

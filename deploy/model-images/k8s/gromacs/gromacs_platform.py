@@ -30,8 +30,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 GMX = os.environ.get("GMX_BIN", "gmx")
 
@@ -580,26 +581,58 @@ def _movie_metadata_fields(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _safe_movie_ref(
-    output_dir: Path, movie_target: Path, movie_summary: dict[str, Any], warnings: list[str],
+def _empty_movie_summary(warnings: list[str]) -> dict[str, Any]:
+    """Neutral movie result used whenever the optional movie cannot be produced."""
+    return {
+        "written": False, "movie_frames": 0, "total_source_frames": 0, "movie_stride": 1,
+        "frame_indices": [], "frame_times_ps": [], "atom_count": 0, "desolvated": False,
+        "aligned": False, "conect_count": 0, "size_bytes": 0,
+        "warnings": warnings,
+    }
+
+
+def _first_existing_file(candidates: Sequence[Path]) -> Path | None:
+    """First readable candidate; callers run this inside the movie guard because
+    ``Path.is_file`` can raise ``PermissionError`` on an unreadable parent."""
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    return None
+
+
+def _publish_movie(
+    output_dir: Path, staging_target: Path, movie_summary: dict[str, Any], warnings: list[str],
 ) -> dict[str, str] | None:
-    """SHA-256 reference for a written movie, or ``None``. Hashing/IO failures
-    (e.g. ``PermissionError``) must never abort a finished MD result."""
-    if not _movie_file_ready(movie_target, movie_summary):
+    """Move a validated movie into ``artifacts`` and return its SHA-256 reference.
+
+    The movie is exported outside ``artifacts`` so a hashing or permission failure
+    can never leave an unreadable file behind for the output uploader, which
+    publishes ``result.json`` last and would otherwise fail on that file.
+    """
+    if not _movie_file_ready(staging_target, movie_summary):
         return None
+    target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
     try:
-        return file_ref(output_dir, "artifacts/trajectory_movie.pdb")
+        digest = sha256_file(staging_target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging_target, target)
     except (Exception, SystemExit) as exc:  # noqa: BLE001 - a broken/missing movie ref must not lose the MD result
         warnings.append(f"trajectory movie reference failed: {exc}")
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
         return None
+    return {"path": "artifacts/trajectory_movie.pdb", "sha256": digest}
 
 
 def run_trajectory_movie_postprocess(
     topology_pdb: Path, trajectory_path: Path, out_dir: Path, *,
     ligand_resname: str = "LIG", ligand_template_sdf: Path | None = None,
-    ligand_itp: Path | None = None, water_resname: str | None = None,
-    run_params: dict[str, Any] | None = None, topology_gro: Path | None = None,
-    superpose: bool = True,
+    ligand_itp_candidates: Sequence[Path] = (), water_resname: str | None = None,
+    run_params: dict[str, Any] | None = None,
+    topology_gro_candidates: Sequence[Path] = (), superpose: bool = True,
 ) -> dict[str, Any]:
     """Export ``trajectory_movie.pdb`` isolated from the MD run.  Every movie
     setting is parsed inside this guard (run params -> env -> default) so a bad
@@ -614,6 +647,8 @@ def run_trajectory_movie_postprocess(
         params = run_params if isinstance(run_params, dict) else {}
         movie_target = Path(out_dir) / "trajectory_movie.pdb"
         movie_target.unlink(missing_ok=True)  # drop a stale movie inside the guard
+        ligand_itp = _first_existing_file(ligand_itp_candidates)
+        topology_gro = _first_existing_file(topology_gro_candidates)
 
         def _pick(key: str, env: str, minimum: int, maximum: int | None = None) -> int | None:
             found = _strict_int(params.get(key), minimum=minimum, maximum=maximum, warnings=warnings, label=key)
@@ -641,12 +676,7 @@ def run_trajectory_movie_postprocess(
         return summary
     except (Exception, SystemExit) as exc:  # noqa: BLE001 - never discard a finished MD trajectory
         print(f"[gromacs] trajectory movie skipped: {exc}", flush=True)
-        return {
-            "written": False, "movie_frames": 0, "total_source_frames": 0, "movie_stride": 1,
-            "frame_indices": [], "frame_times_ps": [], "atom_count": 0, "desolvated": False,
-            "aligned": False, "conect_count": 0, "size_bytes": 0,
-            "warnings": [*warnings, f"trajectory movie failed: {exc}"],
-        }
+        return _empty_movie_summary([*warnings, f"trajectory movie failed: {exc}"])
 
 
 def ensure_pdb_elements(
@@ -927,27 +957,40 @@ def main() -> int:
 
     progress(96, "trajectory movie")
     # Reuse only the ITP this task actually produced; never a stale file left in work/.
-    ligand_itp_path: Path | None = None
+    # File probes stay inside run_trajectory_movie_postprocess so a permission error
+    # cannot abort a finished MD result before result.json is written.
+    ligand_itp_candidates: list[Path] = []
     if param_lig is not None:
-        candidates = [work / "ligand.itp", Path(getattr(param_lig, "ligand_itp", "") or "")]
-        ligand_itp_path = next((path for path in candidates if path.is_file()), None)
+        ligand_itp_candidates = [work / "ligand.itp", Path(getattr(param_lig, "ligand_itp", "") or "")]
     gro_path = Path(info.get("trajectory_gro") or (work / "md.gro"))
-    movie_target = out / "trajectory_movie.pdb"
-    movie_summary = run_trajectory_movie_postprocess(
-        work / "topology.pdb",
-        xtc_path,
-        out,
-        ligand_resname=effective_resname,
-        ligand_template_sdf=param_lig.template_sdf if param_lig is not None else None,
-        ligand_itp=ligand_itp_path,
-        water_resname=water_resname,
-        run_params=run_params,
-        topology_gro=gro_path if gro_path.is_file() else None,
-    )
-    movie_warnings = list(movie_summary.get("warnings") or [])
-    # Resolve the optional movie reference before metadata.json so a hashing or
-    # permission failure only warns; the completed MD result is still registered.
-    movie_ref = _safe_movie_ref(output_dir, movie_target, movie_summary, movie_warnings)
+    movie_warnings: list[str] = []
+    movie_summary = _empty_movie_summary(movie_warnings)
+    movie_ref: dict[str, str] | None = None
+    # Export outside output_dir: a movie that cannot be hashed/moved must leave
+    # nothing behind that the output uploader would try (and fail) to upload.
+    try:
+        staging_dir = Path(tempfile.mkdtemp(prefix=".trajectory-movie-", dir=str(output_dir.parent)))
+    except OSError as exc:
+        movie_warnings.append(f"trajectory movie failed: {exc}")
+    else:
+        try:
+            movie_summary = run_trajectory_movie_postprocess(
+                work / "topology.pdb",
+                xtc_path,
+                staging_dir,
+                ligand_resname=effective_resname,
+                ligand_template_sdf=param_lig.template_sdf if param_lig is not None else None,
+                ligand_itp_candidates=ligand_itp_candidates,
+                water_resname=water_resname,
+                run_params=run_params,
+                topology_gro_candidates=[gro_path],
+            )
+            movie_warnings = list(movie_summary.get("warnings") or [])
+            movie_ref = _publish_movie(
+                output_dir, staging_dir / "trajectory_movie.pdb", movie_summary, movie_warnings,
+            )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
     effective_movie_summary = (
         movie_summary
         if movie_ref is not None

@@ -413,6 +413,20 @@ def _canonical_gro_atom_name(atom_name: str, resname: str = "") -> str:
     return _GRO_ATOM_ALIASES.get(name, name)
 
 
+def _template_residue_positions(templates: Sequence[AtomTemplate]) -> list[int]:
+    """0-based residue ordinal per template atom, keyed like ``parse_pdb_atom_templates``."""
+    positions: list[int] = []
+    last_key: tuple[int, str, str, str] | None = None
+    position = -1
+    for template in templates:
+        key = (template.segment_index, template.chain_id, template.resseq, template.icode)
+        if key != last_key:
+            position += 1
+            last_key = key
+        positions.append(position)
+    return positions
+
+
 def _validate_trajectory_topology(
     trajectory: Any, templates: Sequence[AtomTemplate], keep_indices: Sequence[int],
     *, using_gro: bool = False,
@@ -434,15 +448,40 @@ def _validate_trajectory_topology(
     if len(traj_atoms) != expected:
         return
     kept = {int(index) for index in keep_indices}
+    residue_positions = _template_residue_positions(templates)
     for index, (template, traj_atom) in enumerate(zip(templates, traj_atoms)):
         if index not in kept:
             continue
         if using_gro:
             traj_raw = (getattr(traj_atom, "name", "") or "").strip().upper()
-            traj_res = (getattr(getattr(traj_atom, "residue", None), "name", "") or template.resname)
+            residue = getattr(traj_atom, "residue", None)
+            traj_res = (getattr(residue, "name", "") or "").strip().upper()
+            expected_res = (template.resname or "").strip().upper()
+            if traj_res and expected_res and traj_res != expected_res:
+                raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
+            residue_index = getattr(residue, "index", None)
+            if residue_index is not None:
+                try:
+                    residue_matches = int(residue_index) == residue_positions[index]
+                except (TypeError, ValueError):
+                    residue_matches = True
+                if not residue_matches:
+                    raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
+            else:
+                # MDTraj exposes ``residue.index``; injected/older topology objects may
+                # only carry the file's resSeq, which must still match the template.
+                traj_res_seq = getattr(residue, "resSeq", None)
+                expected_res_seq = (template.resseq or "").strip()
+                if traj_res_seq is not None and expected_res_seq.isdigit():
+                    try:
+                        residue_matches = int(traj_res_seq) == int(expected_res_seq)
+                    except (TypeError, ValueError):
+                        residue_matches = True
+                    if not residue_matches:
+                        raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
             if traj_raw:
                 if (
-                    _canonical_gro_atom_name(traj_raw, traj_res)
+                    _canonical_gro_atom_name(traj_raw, traj_res or template.resname)
                     != _canonical_gro_atom_name(template.atom_name, template.resname)
                 ):
                     raise ValueError("GRO trajectory atom order differs from topology PDB; refusing to render")

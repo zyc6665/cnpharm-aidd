@@ -223,7 +223,8 @@ def test_dockerfile_copies_trajectory_movie_module():
 def test_platform_declares_trajectory_movie_artifacts_and_metadata():
     source = (IMAGE_DIR / "gromacs_platform.py").read_text(encoding="utf-8")
     assert '"trajectory_movie_pdb": movie_ref' in source
-    assert "_safe_movie_ref(output_dir, movie_target, movie_summary" in source
+    assert "def _publish_movie(" in source
+    assert 'staging_dir / "trajectory_movie.pdb"' in source
     assert "def run_trajectory_movie_postprocess(" in source
     for key in ("movie_frames", "movie_stride", "movie_desolvated", "movie_aligned", "movie_time_ps"):
         assert f'"{key}"' in source, f"metadata.json missing {key}"
@@ -366,29 +367,34 @@ def test_postprocess_removes_stale_movie_inside_guard(tmp_path: Path):
     assert not stale.exists()  # unlink 在 try 守卫内执行，异常也不会留下旧影片
 
 
-# 第 8 项：movie_ref 的 file_ref 抛 PermissionError 时降级为 None，不中断已完成的 MD 产物登记。
-def test_safe_movie_ref_returns_none_when_hashing_fails(tmp_path: Path, monkeypatch):
-    target = tmp_path / "trajectory_movie.pdb"
+# 第 8 项：哈希/移动抛 PermissionError 或 SystemExit 时降级为 None；影片在 artifacts 外暂存，
+# 失败时不得留下不可读文件（上传器会在 result.json 之前读取 artifacts 下的每个文件）。
+def test_publish_movie_returns_none_when_hashing_fails(tmp_path: Path, monkeypatch):
+    output_dir = tmp_path / "out"
+    (output_dir / "artifacts").mkdir(parents=True)
+    target = tmp_path / "staging" / "trajectory_movie.pdb"
+    target.parent.mkdir()
     target.write_text("MODEL    1\n", encoding="utf-8")
     warnings: list[str] = []
 
     def _denied(*args, **kwargs):
         raise PermissionError("denied")
 
-    monkeypatch.setattr(gromacs, "file_ref", _denied)
-    assert gromacs._safe_movie_ref(tmp_path, target, {"written": True}, warnings) is None
+    monkeypatch.setattr(gromacs, "sha256_file", _denied)
+    assert gromacs._publish_movie(output_dir, target, {"written": True}, warnings) is None
     assert warnings and "trajectory movie reference failed" in warnings[0]
-    assert gromacs._safe_movie_ref(tmp_path, target, {"written": False}, warnings) is None
-    assert len(warnings) == 1  # 未写出时根本不会调用 file_ref
+    assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
+    assert gromacs._publish_movie(output_dir, target, {"written": False}, warnings) is None
+    assert len(warnings) == 1  # 未写出时根本不会哈希/移动
 
-    # 文件在 _movie_file_ready 后、file_ref 校验前消失会抛出 SystemExit，也必须被吞下降级
-    target.unlink()
+    # 哈希成功后移动阶段抛 SystemExit 同样降级，且不留下半成品
     monkeypatch.undo()
+    monkeypatch.setattr(gromacs, "sha256_file", lambda path: "0" * 64)
+    monkeypatch.setattr(gromacs.os, "replace", lambda *args: (_ for _ in ()).throw(SystemExit("gone")))
     sys_warnings: list[str] = []
-    assert gromacs._safe_movie_ref(tmp_path, target, {"written": False}, sys_warnings) is None
-    monkeypatch.setattr(gromacs, "_movie_file_ready", lambda *args, **kwargs: True)
-    assert gromacs._safe_movie_ref(tmp_path, target, {"written": True}, sys_warnings) is None
+    assert gromacs._publish_movie(output_dir, target, {"written": True}, sys_warnings) is None
     assert sys_warnings and "trajectory movie reference failed" in sys_warnings[0]
+    assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
 
 
 def test_main_registers_md_result_when_movie_ref_raises_system_exit(tmp_path: Path, monkeypatch):
@@ -425,12 +431,12 @@ def test_main_registers_md_result_when_movie_ref_raises_system_exit(tmp_path: Pa
     def fake_analysis(work, target, **kwargs):
         Path(target).write_text("time,potential\n", encoding="utf-8")
 
-    real_file_ref = gromacs.file_ref
+    real_sha256_file = gromacs.sha256_file
 
-    def disappearing_file_ref(out_root, relative):
-        if relative.endswith("trajectory_movie.pdb"):
-            (out_root / relative).unlink(missing_ok=True)
-        return real_file_ref(out_root, relative)
+    def disappearing_sha256_file(path):
+        if Path(path).name == "trajectory_movie.pdb":
+            raise SystemExit("movie vanished")
+        return real_sha256_file(path)
 
     monkeypatch.setattr(gromacs, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(gromacs, "write_analysis_csv", fake_analysis)
@@ -440,7 +446,7 @@ def test_main_registers_md_result_when_movie_ref_raises_system_exit(tmp_path: Pa
         lambda *args, **kwargs: {"mode": "skipped", "engine": "skipped", "summary": {}},
     )
     monkeypatch.setattr(gromacs, "run_trajectory_movie_postprocess", fake_movie)
-    monkeypatch.setattr(gromacs, "file_ref", disappearing_file_ref)
+    monkeypatch.setattr(gromacs, "sha256_file", disappearing_sha256_file)
     monkeypatch.setattr(sys, "argv", [
         "gromacs_platform.py", "--task-id", "t1",
         "--input-dir", str(input_dir), "--output-dir", str(output_dir),
@@ -465,6 +471,7 @@ def test_main_registers_md_result_when_movie_ref_raises_system_exit(tmp_path: Pa
     assert metadata["movie_time_ps"] == []
     assert report["movie_frames"] == 0
     assert any("trajectory movie reference failed" in warning for warning in metadata["movie_warnings"])
+    assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
 
 
 def test_main_registers_md_result_when_movie_ref_hash_fails(tmp_path: Path, monkeypatch):
@@ -498,12 +505,12 @@ def test_main_registers_md_result_when_movie_ref_hash_fails(tmp_path: Path, monk
             "aligned": False, "conect_count": 0, "size_bytes": target.stat().st_size, "warnings": [],
         }
 
-    real_file_ref = gromacs.file_ref
+    real_sha256_file = gromacs.sha256_file
 
-    def flaky_file_ref(output_dir, relative):
-        if relative.endswith("trajectory_movie.pdb"):
+    def flaky_sha256_file(path):
+        if Path(path).name == "trajectory_movie.pdb":
             raise PermissionError("denied")
-        return real_file_ref(output_dir, relative)
+        return real_sha256_file(path)
 
     def fake_analysis(work, target, **kwargs):
         Path(target).write_text("time,potential\n", encoding="utf-8")
@@ -516,7 +523,7 @@ def test_main_registers_md_result_when_movie_ref_hash_fails(tmp_path: Path, monk
         lambda *args, **kwargs: {"mode": "skipped", "engine": "skipped", "summary": {}},
     )
     monkeypatch.setattr(gromacs, "run_trajectory_movie_postprocess", fake_movie)
-    monkeypatch.setattr(gromacs, "file_ref", flaky_file_ref)
+    monkeypatch.setattr(gromacs, "sha256_file", flaky_sha256_file)
     monkeypatch.setattr(sys, "argv", [
         "gromacs_platform.py", "--task-id", "t1",
         "--input-dir", str(input_dir), "--output-dir", str(output_dir),
@@ -544,3 +551,68 @@ def test_main_registers_md_result_when_movie_ref_hash_fails(tmp_path: Path, monk
     assert metadata["movie_time_ps"] == []
     assert report["movie_frames"] == 0
     assert any("trajectory movie reference failed" in warning for warning in metadata["movie_warnings"])
+    # 哈希失败的电影在 artifacts 外暂存，不能留下不可读文件阻塞 result.json 发布
+    assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
+
+
+def test_main_skips_movie_when_gro_probe_is_denied(tmp_path: Path, monkeypatch):
+    """``Path.is_file`` can raise ``PermissionError`` on an unreadable parent. The
+    probe must run inside the movie guard: a finished MD result still publishes
+    result.json, only without the optional movie."""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text(PDB, encoding="utf-8")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    params_path = tmp_path / "params.json"
+    params_path.write_text(json.dumps({
+        "input_files": {"protein_pdb": "protein.pdb"},
+        "params": {"nsteps": 2500, "dt": 0.002, "temperature": 300.0},
+    }), encoding="utf-8")
+
+    def fake_run_pipeline(protein, work, **kwargs):
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "topology.pdb").write_text(PDB, encoding="utf-8")
+        (work / "trajectory.dcd").write_bytes(b"dcd")
+        xtc = work / "md.xtc"
+        xtc.write_bytes(b"xtc")
+        gro = work / "md.gro"
+        gro.write_text("gro\n", encoding="utf-8")
+        return {"duration_ns": 5.0, "trajectory_xtc": str(xtc), "trajectory_gro": str(gro), "ligand": None}
+
+    def fake_analysis(work, target, **kwargs):
+        Path(target).write_text("time,potential\n", encoding="utf-8")
+
+    real_is_file = Path.is_file
+
+    def flaky_is_file(path):
+        if path.name == "md.gro":
+            raise PermissionError("denied")
+        return real_is_file(path)
+
+    monkeypatch.setattr(gromacs, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(gromacs, "write_analysis_csv", fake_analysis)
+    monkeypatch.setattr(gromacs, "write_rmsf_csv", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        gromacs, "run_interactions_postprocess",
+        lambda *args, **kwargs: {"mode": "skipped", "engine": "skipped", "summary": {}},
+    )
+    monkeypatch.setattr(Path, "is_file", flaky_is_file)
+    monkeypatch.setattr(sys, "argv", [
+        "gromacs_platform.py", "--task-id", "t1",
+        "--input-dir", str(input_dir), "--output-dir", str(output_dir),
+        "--params-json", str(params_path), "--work-dir", str(tmp_path / "work"),
+    ])
+
+    class _ExitCalled(Exception):
+        pass
+
+    monkeypatch.setattr(gromacs.os, "_exit", lambda code: (_ for _ in ()).throw(_ExitCalled(code)))
+    with pytest.raises(_ExitCalled):
+        gromacs.main()
+
+    assert (output_dir / "result.json").is_file()
+    metadata = json.loads((output_dir / "artifacts" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["movie_frames"] == 0
+    assert any("trajectory movie failed" in warning for warning in metadata["movie_warnings"])
+    assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
