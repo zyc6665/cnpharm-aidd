@@ -384,7 +384,10 @@ def test_publish_movie_returns_none_when_hashing_fails(tmp_path: Path, monkeypat
     assert gromacs._publish_movie(output_dir, target, {"written": True}, warnings) is None
     assert warnings and "trajectory movie reference failed" in warnings[0]
     assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
+    stale = output_dir / "artifacts" / "trajectory_movie.pdb"
+    stale.write_text("stale\n", encoding="utf-8")
     assert gromacs._publish_movie(output_dir, target, {"written": False}, warnings) is None
+    assert not stale.exists()  # 未写出时也必须清掉上一轮残留，避免无引用产物被上传
     assert len(warnings) == 1  # 未写出时根本不会哈希/移动
 
     # 哈希成功后移动阶段抛 SystemExit 同样降级，且不留下半成品
@@ -616,3 +619,66 @@ def test_main_skips_movie_when_gro_probe_is_denied(tmp_path: Path, monkeypatch):
     assert metadata["movie_frames"] == 0
     assert any("trajectory movie failed" in warning for warning in metadata["movie_warnings"])
     assert not (output_dir / "artifacts" / "trajectory_movie.pdb").exists()
+
+
+def test_main_removes_stale_movie_when_staging_dir_fails(tmp_path: Path, monkeypatch):
+    """A retry can find the previous attempt's movie in ``artifacts``. If the new
+    staging directory cannot be created, that stale file must still be removed:
+    the uploader enumerates every file before publishing ``result.json``."""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text(PDB, encoding="utf-8")
+    output_dir = tmp_path / "out"
+    (output_dir / "artifacts").mkdir(parents=True)
+    stale = output_dir / "artifacts" / "trajectory_movie.pdb"
+    stale.write_text("MODEL     1\nENDMDL\nEND\n", encoding="utf-8")
+    params_path = tmp_path / "params.json"
+    params_path.write_text(json.dumps({
+        "input_files": {"protein_pdb": "protein.pdb"},
+        "params": {"nsteps": 2500, "dt": 0.002, "temperature": 300.0},
+    }), encoding="utf-8")
+
+    def fake_run_pipeline(protein, work, **kwargs):
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "topology.pdb").write_text(PDB, encoding="utf-8")
+        (work / "trajectory.dcd").write_bytes(b"dcd")
+        xtc = work / "md.xtc"
+        xtc.write_bytes(b"xtc")
+        gro = work / "md.gro"
+        gro.write_text("gro\n", encoding="utf-8")
+        return {"duration_ns": 5.0, "trajectory_xtc": str(xtc), "trajectory_gro": str(gro), "ligand": None}
+
+    def fake_analysis(work, target, **kwargs):
+        Path(target).write_text("time,potential\n", encoding="utf-8")
+
+    def no_staging(*args, **kwargs):
+        raise OSError("staging denied")
+
+    monkeypatch.setattr(gromacs, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(gromacs, "write_analysis_csv", fake_analysis)
+    monkeypatch.setattr(gromacs, "write_rmsf_csv", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        gromacs, "run_interactions_postprocess",
+        lambda *args, **kwargs: {"mode": "skipped", "engine": "skipped", "summary": {}},
+    )
+    monkeypatch.setattr(gromacs.tempfile, "mkdtemp", no_staging)
+    monkeypatch.setattr(sys, "argv", [
+        "gromacs_platform.py", "--task-id", "t1",
+        "--input-dir", str(input_dir), "--output-dir", str(output_dir),
+        "--params-json", str(params_path), "--work-dir", str(tmp_path / "work"),
+    ])
+
+    class _ExitCalled(Exception):
+        pass
+
+    monkeypatch.setattr(gromacs.os, "_exit", lambda code: (_ for _ in ()).throw(_ExitCalled(code)))
+    with pytest.raises(_ExitCalled):
+        gromacs.main()
+
+    assert (output_dir / "result.json").is_file()
+    result = json.loads((output_dir / "result.json").read_text(encoding="utf-8"))
+    assert "trajectory_movie_pdb" not in result["artifacts"]["trajectory"]["files"]
+    assert not stale.exists()  # 暂存失败也必须清掉上一轮影片
+    metadata = json.loads((output_dir / "artifacts" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["movie_frames"] == 0
+    assert any("trajectory movie failed" in warning for warning in metadata["movie_warnings"])

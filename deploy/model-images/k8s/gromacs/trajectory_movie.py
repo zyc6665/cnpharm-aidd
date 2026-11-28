@@ -375,56 +375,171 @@ def _coords_valid(frames_angstrom) -> bool:
     return True
 
 
+# MDTraj 1.10.3's GRO reader rewrites names through pdbNames.xml. Both the
+# topology PDB and the GRO file come from the same TPR, so the template must be
+# normalized with the same tables before their names are compared.
 _GRO_ATOM_ALIASES = {
-    "H1": "H",
-    "1H": "H",
-    "HN": "H",
-    "OC1": "O",
-    "OT1": "O",
-    "O1": "O",
-    "OC2": "OXT",
-    "OT2": "OXT",
-    "O2": "OXT",
+    "HN": "H", "H1": "H", "1H": "H", "HN1": "H", "HT1": "H",
+    "2H": "H2", "HN2": "H2", "HT2": "H2",
+    "3H": "H3", "HN3": "H3", "HT3": "H3",
+    "O1": "O", "OT1": "O", "OCT1": "O", "OC1": "O",
+    "O2": "OXT", "OT2": "OXT", "OCT2": "OXT", "OC2": "OXT", "OT": "OXT",
 }
 
-# MDTraj 1.10.3 applies its terminal/ILE atom aliases through the residue alias table,
-# i.e. only to amino-acid residues. Include the common GROMACS/Amber protonation and
-# disulfide names so those residues keep the same alias behaviour.
+# Per-residue entries from the same table (generic protein aliases applied first).
+_GRO_RESIDUE_ATOM_ALIASES: dict[str, dict[str, str]] = {
+    "GLY": {"2HA": "HA2", "HA1": "HA3", "1HA": "HA3", "3HA": "HA3"},
+    "ALA": {"1HB": "HB1", "2HB": "HB2", "3HB": "HB3"},
+    "VAL": {"1HG1": "HG11", "2HG1": "HG12", "3HG1": "HG13",
+            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23"},
+    "LEU": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "1HD1": "HD11", "2HD1": "HD12", "3HD1": "HD13",
+            "1HD2": "HD21", "2HD2": "HD22", "3HD2": "HD23"},
+    "ILE": {"CD": "CD1", "2HG1": "HG12", "HG11": "HG13", "1HG1": "HG13", "3HG1": "HG13",
+            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23",
+            "1HD1": "HD11", "HD1": "HD11", "2HD1": "HD12", "HD2": "HD12",
+            "3HD1": "HD13", "HD3": "HD13"},
+    "SER": {"OG1": "OG", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "HG1": "HG", "HOG": "HG"},
+    "THR": {"OG": "OG1", "CG": "CG2", "HOG": "HG1", "HOG1": "HG1", "1HG": "HG1",
+            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23"},
+    "CYS": {"SG1": "SG", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "HG1": "HG", "HSG": "HG"},
+    "PRO": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3"},
+    "PHE": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
+    "TYR": {"HOH": "HH", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
+    "TRP": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3", "HNE": "HE1"},
+    "HIS": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "HND": "HD1", "HND1": "HD1", "HD": "HD2", "HE": "HE1",
+            "HNE": "HE2", "HNE2": "HE2"},
+    "ASP": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
+    "ASN": {"OD": "OD1", "ND": "ND2", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "1HD2": "HD21", "HND1": "HD21", "2HD2": "HD22", "HND2": "HD22"},
+    "GLU": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3"},
+    "GLN": {"OE": "OE1", "NE": "NE2", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "1HE2": "HE21", "HNE1": "HE21", "2HE2": "HE22", "HNE2": "HE22"},
+    "MET": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "1HE": "HE1", "2HE": "HE2", "3HE": "HE3"},
+    "LYS": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
+            "2HE": "HE2", "HE1": "HE3", "1HE": "HE3", "3HE": "HE3",
+            "1HZ": "HZ1", "HNZ1": "HZ1", "2HZ": "HZ2", "HNZ2": "HZ2",
+            "3HZ": "HZ3", "HNZ3": "HZ3"},
+    "ARG": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
+            "1HH1": "HH11", "HN11": "HH11", "2HH1": "HH12", "HN12": "HH12",
+            "1HH2": "HH21", "HN21": "HH21", "2HH2": "HH22", "HN22": "HH22"},
+    "ORN": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
+            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
+            "1HE": "HE1", "HNE1": "HE1", "2HE": "HE2", "HNE2": "HE2",
+            "3HE": "HE3", "HNE3": "HE3"},
+    "AIB": {"1HB1": "HB11", "2HB1": "HB12", "3HB1": "HB13",
+            "1HB2": "HB21", "2HB2": "HB22", "3HB2": "HB23"},
+    "PCA": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
+            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3"},
+    "FOR": {"CY": "C", "OY": "O", "HY": "H"},
+    "ACE": {"CY": "C", "CAY": "CH3", "CA": "CH3", "OY": "O",
+            "HY1": "H1", "HH31": "H1", "1HH3": "H1",
+            "HY2": "H2", "HH32": "H2", "2HH3": "H2",
+            "HY3": "H3", "HH33": "H3", "3HH3": "H3"},
+    "NME": {"NT": "N", "CH3": "C", "CT": "C", "CAT": "C", "CA": "C", "HNT": "H",
+            "1HA": "H1", "HH31": "H1", "1HH3": "H1",
+            "2HA": "H2", "HH32": "H2", "2HH3": "H2",
+            "3HA": "H3", "HH33": "H3", "3HH3": "H3"},
+    "NH2": {"H2": "HN2", "NT": "N"},
+}
+
+# MDTraj 1.10.3 only applies the atom-name replacements to residues present in
+# pdbNames.xml; arbitrary ligands keep their raw names. Mirror that boundary so a
+# swapped same-element ligand pair (``O``/``O1``) is still rejected.
 _PROTEIN_RESNAMES = frozenset({
     "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
     "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
-    "HID", "HIE", "HIP", "HSD", "HSE", "HSP", "CYX", "CYM", "ASH", "GLH", "LYN",
+    "HID", "HIE", "HIP", "HSD", "HSE", "HSP", "HSH", "HIH", "CYX", "CYM",
+    "ASH", "GLH", "LYN", "ORN", "AIB", "PCA", "FOR", "ACE", "NME", "NH2", "UNK",
 })
+
+# Residue renames performed by the same MDTraj table before the atom aliases apply.
+_GRO_RESIDUE_ALIASES = {
+    "CYX": "CYS",
+    "HID": "HIS", "HIE": "HIS", "HIP": "HIS", "HSD": "HIS", "HSE": "HIS",
+    "HSP": "HIS", "HSH": "HIS", "HIH": "HIS",
+    "NMA": "NME",
+}
+
+
+def _canonical_gro_resname(resname: str) -> str:
+    name = (resname or "").strip().upper()
+    return _GRO_RESIDUE_ALIASES.get(name, name)
 
 
 def _canonical_gro_atom_name(atom_name: str, resname: str = "") -> str:
-    """Normalize MDTraj 1.10.3 GRO/pdbNames.xml aliases for protein residues only.
-
-    H1/1H/HN->H, OC1/OT1/O1->O, OC2/OT2/O2->OXT and ILE CD->CD1 are amino-acid
-    aliases. Applying them to ligands would let a swapped same-element pair such as
-    ``O``/``O1`` pass validation and bind coordinates to the wrong atom name.
-    """
+    """Normalize MDTraj 1.10.3 GRO/pdbNames.xml aliases for protein residues only."""
     name = (atom_name or "").strip().upper()
-    res = (resname or "").strip().upper()
+    res = _canonical_gro_resname(resname)
     if res not in _PROTEIN_RESNAMES:
         return name
-    if res == "ILE" and name == "CD":
-        return "CD1"
-    return _GRO_ATOM_ALIASES.get(name, name)
+    name = _GRO_ATOM_ALIASES.get(name, name)
+    return _GRO_RESIDUE_ATOM_ALIASES.get(res, {}).get(name, name)
 
 
-def _template_residue_positions(templates: Sequence[AtomTemplate]) -> list[int]:
-    """0-based residue ordinal per template atom, keyed like ``parse_pdb_atom_templates``."""
+def _residue_number(value: Any) -> int | None:
+    text = "" if value is None else str(value).strip()
+    digits = text[1:] if text[:1] in ("+", "-") else text
+    return int(text) if digits.isdigit() else None
+
+
+def _template_residue_runs(
+    templates: Sequence[AtomTemplate],
+) -> tuple[list[int], list[tuple[str, str]]]:
+    """0-based residue ordinal per atom plus each run's raw (resname, resSeq).
+
+    MDTraj 1.10.3 starts a new GRO residue only when the consecutive raw
+    ``(resname, resSeq)`` pair changes; GRO records carry neither chain nor
+    insertion code, so those PDB-only distinctions must not split a run here.
+    """
     positions: list[int] = []
-    last_key: tuple[int, str, str, str] | None = None
-    position = -1
+    runs: list[tuple[str, str]] = []
+    last_key: tuple[str, str] | None = None
     for template in templates:
-        key = (template.segment_index, template.chain_id, template.resseq, template.icode)
+        key = ((template.resname or "").strip().upper(), (template.resseq or "").strip())
         if key != last_key:
-            position += 1
+            runs.append(key)
             last_key = key
-        positions.append(position)
-    return positions
+        positions.append(len(runs) - 1)
+    return positions, runs
+
+
+def _trajectory_residue_runs(
+    traj_atoms: Sequence[Any],
+) -> tuple[list[int], list[tuple[str, Any]]]:
+    """Ordinal per trajectory atom, using MDTraj's residue index when present and
+    the GRO reader's own run rule for injected topologies that lack one."""
+    positions: list[int] = []
+    runs: list[tuple[str, Any]] = []
+    last_key: tuple[Any, ...] | None = None
+    for atom in traj_atoms:
+        residue = getattr(atom, "residue", None)
+        index = getattr(residue, "index", None)
+        name = (getattr(residue, "name", "") or "").strip().upper()
+        seq = getattr(residue, "resSeq", None)
+        if index is not None:
+            key: tuple[Any, ...] = ("index", index)
+        else:
+            key = ("seq", name, "" if seq is None else str(seq).strip())
+        if key != last_key:
+            runs.append((name, seq))
+            last_key = key
+        positions.append(len(runs) - 1)
+    return positions, runs
 
 
 def _validate_trajectory_topology(
@@ -448,7 +563,31 @@ def _validate_trajectory_topology(
     if len(traj_atoms) != expected:
         return
     kept = {int(index) for index in keep_indices}
-    residue_positions = _template_residue_positions(templates)
+    if using_gro:
+        expected_positions, expected_runs = _template_residue_runs(templates)
+        traj_positions, traj_runs = _trajectory_residue_runs(traj_atoms)
+        for index in kept:
+            if traj_positions[index] != expected_positions[index]:
+                raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
+        kept_runs = sorted({expected_positions[index] for index in kept})
+        for run in kept_runs:
+            expected_name = _canonical_gro_resname(expected_runs[run][0])
+            traj_name = _canonical_gro_resname(traj_runs[run][0])
+            if expected_name and traj_name and expected_name != traj_name:
+                raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
+        # A whole-residue swap of the same residue type keeps every ordinal and
+        # atom name; the residue numbers are the only identity left. Compare them
+        # only while both files use the same numbering scheme -- a legal
+        # renumbering (42.. -> 1..) must keep working.
+        expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
+        traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
+        if (
+            all(number is not None for number in expected_numbers)
+            and all(number is not None for number in traj_numbers)
+            and sorted(expected_numbers) == sorted(traj_numbers)
+            and expected_numbers != traj_numbers
+        ):
+            raise ValueError("GRO trajectory residue numbering differs from topology PDB; refusing to render")
     for index, (template, traj_atom) in enumerate(zip(templates, traj_atoms)):
         if index not in kept:
             continue
@@ -456,29 +595,6 @@ def _validate_trajectory_topology(
             traj_raw = (getattr(traj_atom, "name", "") or "").strip().upper()
             residue = getattr(traj_atom, "residue", None)
             traj_res = (getattr(residue, "name", "") or "").strip().upper()
-            expected_res = (template.resname or "").strip().upper()
-            if traj_res and expected_res and traj_res != expected_res:
-                raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
-            residue_index = getattr(residue, "index", None)
-            if residue_index is not None:
-                try:
-                    residue_matches = int(residue_index) == residue_positions[index]
-                except (TypeError, ValueError):
-                    residue_matches = True
-                if not residue_matches:
-                    raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
-            else:
-                # MDTraj exposes ``residue.index``; injected/older topology objects may
-                # only carry the file's resSeq, which must still match the template.
-                traj_res_seq = getattr(residue, "resSeq", None)
-                expected_res_seq = (template.resseq or "").strip()
-                if traj_res_seq is not None and expected_res_seq.isdigit():
-                    try:
-                        residue_matches = int(traj_res_seq) == int(expected_res_seq)
-                    except (TypeError, ValueError):
-                        residue_matches = True
-                    if not residue_matches:
-                        raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
             if traj_raw:
                 if (
                     _canonical_gro_atom_name(traj_raw, traj_res or template.resname)

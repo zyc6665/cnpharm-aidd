@@ -601,6 +601,32 @@ def _first_existing_file(candidates: Sequence[Path]) -> Path | None:
     return None
 
 
+def _remove_movie_path(path: Path) -> bool:
+    """Best-effort removal, including files left unreadable by an earlier attempt."""
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except OSError:
+        try:
+            os.chmod(path, 0o600)
+            path.unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False
+
+
+def _discard_movie_target(output_dir: Path, warnings: list[str]) -> None:
+    """Drop a movie left by an earlier attempt before this run decides anything.
+
+    The uploader publishes ``result.json`` last and treats every file under
+    ``output_dir`` as part of the result: a stale movie is either uploaded without
+    a reference or, when unreadable, blocks the whole MD result.
+    """
+    target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
+    if not _remove_movie_path(target):
+        warnings.append(f"stale trajectory movie could not be removed: {target}")
+
+
 def _publish_movie(
     output_dir: Path, staging_target: Path, movie_summary: dict[str, Any], warnings: list[str],
 ) -> dict[str, str] | None:
@@ -608,21 +634,22 @@ def _publish_movie(
 
     The movie is exported outside ``artifacts`` so a hashing or permission failure
     can never leave an unreadable file behind for the output uploader, which
-    publishes ``result.json`` last and would otherwise fail on that file.
+    publishes ``result.json`` last and would otherwise fail on that file.  Any
+    failure also clears the final path so a movie from an earlier attempt cannot
+    survive without a matching reference.
     """
-    if not _movie_file_ready(staging_target, movie_summary):
-        return None
     target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
+    if not _movie_file_ready(staging_target, movie_summary):
+        _remove_movie_path(target)
+        return None
     try:
         digest = sha256_file(staging_target)
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(staging_target, target)
     except (Exception, SystemExit) as exc:  # noqa: BLE001 - a broken/missing movie ref must not lose the MD result
         warnings.append(f"trajectory movie reference failed: {exc}")
-        try:
-            target.unlink(missing_ok=True)
-        except OSError:
-            pass
+        if not _remove_movie_path(target):
+            warnings.append(f"failed trajectory movie could not be removed: {target}")
         return None
     return {"path": "artifacts/trajectory_movie.pdb", "sha256": digest}
 
@@ -966,6 +993,10 @@ def main() -> int:
     movie_warnings: list[str] = []
     movie_summary = _empty_movie_summary(movie_warnings)
     movie_ref: dict[str, str] | None = None
+    # A retry can find the previous attempt's movie under artifacts. Drop it before
+    # any early exit (e.g. a failing mkdtemp) so an unreferenced or unreadable file
+    # can never block the uploader from publishing this run's result.json.
+    _discard_movie_target(output_dir, movie_warnings)
     # Export outside output_dir: a movie that cannot be hashed/moved must leave
     # nothing behind that the output uploader would try (and fail) to upload.
     try:

@@ -1398,10 +1398,13 @@ def test_gro_topology_allows_halogen_and_protein_aliases_but_rejects_swapped_sam
 
 
 class _NamedGroAtom:
-    def __init__(self, name: str, symbol: str, resname: str = "", resindex: int | None = None):
+    def __init__(
+        self, name: str, symbol: str, resname: str = "",
+        resindex: int | None = None, resseq: int | None = None,
+    ):
         self.name = name
         self.element = types.SimpleNamespace(symbol=symbol)
-        self.residue = types.SimpleNamespace(name=resname, index=resindex)
+        self.residue = types.SimpleNamespace(name=resname, index=resindex, resSeq=resseq)
 
 
 def test_gro_topology_accepts_digit_prefixed_terminal_hydrogen(tmp_path: Path):
@@ -1558,6 +1561,146 @@ def test_gro_topology_rejects_same_resname_residue_swap(tmp_path: Path):
         types.SimpleNamespace(atoms=swapped_atoms),
     )
     with pytest.raises(ValueError, match="GRO trajectory residue order"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: swapped_traj,
+        )
+
+
+def _two_frame_trajectory(atoms: list[_NamedGroAtom]):
+    return _TopologyTrajectory(
+        [[[0.1 * i, 0.0, 0.0] for i in range(len(atoms))],
+         [[0.1 * i, 0.1, 0.0] for i in range(len(atoms))]],
+        [0.0, 10.0],
+        types.SimpleNamespace(atoms=atoms),
+    )
+
+
+def test_gro_topology_accepts_mdtraj_residue_and_atom_aliases(tmp_path: Path):
+    """MDTraj rewrites HID/CYX residue names and their atom aliases while reading
+    GRO, while topology.pdb keeps the GROMACS names. Both sides must be normalized
+    with the same pdbNames.xml tables instead of being falsely rejected."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "HD", "HID", "A", 1, element="H"),
+                _pdb_line(2, "SG1", "CYX", "A", 2, element="S"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("HD2", "H", "HIS", resindex=0, resseq=1),
+        _NamedGroAtom("SG", "S", "CYS", resindex=1, resseq=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_chain_boundary_merged_by_gro(tmp_path: Path):
+    """GRO records carry no chain/insertion code: two adjacent residues with the
+    same raw name and number are one MDTraj residue. The template ordinal must
+    follow the GRO reader's own rule instead of splitting on the PDB chain."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CA", "ALA", "B", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_legal_residue_renumbering(tmp_path: Path):
+    """A GRO file may number residues 1..N while topology.pdb keeps the original
+    numbering; that is not an atom-order mismatch and must not be rejected."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 42, element="C"),
+                _pdb_line(2, "CB", "ALA", "A", 43, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_rejects_numbered_same_resname_residue_swap(tmp_path: Path):
+    """MDTraj re-numbers residues by file order, so a swapped ALA/ALA pair keeps
+    ordinals 0/1 and passes the positional check; only the GRO residue numbers
+    still prove the swap."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CA", "ALA", "A", 2, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=1),
+    ]
+    swapped_traj = _two_frame_trajectory(swapped_atoms)
+    with pytest.raises(ValueError, match="residue numbering"):
         movie.export_desolvated_pdb_movie(
             pdb, xtc, tmp_path / "bad.pdb",
             topology_gro=gro,
