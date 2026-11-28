@@ -39,7 +39,7 @@
       <a-alert v-if="analysisLoadErrors.length" type="warning" show-icon class="md-result__notice" :message="t('md.result.analysisLoadFailed', { roles: analysisLoadErrors.join(', ') })" />
       <p v-if="analysisRows.length > 600 || rmsfRows.length > 600" class="md-result__sample-hint">{{ t('md.result.sampledDisplay') }}</p>
       <a-alert
-        v-if="!topologyFile && !analysisFile && !isRunning"
+        v-if="!topologyFile && !movieFile && !analysisFile && !isRunning"
         type="info" show-icon class="md-result__notice" :message="t('md.result.noTrajectoryArtifact')"
       />
       <a-row :gutter="16" class="md-result__grid">
@@ -60,20 +60,33 @@
         <a-col :xs="24" :lg="12"><a-card :bordered="false" :title="t('md.result.outputs')" size="small">
           <a-space direction="vertical" fill>
             <a-button block :disabled="!trajectoryFile" data-testid="md-download-trajectory" @click="downloadRole('trajectory_dcd')">{{ t('md.result.downloadTrajectory') }}</a-button>
+            <a-button block :disabled="!movieFile" data-testid="md-download-movie" @click="downloadRole('trajectory_movie_pdb')">{{ t('md.result.downloadMovie') }}</a-button>
             <a-button block :disabled="!analysisFile" data-testid="md-download-analysis" @click="downloadRole('analysis_csv')">{{ t('md.result.downloadAnalysis') }}</a-button>
             <a-button block :disabled="!topologyFile" data-testid="md-download-topology" @click="downloadRole('topology_pdb')">{{ t('md.result.downloadTopology') }}</a-button>
             <a-button block :disabled="!metadataFile" @click="downloadRole('metadata_json')">{{ t('md.result.downloadMetadata') }}</a-button>
             <a-button v-if="contactsFile" block data-testid="md-download-contacts" @click="downloadRole('contacts_csv')">{{ t('md.result.downloadContacts') }}</a-button>
             <a-button v-if="interactionsFile" block data-testid="md-download-interactions" @click="downloadRole('interactions_json')">{{ t('md.result.downloadInteractions') }}</a-button>
           </a-space>
-          <a-alert type="warning" show-icon class="md-result__notice" :message="t('md.result.trajectoryNotice')" />
+          <a-alert
+            :type="movieFile ? 'info' : 'warning'"
+            show-icon
+            class="md-result__notice"
+            :message="movieFile ? t('md.result.movieNotice') : t('md.result.trajectoryNotice')"
+          />
         </a-card></a-col>
         <a-col :xs="24" :lg="12"><a-card :bordered="false" :title="t('md.result.structurePreview')" size="small">
           <div class="md-result__viewer">
-            <structure-artifact-preview v-if="artifact && topologyFile" :artifact="artifact" :preferred-file-roles="['topology_pdb']" />
+            <structure-artifact-preview
+              v-if="artifact && (movieFile || topologyFile)"
+              :artifact="artifact"
+              :preferred-file-roles="['trajectory_movie_pdb', 'topology_pdb']"
+              :frame-times-ps="movieFrameTimes"
+              :can-export-movie="Boolean(movieFile)"
+              @export-movie="handleExportMovie"
+            />
             <a-empty v-else :description="t('md.result.noTopology')" />
           </div>
-          <p class="md-result__viewer-note">{{ t('md.result.staticPreviewNote') }}</p>
+          <p class="md-result__viewer-note">{{ movieFile ? t('md.result.moviePreviewNote') : t('md.result.staticPreviewNote') }}</p>
         </a-card></a-col>
       </a-row>
 
@@ -183,6 +196,10 @@
   const metadataFile = computed(() => roleFile('metadata_json'))
   const topologyFile = computed(() => roleFile('topology_pdb'))
   const trajectoryFile = computed(() => roleFile('trajectory_dcd'))
+  const movieFile = computed(() => roleFile('trajectory_movie_pdb'))
+  const movieFrameTimes = computed<number[] | null>(() =>
+    Array.isArray(metadata.value.movie_time_ps) ? metadata.value.movie_time_ps : null
+  )
 
   const contactColumns = computed(() => [
     {
@@ -342,6 +359,9 @@
     try { await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined }) }
     catch (cause) { message.error(cause instanceof Error ? cause.message : String(cause)) }
   }
+  async function handleExportMovie(): Promise<void> {
+    await downloadRole('trajectory_movie_pdb')
+  }
   watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactIdLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
   onMounted(() => { disposed = false })
   onBeforeUnmount(() => { disposed = true; requestSequence += 1; stopStream() })
@@ -363,7 +383,7 @@
   .md-result__progress-text { margin: @spacing-xs 0 0; color: @text-color-light-secondary; font-size: @font-size-sm; }
   .md-result__grid { margin-bottom: @spacing-sm; }
   .md-result__notice { margin-top: @spacing-md; }
-  .md-result__viewer { height: 360px; border: 1px solid @border-color; border-radius: @border-radius-md; overflow: hidden; }
+  .md-result__viewer { height: 540px; border: 1px solid @border-color; border-radius: @border-radius-md; overflow: hidden; }
   .md-result__viewer-note { margin: @spacing-xs 0 0; color: @text-color-light-secondary; font-size: @font-size-xs; }
   .md-result__interactions { margin-top: @spacing-md; border-radius: @border-radius-lg; }
   .md-result__interaction-tags { display: flex; flex-wrap: wrap; gap: @spacing-xs; margin-bottom: @spacing-sm; }

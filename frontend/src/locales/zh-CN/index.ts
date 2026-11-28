@@ -2962,6 +2962,9 @@ export default {
       },
       trajectoryNotice: '浏览器内暂不支持在线播放 DCD 轨迹（MoleculeViewer 不支持轨迹/双文件），请下载轨迹后在本地查看。',
       staticPreviewNote: '此处为拓扑 PDB 的静态结构预览；轨迹播放请下载 DCD。',
+      downloadMovie: '下载多帧 PDB (Movie)',
+      movieNotice: '已生成多帧 PDB-movie，可在下方三维视图中直接播放轨迹；也可下载 trajectory_movie.pdb 在本地查看。',
+      moviePreviewNote: '下方为多帧 PDB-movie 在线播放；拖动播放条或点击播放按钮查看轨迹变化。',
       structurePreview: '结构预览',
       noTopology: '暂无拓扑结构',
       chartEmpty: '暂无数据',
@@ -3298,6 +3301,15 @@ export default {
     visualizationNearbyEmpty: '配体 5 Å 范围内未检出受体残基',
     visualizationUnsupported: '当前输出文件暂不支持在线预览',
     visualizationUnsupportedDesc: '目前已接入 PDB / mmCIF / PDBQT / SDF / MOL2 在线可视化，其它格式仍可直接下载。',
+    visualizationTrajectoryControls: '轨迹播放控制',
+    visualizationTrajectoryPlay: '播放',
+    visualizationTrajectoryPause: '暂停',
+    visualizationTrajectoryPrev: '上一帧',
+    visualizationTrajectoryNext: '下一帧',
+    visualizationTrajectorySlider: '轨迹帧进度',
+    visualizationTrajectorySpeed: '播放速度',
+    visualizationTrajectoryLoop: '循环',
+    visualizationTrajectoryExport: '导出电影',
     filePreview: '结果文件',
     filePreviewFile: '文件',
     filePreviewLoading: '正在加载文件内容...',
@@ -3888,7 +3900,8 @@ export default {
     fileName: '文件名',
     fileSize: '大小',
     mdTrajectory: {
-      notice: '轨迹文件（如 DCD）仅提供下载；此处展示拓扑结构的静态预览，RMSD/RMSF 曲线请到任务 MD 结果页查看。'
+      notice: '轨迹文件（如 DCD）仅提供下载；此处展示拓扑结构的静态预览，RMSD/RMSF 曲线请到任务 MD 结果页查看。',
+      movieNotice: '已生成多帧 PDB-movie，可在下方三维视图中直接播放轨迹；也可导出/下载 trajectory_movie.pdb 在本地查看。'
     },
     compoundSet: {
       notice: '化合物集合产物：可直接下载成员文件，或前往候选物页面管理。',

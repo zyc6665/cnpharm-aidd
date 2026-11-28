@@ -191,6 +191,92 @@
           {{ t('tasks.visualizationResetView') }}
         </button>
       </div>
+
+      <div
+        v-if="showTrajectoryBar"
+        class="viewer-traj-bar"
+        role="group"
+        :aria-label="t('tasks.visualizationTrajectoryControls')"
+        data-testid="viewer-traj-bar"
+      >
+        <button
+          class="viewer-traj-btn viewer-traj-btn--play"
+          type="button"
+          data-testid="viewer-traj-play"
+          :aria-pressed="isPlaying"
+          :aria-label="isPlaying ? t('tasks.visualizationTrajectoryPause') : t('tasks.visualizationTrajectoryPlay')"
+          :disabled="loading || Boolean(error)"
+          @click="togglePlayback"
+        >
+          {{ isPlaying ? t('tasks.visualizationTrajectoryPause') : t('tasks.visualizationTrajectoryPlay') }}
+        </button>
+        <button
+          class="viewer-traj-btn"
+          type="button"
+          data-testid="viewer-traj-prev"
+          :aria-label="t('tasks.visualizationTrajectoryPrev')"
+          :title="t('tasks.visualizationTrajectoryPrev')"
+          :disabled="loading || Boolean(error)"
+          @click="goPreviousFrame"
+        >
+          ‹
+        </button>
+        <input
+          ref="trajSliderRef"
+          class="viewer-traj-slider"
+          type="range"
+          data-testid="viewer-traj-slider"
+          :min="0"
+          :max="Math.max(0, trajectoryFrameCount - 1)"
+          step="1"
+          :value="currentFrameIndex"
+          :disabled="loading || Boolean(error)"
+          :aria-label="t('tasks.visualizationTrajectorySlider')"
+          @input="handleSliderInput"
+        />
+        <button
+          class="viewer-traj-btn"
+          type="button"
+          data-testid="viewer-traj-next"
+          :aria-label="t('tasks.visualizationTrajectoryNext')"
+          :title="t('tasks.visualizationTrajectoryNext')"
+          :disabled="loading || Boolean(error)"
+          @click="goNextFrame"
+        >
+          ›
+        </button>
+        <span class="viewer-traj-counter" data-testid="viewer-traj-counter">{{ trajectoryFrameLabel }}</span>
+        <select
+          class="viewer-traj-select"
+          data-testid="viewer-traj-speed"
+          :value="playbackSpeed"
+          :disabled="loading || Boolean(error)"
+          :aria-label="t('tasks.visualizationTrajectorySpeed')"
+          @change="handleSpeedChange"
+        >
+          <option v-for="speed in playbackSpeeds" :key="speed" :value="speed">{{ speed }}x</option>
+        </select>
+        <button
+          class="viewer-traj-btn"
+          :class="{ 'is-active': loopPlayback }"
+          type="button"
+          data-testid="viewer-traj-loop"
+          :aria-pressed="loopPlayback"
+          :title="t('tasks.visualizationTrajectoryLoop')"
+          @click="toggleLoop"
+        >
+          {{ t('tasks.visualizationTrajectoryLoop') }}
+        </button>
+        <button
+          v-if="canExportMovie"
+          class="viewer-traj-btn viewer-traj-btn--export"
+          type="button"
+          data-testid="viewer-traj-export"
+          @click="emit('export-movie')"
+        >
+          {{ t('tasks.visualizationTrajectoryExport') }}
+        </button>
+      </div>
     </div>
 
     <SequenceSelectorBar
@@ -234,8 +320,11 @@ import {
 import SequenceSelectorBar from './SequenceSelectorBar.vue'
 
 import {
+  clampFrameIndex,
+  computeFrameIntervalMs,
   createNormalizedSdfObjectUrl,
   extractPolymerSequenceFromStructure,
+  formatTrajectoryFrameLabel,
   groupSelectedResiduesByChain,
   residueSelectionKey,
   resolveMolstarColorThemeOptions,
@@ -243,12 +332,15 @@ import {
   resolveMolstarHierarchyPreset,
   resolveMolstarRepresentationOptions,
   resolveMolstarViewerPreset,
+  stepFrameIndex,
   toggleSequenceResidueSelection,
+  TRAJECTORY_PLAYBACK_SPEEDS,
   type MolstarBackground,
   type MolstarColorTheme,
   type MolstarRepresentation,
   type MolstarViewerMode,
   type SequenceChain,
+  type TrajectoryPlaybackSpeed,
   type VisualizationScene,
 } from '@/domain/tasks'
 import type { PocketVoxelGrid } from '@/domain/tasks/pocket-voxel'
@@ -264,14 +356,27 @@ const props = withDefaults(defineProps<{
   voxelGrid?: PocketVoxelGrid | null
   focusResidue?: { chain?: string; authSeqId: number; insertionCode?: string } | null
   enableNearbyResidues?: boolean
+  /** 是否启用底部多帧轨迹播放条（默认开，仅在非 compact 且帧数 > 1 时渲染）。 */
+  enableTrajectoryControls?: boolean
+  /** 每一 movie 帧对应的物理时间（ps），用于播放条的帧标签。 */
+  frameTimesPs?: number[] | null
+  /** 是否允许导出/下载 movie（由上层根据是否存在 `trajectory_movie_pdb` 决定）。 */
+  canExportMovie?: boolean
 }>(), {
   variant: 'full',
   allowNativeFullscreen: true,
   voxelGrid: null,
   focusResidue: null,
   enableNearbyResidues: false,
+  enableTrajectoryControls: true,
+  frameTimesPs: null,
+  canExportMovie: false,
 })
-const emit = defineEmits<{ 'residue-focus-result': [status: 'focused' | 'not-found' | 'ambiguous'] }>()
+const emit = defineEmits<{
+  'residue-focus-result': [status: 'focused' | 'not-found' | 'ambiguous']
+  'frame-change': [frameIndex: number]
+  'export-movie': []
+}>()
 
 const { t } = useI18n()
 const isCompact = computed(() => props.variant === 'compact')
@@ -286,6 +391,8 @@ const representationOptions = computed(() => resolveMolstarRepresentationOptions
 const colorThemeOptions = computed(() => resolveMolstarColorThemeOptions(effectiveMode.value))
 
 const containerRef = ref<HTMLElement | null>(null)
+// 用户拖走的原生 range 值不会被 Vue 在 `currentFrameIndex` 未变时回写，失败路径需手动回弹。
+const trajSliderRef = ref<HTMLInputElement | null>(null)
 const loading = ref(true)
 const error = ref('')
 
@@ -312,10 +419,64 @@ const availableLayers = computed(() => ({
   voxels: Boolean(props.voxelGrid?.boxes.length),
 }))
 
+// —— 多帧轨迹播放状态 ——
+const playbackSpeeds = TRAJECTORY_PLAYBACK_SPEEDS
+const trajectoryFrameCount = ref(1)
+const currentFrameIndex = ref(0)
+const isPlaying = ref(false)
+const playbackSpeed = ref<TrajectoryPlaybackSpeed>(1)
+const loopPlayback = ref(true)
+const showTrajectoryBar = computed(
+  () => !isCompact.value && props.enableTrajectoryControls && trajectoryFrameCount.value > 1,
+)
+const trajectoryFrameLabel = computed(() =>
+  formatTrajectoryFrameLabel(currentFrameIndex.value, trajectoryFrameCount.value, props.frameTimesPs ?? undefined),
+)
+// 单飞防堆积：一次状态树 remap 在途时，只记录最新请求，完成后再追一次。
+let frameUpdateInFlight = false
+let pendingFrameRequest: FrameRequest | null = null
+// 所有可播放（`frameCount > 1` 且拿到 `ModelFromTrajectory.model.ref`）的条目。
+let activeTrajectoryModels: TrajectoryModelTarget[] = []
+let playbackTimer: ReturnType<typeof setInterval> | null = null
+// 播放代次：暂停/调速/关循环/手动换帧/场景切换/卸载都递增，用于丢弃排队中的旧自动帧。
+let playbackToken = 0
+// 场景代次：卸载或切换场景时递增，延迟 resolve 的异步更新不得落到已销毁/已替换的 viewer 上。
+let sceneEpoch = 0
+
+/** 把非法/非正帧数统一收敛为 1（单帧）。 */
+function normalizeFrameCount(value: unknown): number {
+  const count = Math.floor(Number(value))
+  return Number.isFinite(count) && count > 0 ? count : 1
+}
+
+type FrameRequestSource = 'auto' | 'manual'
+
+interface FrameRequest {
+  frameIndex: number
+  source: FrameRequestSource
+  playbackToken: number
+  sceneEpoch: number
+}
+
+interface TrajectoryModelTarget {
+  modelRef: string
+  /** 由该 model 派生出的 structure 节点 ref，用于检查换帧后是否进入 error cell。 */
+  structureRefKey: string
+  frameCount: number
+}
+
 interface LoadedEntryRecord {
   role: VisualizationScene['entries'][number]['role']
   structureRefKey: string
   isPrimaryTarget: boolean
+  /** `ModelFromTrajectory` 节点 ref（多帧原地 remap 用）；单帧/无轨迹时为 undefined。 */
+  modelRef?: string
+  /** 该结构实际帧数（从 trajectory.obj.data.frameCount 读取，容错缺省 1）。 */
+  frameCount: number
+  /** 上层是否显式标记该条目为多帧 movie（严格 `=== true`）。 */
+  preferComplexRepresentation: boolean
+  /** 主目标在 cartoon 表示下是否应使用 `polymer-and-ligand`（保留配体/小分子）。 */
+  preferComplexRepresentationForCartoon: boolean
 }
 
 let viewer: MolstarViewer | null = null
@@ -453,6 +614,7 @@ async function applyRepresentationToStructureRef(
   role: VisualizationScene['entries'][number]['role'],
   rep: MolstarRepresentation,
   themeChoice: MolstarColorTheme,
+  preferComplexRepresentation = false,
 ) {
   const themeParams = resolveColorPresetParams(role, themeChoice) as any
   if (rep === 'spacefill') {
@@ -475,7 +637,12 @@ async function applyRepresentationToStructureRef(
     return
   }
 
-  const presetKey = resolveMolstarHierarchyPreset(rep)
+  // cartoon + 上层显式要求保留配体/小分子时用 polymer-and-ligand，
+  // 避免 polymer-cartoon 只画聚合物、把配体藏掉。
+  const presetKey =
+    rep === 'cartoon' && preferComplexRepresentation
+      ? ('polymer-and-ligand' as const)
+      : resolveMolstarHierarchyPreset(rep)
   const provider = PresetStructureRepresentations[presetKey]
   await currentViewer.plugin.managers.structure.component.applyPreset(
     [structureRef],
@@ -498,10 +665,12 @@ async function loadEntryStructure(
     { state: { isGhost: true } },
   )
   const trajectory = await currentViewer.plugin.builders.structure.parseTrajectory(data, entry.format)
+  // 容错读取帧数：真实 trajectory 在 `.obj.data.frameCount`，mock/异常/非有限值统一退化为 1（单帧）。
+  const frameCount = normalizeFrameCount((trajectory as any)?.obj?.data?.frameCount)
 
   if (entry.role === 'pocket') {
     // 口袋残基也用卡通渲染：球棍（atomic-detail）在每个原子上画球，口袋动辄上百个残基，
-    // 叠在卡通蛋白上会糊成一团、把完整蛋白整个盖住。卡通 + 单色反而更容易看出口袋位置。
+    // 叠在卡通蛋白上会糊成一团、把整个蛋白整个盖住。卡通 + 单色反而更容易看出口袋位置。
     const preset = await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
       representationPreset: 'polymer-cartoon',
       representationPresetParams: {
@@ -509,7 +678,17 @@ async function loadEntryStructure(
       },
     })
     const ref = preset?.structure?.ref
-    return ref ? { role: entry.role, structureRefKey: ref, isPrimaryTarget: false } : null
+    return ref
+      ? {
+          role: entry.role,
+          structureRefKey: ref,
+          isPrimaryTarget: false,
+          modelRef: preset?.model?.ref,
+          frameCount,
+          preferComplexRepresentation: false,
+          preferComplexRepresentationForCartoon: false,
+        }
+      : null
   }
 
   const primaryTarget = isPrimaryTargetEntry(entry.role)
@@ -518,7 +697,15 @@ async function loadEntryStructure(
     : entry.role === 'ligand'
       ? 'ball-and-stick'
       : viewerPreset.value.primaryRepresentation
-  const presetName = resolveMolstarHierarchyPreset(initialRep)
+  // 仅当上层显式标记 `preferComplexRepresentation`（如去溶剂的 trajectory_movie_pdb）时，
+  // 主目标卡通才用 polymer-and-ligand 保住配体/小分子；多帧但未标记的既有 protein/docking
+  // 结构（含多帧含水 PDB）保持原 polymer-cartoon 外观，不因帧数改变渲染。
+  const preferComplexRepresentation = entry.preferComplexRepresentation === true
+  const preferComplexRepresentationForCartoon = primaryTarget && preferComplexRepresentation
+  const presetName =
+    initialRep === 'cartoon' && preferComplexRepresentationForCartoon
+      ? ('polymer-and-ligand' as const)
+      : resolveMolstarHierarchyPreset(initialRep)
   const themeParams = primaryTarget
     ? resolveColorPresetParams(entry.role, activeColorTheme.value)
     : undefined
@@ -540,12 +727,21 @@ async function loadEntryStructure(
         entry.role,
         'spacefill',
         activeColorTheme.value,
+        preferComplexRepresentationForCartoon,
       )
     }
   }
 
   return structureRefKey
-    ? { role: entry.role, structureRefKey, isPrimaryTarget: primaryTarget }
+    ? {
+        role: entry.role,
+        structureRefKey,
+        isPrimaryTarget: primaryTarget,
+        modelRef: preset?.model?.ref,
+        frameCount,
+        preferComplexRepresentation,
+        preferComplexRepresentationForCartoon,
+      }
     : null
 }
 
@@ -783,6 +979,7 @@ async function handleRepresentationChange() {
       record.role,
       activeRepresentation.value,
       activeColorTheme.value,
+      record.preferComplexRepresentationForCartoon,
     )
   }
 
@@ -1112,10 +1309,245 @@ function resetCamera() {
   viewer.plugin.managers.camera.reset(undefined, 300)
 }
 
+// —— 多帧轨迹播放控制 ——
+
+/** 递增播放代次：使所有已排队的自动帧立即失效（暂停/调速/关循环/手动换帧/场景切换/卸载）。 */
+function invalidatePlayback() {
+  playbackToken += 1
+  if (pendingFrameRequest?.source === 'auto') {
+    pendingFrameRequest = null
+  }
+}
+
+function stopPlayback() {
+  invalidatePlayback()
+  if (playbackTimer !== null) {
+    clearInterval(playbackTimer)
+    playbackTimer = null
+  }
+  isPlaying.value = false
+}
+
+/** 请求是否已过期：场景/卸载变化一律丢弃；自动帧还要额外确认仍在播放且代次未变。 */
+function isFrameRequestStale(request: FrameRequest): boolean {
+  if (disposed || request.sceneEpoch !== sceneEpoch) return true
+  if (!viewer || !activeTrajectoryModels.length) return true
+  if (request.source === 'auto' && (!isPlaying.value || request.playbackToken !== playbackToken)) return true
+  return false
+}
+
+/** 把原生 range 控件的值回弹到当前已提交帧（Vue 不会在帧号未变时改写被用户拖走的 DOM 值）。 */
+function syncSliderToCommittedFrame() {
+  const slider = trajSliderRef.value
+  if (slider) slider.value = String(currentFrameIndex.value)
+}
+
+/** 请求是否已不应再提交到 Mol* 状态树（场景/卸载/自动播放代次）。 */
+function isAutoFrameRequestStale(request: FrameRequest): boolean {
+  return request.source === 'auto' && (!isPlaying.value || request.playbackToken !== playbackToken)
+}
+
+/**
+ * `PluginCommands.State.Update` 在部分错误下仍会 resolve，但目标 cell 会进入 `error`。
+ * 只要被更新的 model/structure 节点任一处于 error，就视为本次换帧失败。
+ */
+function hasFailedUpdateCells(currentViewer: MolstarViewer, refs: string[]): boolean {
+  const cells = currentViewer.plugin.state.data.cells as unknown as
+    | ReadonlyMap<string, { status?: string }>
+    | undefined
+  if (!cells || typeof cells.get !== 'function') return false
+  return refs.some(ref => cells.get(ref)?.status === 'error')
+}
+
+/** 把所有可播放轨迹写回指定帧号（每条按自身帧数夹紧），用于过期自动帧的状态树回滚。 */
+async function writeTrajectoryFrameIndex(currentViewer: MolstarViewer, frameIndex: number): Promise<void> {
+  const state = currentViewer.plugin.state.data
+  const update = state.build()
+  for (const trajectoryModel of activeTrajectoryModels) {
+    update.to(trajectoryModel.modelRef).update({
+      modelIndex: Math.min(Math.max(0, frameIndex), trajectoryModel.frameCount - 1),
+    })
+  }
+  await PluginCommands.State.Update(currentViewer.plugin, { state, tree: update, options: { doNotLogTiming: true } })
+}
+
+function hasActivePendingFrameRequest(): boolean {
+  if (pendingFrameRequest && isFrameRequestStale(pendingFrameRequest)) {
+    pendingFrameRequest = null
+  }
+  return pendingFrameRequest !== null
+}
+
+/**
+ * 原地 remap 到指定帧：修改每条可播放 `ModelFromTrajectory` 节点的 `modelIndex`，
+ * 不重建插件、不复位相机，保留图层显隐/配色/序列高亮与焦点残基。
+ * 单飞 + pending 合并高频拖动；**只有状态树更新真正 resolve 且目标 cell 未报错后才提交帧号与事件**，
+ * 失败时将状态树回写到最后一次成功帧（确保 Mol* 参数复位、重选同一帧可再次触发转换）。
+ */
+async function applyFrameIndex(request: FrameRequest) {
+  if (isFrameRequestStale(request)) return
+  const frameCount = trajectoryFrameCount.value
+  if (frameCount <= 1) return
+  const target = clampFrameIndex(request.frameIndex, frameCount)
+  if (target === currentFrameIndex.value && !frameUpdateInFlight) return
+  const normalizedRequest: FrameRequest = { ...request, frameIndex: target }
+  if (frameUpdateInFlight) {
+    pendingFrameRequest = normalizedRequest
+    return
+  }
+  frameUpdateInFlight = true
+  const epoch = sceneEpoch
+  try {
+    const applied = await enqueueMutation(async () => {
+      if (disposed || epoch !== sceneEpoch || !viewer || !activeTrajectoryModels.length) return false
+      // 已经进入队列但尚未提交的自动帧，若期间已暂停/调速/关循环，直接丢弃。
+      if (isAutoFrameRequestStale(request)) return false
+      const currentViewer = viewer
+      const updatedRefs: string[] = []
+      const state = currentViewer.plugin.state.data
+      const update = state.build()
+      for (const trajectoryModel of activeTrajectoryModels) {
+        update.to(trajectoryModel.modelRef).update({
+          modelIndex: Math.min(target, trajectoryModel.frameCount - 1),
+        })
+        updatedRefs.push(trajectoryModel.modelRef)
+        if (trajectoryModel.structureRefKey) updatedRefs.push(trajectoryModel.structureRefKey)
+      }
+      await PluginCommands.State.Update(currentViewer.plugin, {
+        state,
+        tree: update,
+        options: { doNotLogTiming: true },
+      })
+      const failedCells = hasFailedUpdateCells(currentViewer, updatedRefs)
+      if (disposed || epoch !== sceneEpoch) return false
+      // 无论是目标 cell 报错（modelIndex 已被写入，不回写会导致重选同帧被 Mol* 短路），
+      // 还是在途自动帧已被暂停/调速/关循环，都需要立刻把状态树写回最后一次已提交帧。
+      if (failedCells || isAutoFrameRequestStale(request)) {
+        try {
+          await writeTrajectoryFrameIndex(currentViewer, currentFrameIndex.value)
+        } catch {
+          // 回写失败不阻断控制流；计数仍停在最后一次成功帧。
+        }
+        return false
+      }
+      return true
+    })
+    // 更新被丢弃/已过期/已卸载：不得推进帧号，也不得发出 frame-change。
+    if (!applied || isFrameRequestStale(request)) {
+      if (!hasActivePendingFrameRequest()) syncSliderToCommittedFrame()
+      return
+    }
+    currentFrameIndex.value = target
+    emit('frame-change', target)
+  } catch {
+    // 帧切换失败不终止播放控制：帧号保持最后一次成功值，用户可再次选择同一帧重试。
+    if (!hasActivePendingFrameRequest()) syncSliderToCommittedFrame()
+  } finally {
+    frameUpdateInFlight = false
+    const pending = pendingFrameRequest
+    pendingFrameRequest = null
+    if (pending && !isFrameRequestStale(pending)) void applyFrameIndex(pending)
+  }
+}
+
+function createFrameRequest(frameIndex: number, source: FrameRequestSource = 'manual'): FrameRequest {
+  return { frameIndex, source, playbackToken, sceneEpoch }
+}
+
+function togglePlayback() {
+  if (isPlaying.value) {
+    stopPlayback()
+    return
+  }
+  if (trajectoryFrameCount.value <= 1) return
+  isPlaying.value = true
+  const interval = computeFrameIntervalMs(playbackSpeed.value)
+  playbackTimer = setInterval(() => {
+    if (!isPlaying.value || disposed) {
+      stopPlayback()
+      return
+    }
+    const next = stepFrameIndex(currentFrameIndex.value, 1, trajectoryFrameCount.value, loopPlayback.value)
+    if (next === null) {
+      stopPlayback()
+      return
+    }
+    void applyFrameIndex(createFrameRequest(next, 'auto'))
+  }, interval)
+}
+
+function handleSliderInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement | null)?.value ?? 0)
+  // 手动换帧同样推进播放代次：丢弃暂停/播放中排队但未提交的自动帧。
+  stopPlayback()
+  void applyFrameIndex(createFrameRequest(value, 'manual'))
+}
+
+function handleSpeedChange(event: Event) {
+  const raw = Number((event.target as HTMLSelectElement | null)?.value ?? 1)
+  const speed = (TRAJECTORY_PLAYBACK_SPEEDS as readonly number[]).includes(raw)
+    ? (raw as TrajectoryPlaybackSpeed)
+    : 1
+  playbackSpeed.value = speed
+  const wasPlaying = isPlaying.value
+  stopPlayback()
+  if (wasPlaying) togglePlayback()
+}
+
+function toggleLoop() {
+  loopPlayback.value = !loopPlayback.value
+  // 循环开关变化立即作废已排队的自动帧（旧回绕/不回头帧不得再提交）。
+  invalidatePlayback()
+}
+
+function goPreviousFrame() {
+  stopPlayback()
+  const next = stepFrameIndex(currentFrameIndex.value, -1, trajectoryFrameCount.value, loopPlayback.value)
+  if (next !== null) void applyFrameIndex(createFrameRequest(next, 'manual'))
+}
+
+function goNextFrame() {
+  stopPlayback()
+  const next = stepFrameIndex(currentFrameIndex.value, 1, trajectoryFrameCount.value, loopPlayback.value)
+  if (next !== null) void applyFrameIndex(createFrameRequest(next, 'manual'))
+}
+
+/**
+ * 渲染完成后重置轨迹状态：收集**所有**可播放条目（`frameCount > 1` 且拿到 modelRef），
+ * 不因列表首条恰好缺 `modelRef` 就丢弃后续有效条目。
+ *
+ * 主控制条目（决定播放条帧数与 `frameTimesPs` 的对应关系）优先级：
+ * 1. 显式标记 `preferComplexRepresentation === true` 的 movie（外部时间数组属于它）；
+ * 2. 主目标条目；
+ * 3. 首条有效可播放条目。
+ * 其余条目各自按自身 `frameCount - 1` 夹紧同步，不会把较小轨迹的帧数套到别的轨迹上。
+ */
+function resetTrajectoryStateFromEntries() {
+  const playableRecords = loadedEntries.filter(
+    record => record.frameCount > 1 && Boolean(record.modelRef),
+  )
+  activeTrajectoryModels = playableRecords.map(record => ({
+    modelRef: record.modelRef as string,
+    structureRefKey: record.structureRefKey,
+    frameCount: record.frameCount,
+  }))
+  const primaryPlayableRecord =
+    playableRecords.find(record => record.preferComplexRepresentation === true)
+    ?? playableRecords.find(record => record.isPrimaryTarget)
+    ?? playableRecords[0]
+  trajectoryFrameCount.value = normalizeFrameCount(primaryPlayableRecord?.frameCount ?? 1)
+  currentFrameIndex.value = 0
+  pendingFrameRequest = null
+  // `frameUpdateInFlight` 交给在途更新的 finally 复位，避免旧场景的延迟回包与新场景状态互相覆盖。
+}
+
 async function renderScene() {
   const seq = ++renderSeq
   loading.value = true
   error.value = ''
+  // 场景代次递增：上一场景排队中的异步帧更新在 resume 后会被丢弃，不污染新场景。
+  sceneEpoch += 1
+  stopPlayback()
   entryResourcesRegistry.clear()
   loadedEntries = []
   selectionHighlightRefs = []
@@ -1131,6 +1563,10 @@ async function renderScene() {
   sequenceChains.value = []
   selectedResidueKeys.value = []
   lastAnchorKey.value = null
+  activeTrajectoryModels = []
+  trajectoryFrameCount.value = 1
+  currentFrameIndex.value = 0
+  pendingFrameRequest = null
   try {
     await enqueueMutation(async () => {
       if (seq !== renderSeq || disposed) return
@@ -1163,6 +1599,7 @@ async function renderScene() {
       if (!isCompact.value && sequenceChains.value.length) sequenceOpen.value = true
       currentViewer.handleResize()
     })
+    if (seq === renderSeq && !disposed) resetTrajectoryStateFromEntries()
     if (seq === renderSeq && !disposed && loadedEntries.length && props.focusResidue) {
       await applyFocusResidue(props.focusResidue)
     }
@@ -1209,13 +1646,21 @@ watch(
 onUnmounted(() => {
   disposed = true
   renderSeq += 1
+  // 卸载代次递增：延迟 resolve 的 Mol* 更新不得再提交帧号或 emit。
+  sceneEpoch += 1
+  stopPlayback()
+  activeTrajectoryModels = []
+  pendingFrameRequest = null
   entryResourcesRegistry.clear()
   resizeObserver?.disconnect()
   removeLayoutSyncListener?.()
   removeLayoutSyncListener = null
   removeClickListener?.()
   removeClickListener = null
-  void Promise.resolve(viewerInitPromise).finally(() => {
+  // 等待在途状态树 mutation 结束（以及 viewer 初始化完成）再销毁，
+  // 防止 `PluginCommands.State.Update` 与 `viewer.dispose()` 撞车。
+  const pendingMutations = mutationQueue
+  void Promise.allSettled([Promise.resolve(viewerInitPromise), pendingMutations]).finally(() => {
     disposeMolstarViewer(viewer)
     viewer = null
   })
@@ -1391,5 +1836,96 @@ onUnmounted(() => {
 
 .molecule-viewer :deep(.msp-viewport) {
   background: transparent;
+}
+
+.viewer-traj-bar {
+  position: absolute;
+  left: @spacing-sm;
+  right: @spacing-sm;
+  bottom: @spacing-sm;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: @spacing-xs;
+  padding: 6px 8px;
+  border: 1px solid rgba(207, 224, 247, 0.28);
+  border-radius: 8px;
+  background: rgba(8, 20, 36, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.viewer-traj-btn,
+.viewer-traj-select {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(207, 224, 247, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 20, 36, 0.76);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 24px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.viewer-traj-btn.is-active {
+  border-color: #38bdf8;
+  background: rgba(14, 116, 144, 0.85);
+  color: #ffffff;
+}
+
+.viewer-traj-btn--play {
+  min-width: 52px;
+  font-weight: 600;
+}
+
+.viewer-traj-btn--export {
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+
+.viewer-traj-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.viewer-traj-slider {
+  flex: 1 1 120px;
+  min-width: 80px;
+  height: 4px;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.viewer-traj-counter {
+  min-width: 68px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.molecule-viewer--bg-white .viewer-traj-bar {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.molecule-viewer--bg-white .viewer-traj-btn,
+.molecule-viewer--bg-white .viewer-traj-select {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+}
+
+.molecule-viewer--bg-white .viewer-traj-btn.is-active {
+  border-color: #0284c7;
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.molecule-viewer--bg-white .viewer-traj-counter {
+  color: #0f172a;
 }
 </style>

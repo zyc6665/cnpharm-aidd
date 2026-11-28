@@ -34,6 +34,11 @@ export interface VisualizationSceneEntry {
   scoreLabel?: string
   sdfRecordIndex?: number
   sdfRecordScoped?: true
+  /**
+   * 提示 Mol* 在 cartoon 表示下用 `polymer-and-ligand`（蛋白卡通 + 配体球棍），
+   * 避免 `polymer-cartoon` 把配体/小分子隐藏。缺省 undefined/false，对现有调用方零影响。
+   */
+  preferComplexRepresentation?: boolean
 }
 
 export interface VisualizationScene {
@@ -182,9 +187,10 @@ const ARTIFACT_PREVIEW_ROLES: Record<string, string[]> = {
   binding_pocket: ['pocket_file', 'structure_file'],
   ligand_structure: ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
   molecule_table: ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
-  // MD 轨迹的 DCD 不在 molstar `BuiltInTrajectoryFormat` 里，按既有约定只做
-  // 拓扑结构的静态预览（完整轨迹文件仍可下载，RMSD/RMSF 曲线见任务 MD 结果页）。
-  md_trajectory: ['topology_pdb', 'structure_file', 'structure_pdb'],
+  // MD 轨迹优先加载多帧 `trajectory_movie_pdb`（浏览器内原地播放）；历史旧任务无此 role，
+  // 回退到 `topology_pdb` 做静态预览。DCD 不在 molstar `BuiltInTrajectoryFormat` 里，
+  // 完整轨迹文件仍可下载，RMSD/RMSF 曲线见任务 MD 结果页。
+  md_trajectory: ['trajectory_movie_pdb', 'topology_pdb', 'structure_file', 'structure_pdb'],
 }
 
 function normalizeArtifactType(artifact: TypedArtifact): string {
@@ -257,6 +263,9 @@ function buildArtifactResultItem(artifact: TypedArtifact): VisualizationResultIt
       format,
       extension,
       relativePath: file.relative_path,
+      ...(file.relative_path === 'trajectory_movie_pdb'
+        ? { preferComplexRepresentation: true }
+        : {}),
     }
 
     return {

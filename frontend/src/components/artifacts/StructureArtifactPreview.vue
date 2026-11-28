@@ -1,6 +1,13 @@
 <template>
   <div v-if="scene" class="structure-artifact-preview" data-testid="structure-artifact-preview">
-    <component :is="MoleculeViewer" :scene="scene" :mode="resolvedMode" />
+    <component
+      :is="MoleculeViewer"
+      :scene="scene"
+      :mode="resolvedMode"
+      :frame-times-ps="frameTimesPs"
+      :can-export-movie="canExportMovie"
+      @export-movie="emit('export-movie')"
+    />
   </div>
 </template>
 
@@ -22,11 +29,19 @@ const props = withDefaults(
     role?: VisualizationSceneEntry['role']
     mode?: MolstarViewerMode
     preferredFileRoles?: string[]
+    /** 每一 movie 帧对应的物理时间（ps），透传给 MoleculeViewer 的播放条。 */
+    frameTimesPs?: number[] | null
+    /** 是否允许导出 movie（存在 `trajectory_movie_pdb` 时为 true）。 */
+    canExportMovie?: boolean
   }>(),
   {
-    role: 'structure'
+    role: 'structure',
+    frameTimesPs: null,
+    canExportMovie: false,
   }
 )
+
+const emit = defineEmits<{ 'export-movie': [] }>()
 
 const MoleculeViewer = defineAsyncComponent(() => import('@/components/tasks/MoleculeViewer.vue'))
 
@@ -74,6 +89,7 @@ const scene = computed(() => {
   }
 
   const extension = `.${format === 'mmcif' ? 'cif' : format}`
+  const selectedRole = selectedRoleFile.value?.role
   const entry: VisualizationSceneEntry = {
     key: `artifact-${props.artifact.id}`,
     url: fileRef.value.url,
@@ -82,6 +98,8 @@ const scene = computed(() => {
     role: props.role,
     format,
     extension,
+    // 命中多帧 movie 时用 polymer-and-ligand 保留配体/小分子；回退 topology_pdb 时为 false。
+    preferComplexRepresentation: selectedRole === 'trajectory_movie_pdb',
   }
 
   return createVisualizationScene([], [entry], [])

@@ -15,8 +15,9 @@ vi.mock('@/components/tasks/MoleculeViewer.vue', () => ({
   __esModule: true,
   default: {
     name: 'MoleculeViewer',
-    props: ['scene'],
-    template: '<div data-testid="molecule-viewer">{{ scene.entries[0].url }}</div>'
+    props: ['scene', 'frameTimesPs', 'canExportMovie'],
+    template:
+      '<div data-testid="molecule-viewer" :data-frame-times="JSON.stringify(frameTimesPs)">{{ scene.entries[0].url }}</div>'
   }
 }))
 
@@ -402,5 +403,123 @@ describe('ArtifactRenderer', () => {
     })
 
     expect(wrapper.find('[data-testid="run-report-artifact"]').exists()).toBe(true)
+  })
+
+  it('renders the movie notice and playable preview when md_trajectory exposes a trajectory_movie_pdb', async () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'md_trajectory',
+          name: 'trajectory_movie.pdb',
+          latest_version: {
+            ...version,
+            filename: 'trajectory_movie.pdb',
+            content_type: 'chemical/x-pdb',
+            files: [
+              {
+                id: 'file-topology',
+                role: 'topology_pdb',
+                file_id: 'file-topology',
+                is_primary: false,
+                sort_order: 0,
+                filename: 'topology.pdb',
+                download_url: '/api/v1/files/topology/download'
+              },
+              {
+                id: 'file-movie',
+                role: 'trajectory_movie_pdb',
+                file_id: 'file-movie',
+                is_primary: true,
+                sort_order: 1,
+                filename: 'trajectory_movie.pdb',
+                download_url: '/api/v1/files/movie/download'
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('artifactAssets.mdTrajectory.movieNotice')
+    expect(wrapper.text()).not.toContain('artifactAssets.mdTrajectory.notice')
+    expect(wrapper.find('[data-testid="molecule-viewer"]').exists()).toBe(true)
+  })
+
+  it('forwards movie_time_ps from the version manifest as frameTimesPs to the viewer', async () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'md_trajectory',
+          name: 'trajectory_movie.pdb',
+          latest_version: {
+            ...version,
+            filename: 'trajectory_movie.pdb',
+            content_type: 'chemical/x-pdb',
+            manifest_json: {
+              metadata: { movie_time_ps: [0, 2.5, 5] }
+            },
+            files: [
+              {
+                id: 'file-topology',
+                role: 'topology_pdb',
+                file_id: 'file-topology',
+                is_primary: false,
+                sort_order: 0,
+                filename: 'topology.pdb',
+                download_url: '/api/v1/files/topology/download'
+              },
+              {
+                id: 'file-movie',
+                role: 'trajectory_movie_pdb',
+                file_id: 'file-movie',
+                is_primary: true,
+                sort_order: 1,
+                filename: 'trajectory_movie.pdb',
+                download_url: '/api/v1/files/movie/download'
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').attributes('data-frame-times')).toBe('[0,2.5,5]')
+  })
+
+  it('keeps the static topology copy for legacy md_trajectory artifacts without a movie', async () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'md_trajectory',
+          name: 'topology.pdb',
+          latest_version: {
+            ...version,
+            filename: 'topology.pdb',
+            content_type: 'chemical/x-pdb',
+            files: [
+              {
+                id: 'file-topology',
+                role: 'topology_pdb',
+                file_id: 'file-topology',
+                is_primary: true,
+                sort_order: 0,
+                filename: 'topology.pdb',
+                download_url: '/api/v1/files/topology/download'
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('artifactAssets.mdTrajectory.notice')
+    expect(wrapper.text()).not.toContain('artifactAssets.mdTrajectory.movieNotice')
+    expect(wrapper.find('[data-testid="molecule-viewer"]').exists()).toBe(true)
   })
 })
