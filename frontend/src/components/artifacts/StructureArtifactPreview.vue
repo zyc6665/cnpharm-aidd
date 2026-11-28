@@ -11,7 +11,7 @@
     />
   </div>
   <a-alert
-    v-else-if="hasFiles"
+    v-else-if="hasFiles || versionUnavailable"
     type="warning"
     show-icon
     class="structure-artifact-preview__unavailable"
@@ -72,10 +72,18 @@ function fileIdentity(file: ArtifactVersionFile): string {
  */
 const failedFiles = ref<string[]>([])
 
+/**
+ * 版本级下载地址（`latest_version.files` 为空时的回退候选）失败。
+ * 该候选没有 role 文件可记录，必须单独标记，否则 `hasFiles` 为 false 会让
+ * 模板既不渲染查看器、也不渲染降级提示，留下一块空白。
+ */
+const versionUnavailable = ref(false)
+
 watch(
   () => [props.artifact.id, props.artifact.latest_version.id],
   () => {
     failedFiles.value = []
+    versionUnavailable.value = false
   }
 )
 
@@ -134,7 +142,10 @@ const resolvedMode = computed(() =>
 function handleEntryUnavailable(key: string): void {
   if (key !== entryKey.value) return
   const failedFile = selectedRoleFile.value
-  if (!failedFile) return
+  if (!failedFile) {
+    versionUnavailable.value = true
+    return
+  }
   const identity = fileIdentity(failedFile)
   if (!failedFiles.value.includes(identity)) {
     failedFiles.value = [...failedFiles.value, identity]
@@ -145,8 +156,9 @@ function handleEntryUnavailable(key: string): void {
 }
 
 const scene = computed(() => {
-  // 有候选文件但全部加载失败：不再生成不可用条目，交给模板显示降级提示。
-  if (hasFiles.value && !selectedRoleFile.value) {
+  // 有候选文件但全部加载失败，或版本级回退地址也失败：不再生成不可用条目，
+  // 交给模板显示降级提示。
+  if ((hasFiles.value && !selectedRoleFile.value) || versionUnavailable.value) {
     return null
   }
 

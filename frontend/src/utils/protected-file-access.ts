@@ -245,8 +245,15 @@ async function performProtectedFileDownload(
   const resource = await createProtectedObjectUrl(file.url, dependencies)
 
   try {
-    if (options.requireContent && resource.size === 0) {
-      throw new Error('下载内容为空')
+    if (options.requireContent) {
+      // blob:/data: 地址不经过受保护请求，拿不到字节数：空 data: URL 也能走到
+      // 这里。requireContent 的语义是「确认内容真实可读」，无法证明就按失败处理。
+      if (resource.size === undefined) {
+        throw new Error('无法验证下载内容')
+      }
+      if (resource.size === 0) {
+        throw new Error('下载内容为空')
+      }
     }
     const anchor = dom.createAnchor()
     try {

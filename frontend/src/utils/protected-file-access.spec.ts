@@ -158,4 +158,49 @@ describe('protected-file-access', () => {
     ).rejects.toThrow('下载内容为空')
     expect(click).not.toHaveBeenCalled()
   })
+
+  it('requireContent refuses browser-local urls whose length cannot be verified', async () => {
+    const click = vi.fn()
+
+    for (const url of ['data:application/octet-stream,', 'blob:empty']) {
+      await expect(
+        triggerProtectedFileDownload(
+          { url, filename: 'trajectory_movie.pdb' },
+          {
+            dom: {
+              appendAnchor: () => undefined,
+              createAnchor: () => ({ href: '', download: '', click, remove: () => undefined }),
+            },
+          },
+          { requireContent: true }
+        )
+      ).rejects.toThrow('无法验证下载内容')
+    }
+
+    expect(click).not.toHaveBeenCalled()
+    expect(requestGet).not.toHaveBeenCalled()
+  })
+
+  it('keeps browser-local urls downloadable without requireContent', async () => {
+    const clicks: string[] = []
+
+    await triggerProtectedFileDownload(
+      { url: 'data:text/plain,hello', filename: 'a.txt' },
+      {
+        dom: {
+          appendAnchor: () => undefined,
+          createAnchor: () => ({
+            href: '',
+            download: '',
+            click() {
+              clicks.push(this.href)
+            },
+            remove: () => undefined,
+          }),
+        },
+      }
+    )
+
+    expect(clicks).toEqual(['data:text/plain,hello'])
+  })
 })

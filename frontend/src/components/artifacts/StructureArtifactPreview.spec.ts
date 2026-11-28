@@ -183,6 +183,29 @@ describe('StructureArtifactPreview', () => {
     expect(wrapper.emitted('movie-unavailable')).toHaveLength(1)
   })
 
+  it('shows the unavailable alert when the version-level fallback fails with no role files', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb'),
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/artifacts/artifact-1/versions/version-1/download'
+    )
+
+    // 没有 role 文件时预览走版本级地址；该地址失败也必须显示降级提示，
+    // 不能因为 hasFiles=false 留下一块空白画布。
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="molecule-viewer"]').exists()).toBe(false)
+    expect(
+      wrapper.get('[data-testid="structure-preview-unavailable"]').attributes('message')
+    ).toBe('artifactAssets.structurePreview.unavailable')
+  })
+
   it('shows an unavailable alert when every candidate file fails', async () => {
     const wrapper = mount(StructureArtifactPreview, {
       props: {

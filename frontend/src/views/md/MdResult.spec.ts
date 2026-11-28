@@ -179,6 +179,53 @@ describe('MD result movie integration', () => {
     const preview = wrapper.get('[data-testid="structure-preview-stub"]')
     expect(preview.attributes('data-frame-times')).toBe('null')
     expect(preview.attributes('data-can-export')).toBe('false')
+    expect(wrapper.get('.md-result__viewer-note').text()).toBe('md.result.staticPreviewNote')
+  })
+
+  it('re-enables playback and export when the same artifact publishes a healthy new version', async () => {
+    type StreamHandlers = Parameters<typeof openTaskEventStream>[1]
+    let streamHandlers: Partial<StreamHandlers> = {}
+    vi.mocked(openTaskEventStream).mockImplementation((_id, handlers) => {
+      streamHandlers = handlers
+      return { available: true, close: vi.fn() }
+    })
+    vi.mocked(getMdResult).mockResolvedValue({
+      status: 'running',
+      outputs: [{ id: 'artifact-1', standard_type: 'md_trajectory@1' }],
+    } as unknown as MdResultDetail)
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      data: { id: 'task-1', status: 'running', progress: 50 },
+    } as unknown as Awaited<ReturnType<typeof getTaskDetail>>)
+    vi.mocked(getArtifactDetail).mockResolvedValue(
+      makeArtifact(['trajectory_movie_pdb', 'topology_pdb', 'metadata_json']),
+    )
+
+    const wrapper = mount(MdResult, { global: { stubs } })
+    await flushPromises()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="fail-movie"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="structure-preview-stub"]').attributes('data-can-export')).toBe('false')
+    expect(wrapper.get('[data-testid="structure-preview-stub"]').attributes('data-frame-times')).toBe('null')
+
+    // 同一 artifact 刷新出新版本：旧的失败标记必须清掉，否则新影片仍然不能播放/导出。
+    const refreshed = makeArtifact(['trajectory_movie_pdb', 'topology_pdb', 'metadata_json'])
+    refreshed.latest_version = { ...refreshed.latest_version, id: 'version-2', version: 2 }
+    vi.mocked(getArtifactDetail).mockResolvedValue(refreshed)
+    streamHandlers.onDone?.({} as never)
+    await flushPromises()
+    await flushPromises()
+
+    const preview = wrapper.get('[data-testid="structure-preview-stub"]')
+    expect(preview.attributes('data-can-export')).toBe('true')
+    expect(preview.attributes('data-frame-times')).toBe('[0,2,4]')
+    expect(
+      wrapper.findAll('.a-alert').some(
+        alert => alert.attributes('data-message') === 'md.result.movieFallbackNotice',
+      ),
+    ).toBe(false)
+    expect(wrapper.get('.md-result__viewer-note').text()).toBe('md.result.moviePreviewNote')
   })
 
   it('degrades legacy tasks without a movie to a static topology preview', async () => {

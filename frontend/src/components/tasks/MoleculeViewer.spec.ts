@@ -16,7 +16,8 @@ function deferred<T = undefined>() {
 interface MockPreset {
   structure: { ref: string }
   model?: { ref: string }
-  representation?: Record<string, { ref: string }>
+  /** Mol* 5.9 `applyPreset` 返回 `representation.representations` 这层。 */
+  representation?: { representations?: Record<string, { ref: string }> }
 }
 
 function defaultPreset(): MockPreset {
@@ -947,7 +948,7 @@ describe('MoleculeViewer', () => {
       {
         structure: { ref: 'structure-ref-movie' },
         model: { ref: 'model-ref-movie' },
-        representation: { 'polymer-cartoon': { ref: 'rep-ref-movie' } },
+        representation: { representations: { 'polymer-cartoon': { ref: 'rep-ref-movie' } } },
       },
     ]
     const wrapper = mount(MoleculeViewer, {

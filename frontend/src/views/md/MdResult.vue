@@ -87,7 +87,7 @@
             />
             <a-empty v-else :description="t('md.result.noTopology')" />
           </div>
-          <p class="md-result__viewer-note">{{ movieFile ? t('md.result.moviePreviewNote') : t('md.result.staticPreviewNote') }}</p>
+          <p class="md-result__viewer-note">{{ movieFile && !movieUnavailable ? t('md.result.moviePreviewNote') : t('md.result.staticPreviewNote') }}</p>
         </a-card></a-col>
       </a-row>
 
@@ -187,7 +187,7 @@
   let streamHandle: { close: () => void } | null = null
   let disposed = false
   let requestSequence = 0
-  let artifactIdLoaded: string | null = null
+  let artifactVersionLoaded: string | null = null
   const files = computed<ArtifactVersionFile[]>(() => artifact.value?.latest_version.files ?? [])
   function roleFile(role: MdTrajectoryRole): ArtifactVersionFile | null { return files.value.find(file => file.role === role) ?? null }
   const analysisFile = computed(() => roleFile('analysis_csv'))
@@ -348,8 +348,11 @@
       const output = findOutputByStandardType(detail.outputs, 'md_trajectory@1')
       const nextArtifact = output ? await getArtifactDetail(output.id) : null
       if (disposed || sequence !== requestSequence) return
-      const nextId = nextArtifact?.id ?? null
-      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; movieUnavailable.value = false; artifactIdLoaded = nextId }
+      // 同一 artifact 刷新出新版本时也要重置：旧版本的坏影片不能把新版本的播放/导出一直锁死。
+      const nextVersionKey = nextArtifact
+        ? `${nextArtifact.id}@${nextArtifact.latest_version?.id ?? nextArtifact.latest_version?.version ?? ''}`
+        : null
+      if (artifactVersionLoaded !== nextVersionKey) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; movieUnavailable.value = false; artifactVersionLoaded = nextVersionKey }
       artifact.value = nextArtifact
       if (nextArtifact) await loadAnalysisAndMetadata(sequence)
       if (disposed || sequence !== requestSequence) return
@@ -368,7 +371,7 @@
   async function handleExportMovie(): Promise<void> {
     await downloadRole('trajectory_movie_pdb')
   }
-  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactIdLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
+  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactVersionLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
   onMounted(() => { disposed = false })
   onBeforeUnmount(() => { disposed = true; requestSequence += 1; stopStream() })
   const overviewSections = computed<DescriptionSection[]>(() => [{ key: 'overview', fields: [

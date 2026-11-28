@@ -659,12 +659,15 @@ async function applyRepresentationToStructureRef(
 
 /**
  * 收集 `hierarchy.applyPreset` 返回的 representation 节点 ref。
- * 表示预设返回 `representation: { name: selector }`；selector 的 `.ref` 是状态树
- * 节点 key。换帧时 structure 更新会级联重算这些节点，其中任一个进入 error
- * 都说明新帧没有完整渲染出来，不能只检查 model/structure 两个节点。
+ * Mol* 5.9 的预设结果包在 `representation.representations` 下
+ * （`StructureRepresentationPresetProvider.Result`），值是 selector，其 `.ref`
+ * 是状态树节点 key。换帧时 structure 更新会级联重算这些节点，其中任一个进入
+ * error 都说明新帧没有完整渲染出来，不能只检查 model/structure 两个节点。
  */
 function collectRepresentationRefs(preset: unknown): string[] {
-  const representations = (preset as { representation?: unknown } | null | undefined)?.representation
+  const result = (preset as { representation?: { representations?: unknown } } | null | undefined)
+    ?.representation
+  const representations = result?.representations
   if (!representations || typeof representations !== 'object') return []
   const refs: string[] = []
   for (const value of Object.values(representations as Record<string, unknown>)) {
