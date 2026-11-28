@@ -711,15 +711,23 @@ def _residue_number_matching_is_forced(
     """
     if not slots:
         return True
-    groups: dict[tuple[str, tuple[str, ...]], list[int]] = {}
-    for slot in slots:
-        groups.setdefault(signatures[slot], []).append(slot)
     return all(
         _signature_group_number_matching_is_forced(
             expected_numbers, actual_numbers, group
         )
-        for group in groups.values()
+        for group in _signature_groups(signatures, slots).values()
     )
+
+
+def _signature_groups(
+    signatures: Sequence[tuple[str, tuple[str, ...]]],
+    slots: Sequence[int],
+) -> dict[tuple[str, tuple[str, ...]], list[int]]:
+    """Group run slots by the signature they could hide behind."""
+    groups: dict[tuple[str, tuple[str, ...]], list[int]] = {}
+    for slot in slots:
+        groups.setdefault(signatures[slot], []).append(slot)
+    return groups
 
 
 def _signature_group_number_matching_is_forced(
@@ -749,7 +757,10 @@ def _signature_group_number_matching_is_forced(
             exact_expected[target] += 1
             demand_by_class[_cpp_remainder(target, _PDB_RESSEQ_MODULUS)] += 1
         else:
-            class_expected[expected] += 1
+            # A truncated PDB number can describe any GRO value in its C++
+            # remainder class; store it under that class so the counter key
+            # matches ``class_actual`` even for a negative number.
+            class_expected[_cpp_remainder(expected, _PDB_RESSEQ_MODULUS)] += 1
     if any(
         count != 1 or exact_actual[target] != 1
         for target, count in exact_expected.items()
@@ -1028,37 +1039,41 @@ def _validate_trajectory_topology(
             run_positions.setdefault(expected_positions[position], []).append(position)
         # Fields the output exposes for a run: canonical residue name and the
         # ordered canonical atom names. Runs whose signatures differ cannot be
-        # exchanged without one of those fields changing at a kept position.
-        run_signatures = [
+        # exchanged without one of those fields changing at a kept position --
+        # but only while the matching check actually compares that field. A
+        # blank residue name on either side skips the per-run check, and a blank
+        # trajectory atom name falls back to the element, which does not tell
+        # same-element atoms apart. Trust each component only when it binds for
+        # every run, and drop just the untrusted component from all signatures:
+        # masking consistently keeps two runs distinguishable through the
+        # component that still binds. With both components untrusted this is the
+        # old whole-class uniqueness. Per-run masking would not be sound: an
+        # untrusted run would look different from a trusted twin even when a
+        # swap between them is invisible.
+        resnames_bind = all(
+            _canonical_gro_resname(expected_runs[run][0])
+            and _canonical_gro_resname(traj_runs[run][0])
+            for run in kept_runs
+        )
+        atom_names_bind = all(
+            (getattr(traj_atoms[position], "name", "") or "").strip()
+            for run in kept_runs
+            for position in run_positions[run]
+        )
+        uniqueness_signatures = [
             (
-                _canonical_gro_resname(expected_runs[run][0]),
+                _canonical_gro_resname(expected_runs[run][0]) if resnames_bind else "",
                 tuple(
                     _mdtraj_gro_atom_name(
                         templates[position].atom_name, templates[position].resname
                     )
                     for position in run_positions[run]
-                ),
+                )
+                if atom_names_bind
+                else (),
             )
             for run in kept_runs
         ]
-        # Signature grouping is only sound while the name checks actually
-        # compare names. A blank residue name on either side skips the per-run
-        # check, and a blank trajectory atom name falls back to the element, so
-        # two differently named runs could then exchange without detection.
-        # Fall back to one shared group -- the old whole-class uniqueness -- for
-        # those malformed inputs instead of trusting the signatures.
-        names_bind_run_order = all(
-            _canonical_gro_resname(expected_runs[run][0])
-            and _canonical_gro_resname(traj_runs[run][0])
-            and all(
-                (getattr(traj_atoms[position], "name", "") or "").strip()
-                for position in run_positions[run]
-            )
-            for run in kept_runs
-        )
-        uniqueness_signatures = (
-            run_signatures if names_bind_run_order else [("", ())] * len(kept_runs)
-        )
         kept_run_slots = {run: slot for slot, run in enumerate(kept_runs)}
         pinned_run_slots = {
             kept_run_slots[run]
@@ -1068,35 +1083,54 @@ def _validate_trajectory_topology(
         remaining_slots = [
             slot for slot in range(len(kept_runs)) if slot not in pinned_run_slots
         ]
-        # A folded run whose atoms share a name cannot fall back on the names
-        # inside the residue: each of those atoms needs its serial. The merged
-        # chain boundary (same run, unchanged numbers) is left alone -- there
-        # the positional order is all either file carries.
+        # Atoms that share an output name cannot be told apart by name. Under a
+        # fold the whole run is one residue identity, so every repeated name in
+        # it needs its atom serial. Without a fold, only a repeat inside one PDB
+        # residue is ambiguous: a GRO run may legitimately merge two PDB
+        # residues across a chain boundary, where the same atom name appears
+        # twice and the positional order is all either file carries. Runs with
+        # an unreadable number cannot prove a fold either, so they take the
+        # per-residue scope.
+        template_residue_keys = [
+            (template.segment_index, template.chain_id, template.resseq, template.icode)
+            for template in templates
+        ]
         for slot in range(len(kept_runs)):
-            if expected_numbers[slot] is None or traj_numbers[slot] is None:
-                continue
-            if expected_numbers[slot] == traj_numbers[slot]:
-                continue
             positions = run_positions[kept_runs[slot]]
-            names = Counter(
-                _mdtraj_gro_atom_name(
-                    templates[position].atom_name, templates[position].resname
-                )
-                for position in positions
+            folded_run = (
+                expected_numbers[slot] is not None
+                and traj_numbers[slot] is not None
+                and expected_numbers[slot] != traj_numbers[slot]
             )
-            duplicated_names = {name for name, count in names.items() if count > 1}
-            if duplicated_names and not all(
-                serial_pin_by_position[position]
-                for position in positions
-                if _mdtraj_gro_atom_name(
-                    templates[position].atom_name, templates[position].resname
+            if folded_run:
+                scopes = [positions]
+            else:
+                by_residue: dict[tuple[int, str, str, str], list[int]] = {}
+                for position in positions:
+                    by_residue.setdefault(
+                        template_residue_keys[position], []
+                    ).append(position)
+                scopes = list(by_residue.values())
+            for scope in scopes:
+                names = Counter(
+                    _mdtraj_gro_atom_name(
+                        templates[position].atom_name, templates[position].resname
+                    )
+                    for position in scope
                 )
-                in duplicated_names
-            ):
-                raise ValueError(
-                    "GRO trajectory residue numbering differs from topology PDB "
-                    "without atom-serial proof; refusing to render"
-                )
+                duplicated_names = {name for name, count in names.items() if count > 1}
+                if duplicated_names and not all(
+                    serial_pin_by_position[position]
+                    for position in scope
+                    if _mdtraj_gro_atom_name(
+                        templates[position].atom_name, templates[position].resname
+                    )
+                    in duplicated_names
+                ):
+                    raise ValueError(
+                        "GRO trajectory residue numbering differs from topology PDB "
+                        "without atom-serial proof; refusing to render"
+                    )
         remaining_consistent = all(
             expected_numbers[slot] is not None
             and traj_numbers[slot] is not None
@@ -1117,6 +1151,28 @@ def _validate_trajectory_topology(
                     "GRO trajectory residue numbering differs from topology PDB "
                     "without atom-serial proof; refusing to render"
                 )
+            else:
+                # No readable pair proves the identity of these runs. A run
+                # alone in its signature has no run it could hide behind, but
+                # two interchangeable runs could exchange without changing any
+                # field the output compares -- and the swap sends the
+                # unreadable number into the other slot, so the numbering check
+                # cannot see it either. The signature group must therefore
+                # prove the pairing by its numbers, which it cannot while a
+                # member is unreadable.
+                if any(
+                    len(group) > 1
+                    and not _signature_group_number_matching_is_forced(
+                        expected_numbers, traj_numbers, group
+                    )
+                    for group in _signature_groups(
+                        uniqueness_signatures, remaining_slots
+                    ).values()
+                ):
+                    raise ValueError(
+                        "GRO trajectory residue numbering differs from topology PDB "
+                        "without atom-serial proof; refusing to render"
+                    )
     for index, (template, traj_atom) in enumerate(zip(templates, traj_atoms)):
         if index not in kept:
             continue
