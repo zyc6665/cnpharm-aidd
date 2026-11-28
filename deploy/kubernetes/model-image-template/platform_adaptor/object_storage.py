@@ -25,6 +25,12 @@ RESULT_VERSION = "aidd.platform/result"
 LEGACY_RESULT_VERSION = "aidd.platform/result"
 ACCEPTED_RESULT_VERSIONS = {RESULT_VERSION, LEGACY_RESULT_VERSION}
 
+# 可选产物：GROMACS 适配层在写 result.json 前会尽力删除上一次尝试残留的影片。
+# 若文件系统同时拒绝 unlink 与 chmod，结果仍应照常发布——result.json 未声明该
+# 路径时上传器跳过它，而不是让一个无法读取的旧文件拖垮整次上传。只豁免这一条
+# 固定路径，其他未声明文件仍按原语义处理。
+UNDECLARED_OPTIONAL_OUTPUTS = frozenset({"artifacts/trajectory_movie.pdb"})
+
 
 def _env(values: dict[str, str], name: str, default: str | None = None) -> str | None:
     value = values.get(f"{ENV_PREFIX}{name}")
@@ -172,12 +178,19 @@ def _resolve_output_result(
             "result.json must use aidd.platform/result (or legacy aidd.platform/result)"
         )
 
-    files = sorted(
-        path
-        for path in output_dir.rglob("*")
-        if path.is_file() and not path.is_symlink()
-    )
     _verify_declared_output_files(output_dir, result_payload)
+    declared = _declared_output_paths(result_payload)
+    files: list[Path] = []
+    for path in sorted(output_dir.rglob("*")):
+        relative_path = path.relative_to(output_dir).as_posix()
+        # Exclude by path first: an undeclared residual movie may be unreadable
+        # (permission denied on stat), and probing it must not abort the upload
+        # before result.json is published.
+        if relative_path in UNDECLARED_OPTIONAL_OUTPUTS and relative_path not in declared:
+            continue
+        if not path.is_file() or path.is_symlink():
+            continue
+        files.append(path)
     return output_dir, result_path, files
 
 
@@ -210,6 +223,30 @@ def upload_output_directory(
     _upload_file(storage, bucket, result_key, result_path)
     uploaded.append(result_key)
     return uploaded
+
+
+def _declared_output_paths(result_payload: dict[str, Any]) -> set[str]:
+    """规范化后的 result.json 声明产物路径集合。"""
+    declared: set[str] = set()
+    artifacts = result_payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return declared
+    for value in artifacts.values():
+        entries = value if isinstance(value, list) else [value]
+        for artifact in entries:
+            if not isinstance(artifact, dict):
+                continue
+            files = artifact.get("files")
+            if not isinstance(files, dict):
+                continue
+            for file_ref in files.values():
+                if not isinstance(file_ref, dict):
+                    continue
+                try:
+                    declared.add(_safe_output_path(file_ref.get("path")))
+                except ObjectStorageError:
+                    continue
+    return declared
 
 
 def _verify_declared_output_files(output_dir: Path, result_payload: dict[str, Any]) -> None:
