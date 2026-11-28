@@ -742,11 +742,17 @@ def _validate_trajectory_topology(
         # every position both sides can prove: a partial proof still exposes an
         # in-place swap, and a full proof accepts a legal renumbering (42.. -> 1..).
         kept_order = sorted(kept)
-        expected_serials = [templates[index].serial for index in kept_order]
-        traj_serials = [_atom_serial(traj_atoms[index]) for index in kept_order]
-        expected_trusted = _trusted_serial_positions(expected_serials)
-        traj_trusted = _trusted_serial_positions(traj_serials)
-        comparable = set(expected_trusted) & set(traj_trusted)
+        # Count uniqueness over the whole file, solvent included: a serial that
+        # repeats on a filtered water atom is still ambiguous evidence for the
+        # kept solute atom that shares it. Only kept positions are compared.
+        expected_trusted = _trusted_serial_positions(
+            [template.serial for template in templates]
+        )
+        traj_trusted = _trusted_serial_positions(
+            [_atom_serial(atom) for atom in traj_atoms]
+        )
+        kept_positions = set(kept_order)
+        comparable = set(expected_trusted) & set(traj_trusted) & kept_positions
         for position in sorted(comparable):
             if expected_trusted[position] != traj_trusted[position]:
                 raise ValueError(
@@ -760,11 +766,15 @@ def _validate_trajectory_topology(
         # Otherwise the movie is skipped instead of risking an atom-order mismatch.
         expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
         traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
-        numbers_known = (
-            all(number is not None for number in expected_numbers)
-            and all(number is not None for number in traj_numbers)
+        # Compare pair by pair: an unparseable residue number (e.g. hybrid36
+        # ``A000``) must not mask a provable change at another residue.
+        numbering_changed = any(
+            expected_number is not None
+            and traj_number is not None
+            and expected_number != traj_number
+            for expected_number, traj_number in zip(expected_numbers, traj_numbers)
         )
-        if numbers_known and expected_numbers != traj_numbers and not serials_prove_order:
+        if numbering_changed and not serials_prove_order:
             raise ValueError(
                 "GRO trajectory residue numbering differs from topology PDB "
                 "without atom-serial proof; refusing to render"

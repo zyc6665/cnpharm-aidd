@@ -1948,6 +1948,77 @@ def test_gro_topology_rejects_renumbering_when_serials_repeat(tmp_path: Path):
         )
 
 
+def test_gro_topology_counts_serials_before_desolvation(tmp_path: Path):
+    """A kept atom's serial must be unique in the whole file, solvent included:
+    when the same serial also repeats on a filtered water atom, it proves nothing
+    and a 42/43 -> 1/3 renumbering must not be accepted."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 42, element="C"),
+                _pdb_line(2, "CB", "ALA", "A", 43, element="C"),
+                _pdb_line(1, "OW", "SOL", "A", 44, record="HETATM", element="O"),
+                _pdb_line(2, "OW", "SOL", "A", 45, record="HETATM", element="O"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n4\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=3, serial=2),
+        _NamedGroAtom("OW", "O", "SOL", resindex=2, resseq=44, serial=1),
+        _NamedGroAtom("OW", "O", "SOL", resindex=3, resseq=45, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_rejects_numbering_change_hidden_by_unparsable_residue(tmp_path: Path):
+    """One unparsable hybrid-36 residue number (``A000``) must not mask a provable
+    change at another residue: 43 vs 3 without full serial proof is a mismatch."""
+    ca_line = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    hybrid_line = ca_line[:22] + "A000" + ca_line[26:]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                hybrid_line,
+                _pdb_line(2, "CA", "ALA", "A", 43, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=3, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
 def test_gro_topology_accepts_case_preserved_atom_names(tmp_path: Path):
     """MDTraj looks atom names up case-sensitively against the upper-case XML, so
     a raw ``h1`` stays ``h1``. Upper-casing only the template would map it to
