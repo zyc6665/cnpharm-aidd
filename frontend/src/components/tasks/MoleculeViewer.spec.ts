@@ -16,7 +16,45 @@ function deferred<T = undefined>() {
 interface MockPreset {
   structure: { ref: string }
   model?: { ref: string }
-  representation?: Record<string, { ref: string }>
+  /** Mol* 5.9 `applyPreset` 返回 `representation.representations` 这层。 */
+  representation?: { representations?: Record<string, { ref: string }> }
+}
+
+interface MockHierarchyRepresentation {
+  cell: { transform: { ref: string } }
+}
+
+interface MockHierarchyComponent {
+  ref: string
+  representations?: MockHierarchyRepresentation[]
+}
+
+interface MockHierarchyStructure {
+  cell: { transform: { ref: string }; obj?: { data?: { id?: string } } }
+  components: MockHierarchyComponent[]
+}
+
+function defaultHierarchy(): MockHierarchyStructure[] {
+  return [
+    {
+      cell: { transform: { ref: 'structure-ref-1' }, obj: { data: { id: 'mock-structure' } } },
+      components: [{ ref: 'comp-1' }],
+    },
+  ]
+}
+
+/** 模拟样式切换后状态树里的 representation 节点（真实 Mol* 会清空并重建它们）。 */
+function setLiveRepresentations(structureRefKey: string, refs: string[]): void {
+  const structure = mockState.hierarchyStructures.find(
+    entry => entry.cell.transform.ref === structureRefKey,
+  )
+  if (!structure) return
+  structure.components = [
+    {
+      ref: 'comp-live',
+      representations: refs.map(ref => ({ cell: { transform: { ref } } })),
+    },
+  ]
 }
 
 function defaultPreset(): MockPreset {
@@ -48,6 +86,8 @@ const mockState = {
   presetQueue: [] as MockPreset[],
   /** 缺省帧数（未配置队列时使用）。 */
   trajectoryFrameCount: 1,
+  /** 当前状态树层级；样式切换用例会按需替换 representation 节点。 */
+  hierarchyStructures: defaultHierarchy(),
   extractedChains: [
     {
       chain: 'A',
@@ -159,15 +199,7 @@ vi.mock('./molstar-viewer-kernel', () => ({
         structure: {
           hierarchy: {
             current: {
-              structures: [
-                {
-                  cell: {
-                    transform: { ref: 'structure-ref-1' },
-                    obj: { data: { id: 'mock-structure' } },
-                  },
-                  components: [{ ref: 'comp-1' }],
-                },
-              ],
+              structures: mockState.hierarchyStructures,
             },
           },
           component: {
@@ -366,6 +398,7 @@ describe('MoleculeViewer', () => {
     mockState.presetQueue = []
     mockState.updateCalls = []
     mockState.cells.clear()
+    mockState.hierarchyStructures = defaultHierarchy()
     mockState.stateUpdate.mockReset()
     mockState.stateUpdate.mockImplementation(async () => undefined)
     mockState.extractedChains = [
@@ -947,7 +980,7 @@ describe('MoleculeViewer', () => {
       {
         structure: { ref: 'structure-ref-movie' },
         model: { ref: 'model-ref-movie' },
-        representation: { 'polymer-cartoon': { ref: 'rep-ref-movie' } },
+        representation: { representations: { 'polymer-cartoon': { ref: 'rep-ref-movie' } } },
       },
     ]
     const wrapper = mount(MoleculeViewer, {
@@ -964,6 +997,57 @@ describe('MoleculeViewer', () => {
     // Mol* 可能只把 representation 节点置为 error，model/structure 仍为 ok：
     // 这同样意味着新帧没有完整渲染，不能提交帧号。
     mockState.cells.set('rep-ref-movie', { status: 'error' })
+
+    await wrapper.get('[data-testid="viewer-traj-play"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(computeFrameIntervalMs(1))
+    await vi.advanceTimersByTimeAsync(computeFrameIntervalMs(1))
+
+    expect(wrapper.get('[data-testid="viewer-traj-counter"]').text()).toBe('1 / 5')
+    expect(wrapper.get('[data-testid="viewer-traj-play"]').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.emitted('frame-change')).toBeUndefined()
+    expect(mockState.updateModel).toHaveBeenLastCalledWith({ modelIndex: 0 })
+  })
+
+  it('checks representation cells rebuilt by a later style switch', async () => {
+    vi.useFakeTimers()
+    mockState.trajectoryFrameCount = 5
+    mockState.presetQueue = [
+      {
+        structure: { ref: 'structure-ref-movie' },
+        model: { ref: 'model-ref-movie' },
+        representation: { representations: { 'polymer-cartoon': { ref: 'rep-ref-initial' } } },
+      },
+    ]
+    mockState.hierarchyStructures = [
+      {
+        cell: { transform: { ref: 'structure-ref-movie' }, obj: { data: { id: 'mock-structure' } } },
+        components: [
+          {
+            ref: 'comp-movie',
+            representations: [{ cell: { transform: { ref: 'rep-ref-initial' } } }],
+          },
+        ],
+      },
+    ]
+    const wrapper = mount(MoleculeViewer, {
+      props: {
+        scene: buildMovieScene(),
+        mode: 'protein',
+        variant: 'full',
+      },
+      global: { stubs: { ASpin: true, AAlert: true } },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="viewer-traj-counter"]').text()).toBe('1 / 5')
+
+    // 切换样式会销毁初始 representation 并新建节点；换帧校验必须读新节点。
+    mockState.addRepresentation.mockImplementationOnce(async () => {
+      setLiveRepresentations('structure-ref-movie', ['rep-ref-spacefill'])
+    })
+    await wrapper.get('[data-testid="viewer-representation-select"]').setValue('spacefill')
+    await flushPromises()
+
+    mockState.cells.set('rep-ref-spacefill', { status: 'error' })
 
     await wrapper.get('[data-testid="viewer-traj-play"]').trigger('click')
     await vi.advanceTimersByTimeAsync(computeFrameIntervalMs(1))

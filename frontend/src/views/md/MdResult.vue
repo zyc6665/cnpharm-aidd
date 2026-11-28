@@ -84,10 +84,11 @@
               :can-export-movie="Boolean(movieFile) && !movieUnavailable"
               @export-movie="handleExportMovie"
               @movie-unavailable="handleMovieUnavailable"
+              @movie-available="handleMovieAvailable"
             />
             <a-empty v-else :description="t('md.result.noTopology')" />
           </div>
-          <p class="md-result__viewer-note">{{ movieFile ? t('md.result.moviePreviewNote') : t('md.result.staticPreviewNote') }}</p>
+          <p class="md-result__viewer-note">{{ movieFile && !movieUnavailable ? t('md.result.moviePreviewNote') : t('md.result.staticPreviewNote') }}</p>
         </a-card></a-col>
       </a-row>
 
@@ -187,7 +188,7 @@
   let streamHandle: { close: () => void } | null = null
   let disposed = false
   let requestSequence = 0
-  let artifactIdLoaded: string | null = null
+  let artifactVersionLoaded: string | null = null
   const files = computed<ArtifactVersionFile[]>(() => artifact.value?.latest_version.files ?? [])
   function roleFile(role: MdTrajectoryRole): ArtifactVersionFile | null { return files.value.find(file => file.role === role) ?? null }
   const analysisFile = computed(() => roleFile('analysis_csv'))
@@ -203,7 +204,24 @@
   )
   // movie 存在但预览加载失败时回退 topology_pdb：此时时间数组与导出都不得继续挂在 movie 上。
   const movieUnavailable = ref(false)
-  function handleMovieUnavailable(): void { movieUnavailable.value = true }
+  interface MovieSource { artifactId: string; versionId: string }
+  // 预览组件的加载是异步的：刷新换版本后，旧版本那次加载的失败事件仍可能迟到。
+  // 事件必须带上来源版本，父页面只接受与当前 artifact 版本一致的状态变更。
+  function isCurrentMovieSource(source?: MovieSource): boolean {
+    const current = artifact.value
+    if (!current) return false
+    if (!source) return true
+    return source.artifactId === current.id && source.versionId === current.latest_version.id
+  }
+  function handleMovieUnavailable(source?: MovieSource): void {
+    if (!isCurrentMovieSource(source)) return
+    movieUnavailable.value = true
+  }
+  // 同一版本重新拉取后影片可能恢复：预览组件重新选中影片时解除降级状态。
+  function handleMovieAvailable(source?: MovieSource): void {
+    if (!isCurrentMovieSource(source)) return
+    movieUnavailable.value = false
+  }
 
   const contactColumns = computed(() => [
     {
@@ -348,8 +366,11 @@
       const output = findOutputByStandardType(detail.outputs, 'md_trajectory@1')
       const nextArtifact = output ? await getArtifactDetail(output.id) : null
       if (disposed || sequence !== requestSequence) return
-      const nextId = nextArtifact?.id ?? null
-      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; movieUnavailable.value = false; artifactIdLoaded = nextId }
+      // 同一 artifact 刷新出新版本时也要重置：旧版本的坏影片不能把新版本的播放/导出一直锁死。
+      const nextVersionKey = nextArtifact
+        ? `${nextArtifact.id}@${nextArtifact.latest_version?.id ?? nextArtifact.latest_version?.version ?? ''}`
+        : null
+      if (artifactVersionLoaded !== nextVersionKey) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; movieUnavailable.value = false; artifactVersionLoaded = nextVersionKey }
       artifact.value = nextArtifact
       if (nextArtifact) await loadAnalysisAndMetadata(sequence)
       if (disposed || sequence !== requestSequence) return
@@ -368,7 +389,7 @@
   async function handleExportMovie(): Promise<void> {
     await downloadRole('trajectory_movie_pdb')
   }
-  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactIdLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
+  watch(taskId, () => { result.value = null; task.value = null; artifact.value = null; artifactVersionLoaded = null; analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; void reload() }, { immediate: true })
   onMounted(() => { disposed = false })
   onBeforeUnmount(() => { disposed = true; requestSequence += 1; stopStream() })
   const overviewSections = computed<DescriptionSection[]>(() => [{ key: 'overview', fields: [

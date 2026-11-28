@@ -659,17 +659,45 @@ async function applyRepresentationToStructureRef(
 
 /**
  * 收集 `hierarchy.applyPreset` 返回的 representation 节点 ref。
- * 表示预设返回 `representation: { name: selector }`；selector 的 `.ref` 是状态树
- * 节点 key。换帧时 structure 更新会级联重算这些节点，其中任一个进入 error
- * 都说明新帧没有完整渲染出来，不能只检查 model/structure 两个节点。
+ * Mol* 5.9 的预设结果包在 `representation.representations` 下
+ * （`StructureRepresentationPresetProvider.Result`），值是 selector，其 `.ref`
+ * 是状态树节点 key。换帧时 structure 更新会级联重算这些节点，其中任一个进入
+ * error 都说明新帧没有完整渲染出来，不能只检查 model/structure 两个节点。
  */
 function collectRepresentationRefs(preset: unknown): string[] {
-  const representations = (preset as { representation?: unknown } | null | undefined)?.representation
+  const result = (preset as { representation?: { representations?: unknown } } | null | undefined)
+    ?.representation
+  const representations = result?.representations
   if (!representations || typeof representations !== 'object') return []
   const refs: string[] = []
   for (const value of Object.values(representations as Record<string, unknown>)) {
     const ref = (value as { ref?: unknown } | null | undefined)?.ref
     if (typeof ref === 'string' && ref) refs.push(ref)
+  }
+  return refs
+}
+
+/**
+ * 读取某个 structure 当前在状态树里的 representation 节点 ref。
+ *
+ * 切换渲染样式会清空并重建 representation 节点（`applyPreset` / spacefill 的
+ * clear + addRepresentation），初始预设返回的 ref 随即失效。换帧校验必须用
+ * 重建后的 ref，否则新 representation 的错误永远看不到，坏帧会被当成成功提交。
+ */
+function collectLiveRepresentationRefs(
+  currentViewer: MolstarViewer,
+  structureRefKey: string,
+): string[] {
+  const structure = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
+    s => s.cell.transform.ref === structureRefKey,
+  )
+  if (!structure) return []
+  const refs: string[] = []
+  for (const component of structure.components) {
+    for (const representation of component.representations ?? []) {
+      const ref = representation.cell.transform.ref
+      if (ref) refs.push(ref)
+    }
   }
   return refs
 }
@@ -1006,6 +1034,13 @@ async function handleRepresentationChange() {
       activeColorTheme.value,
       record.preferComplexRepresentationForCartoon,
     )
+    // 样式切换后旧 representation 节点已被销毁，换帧校验必须改用新建的节点。
+    record.representationRefs = collectLiveRepresentationRefs(currentViewer, record.structureRefKey)
+    for (const trajectoryModel of activeTrajectoryModels) {
+      if (trajectoryModel.structureRefKey === record.structureRefKey) {
+        trajectoryModel.representationRefs = record.representationRefs
+      }
+    }
   }
 
   await syncSelectedResiduesHighlight()

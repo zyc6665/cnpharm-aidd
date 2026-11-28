@@ -14,6 +14,7 @@
       :can-export-movie="Boolean(movieFile) && !movieUnavailable"
       @export-movie="handleExportMovie"
       @movie-unavailable="handleMovieUnavailable"
+      @movie-available="handleMovieAvailable"
     />
   </section>
 </template>
@@ -100,8 +101,30 @@ const noticeMessage = computed(() => {
   return movieFile.value ? t('artifactAssets.mdTrajectory.movieNotice') : t('artifactAssets.mdTrajectory.notice')
 })
 
-function handleMovieUnavailable(): void {
+interface MovieSource {
+  artifactId: string
+  versionId: string
+}
+
+// 预览的加载是异步的：版本刷新后，旧版本那次加载的失败事件仍可能迟到。
+// 只接受与当前版本一致的事件，避免把新版本的影片重新锁成降级状态。
+function isCurrentMovieSource(source?: MovieSource): boolean {
+  if (!source) return true
+  return (
+    source.artifactId === props.artifact.id &&
+    source.versionId === props.artifact.latest_version.id
+  )
+}
+
+function handleMovieUnavailable(source?: MovieSource): void {
+  if (!isCurrentMovieSource(source)) return
   movieUnavailable.value = true
+}
+
+// 同一版本重新拉取后影片可能恢复：预览重新选中影片时解除降级。
+function handleMovieAvailable(source?: MovieSource): void {
+  if (!isCurrentMovieSource(source)) return
+  movieUnavailable.value = false
 }
 
 async function handleExportMovie(): Promise<void> {
