@@ -615,10 +615,54 @@ def _mdtraj_gro_atom_name(atom_name: str, resname: str = "") -> str:
     return _GRO_RESIDUE_ATOM_ALIASES.get(res, {}).get(name, base.get(name, name))
 
 
+_HYBRID36_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# GROMACS' PDB writer stores only resSeq % 10000 in the four-column field while
+# GRO keeps the full five-column number, so the two files describe one residue
+# with e.g. 0 (PDB) and 10000 (GRO) once a system has more than 9999 residues.
+_PDB_RESSEQ_MODULUS = 10000
+
+
 def _residue_number(value: Any) -> int | None:
+    """Parse a residue number, decoding the hybrid-36 upper-case block.
+
+    GROMACS writes plain decimals, but a topology PDB produced by other tools
+    may encode resSeq > 9999 as hybrid-36 (``A000`` == 10000). Decoding it keeps
+    the comparison honest instead of treating that residue as unparsable.
+    """
     text = "" if value is None else str(value).strip()
-    digits = text[1:] if text[:1] in ("+", "-") else text
-    return int(text) if digits.isdigit() else None
+    if not text:
+        return None
+    if text[:1] in ("+", "-"):
+        digits = text[1:]
+        return int(text) if digits.isdigit() else None
+    if text.isdigit():
+        return int(text)
+    if len(text) != 4 or not text.isupper():
+        return None
+    if any(character not in _HYBRID36_DIGITS for character in text):
+        return None
+    # The upper-case block always starts with a letter (A000 == 10000). A
+    # digit-led field such as 9ZZZ is not valid hybrid-36 and must stay
+    # unparsable instead of decoding to 9999.
+    if text[0] not in _HYBRID36_DIGITS[10:]:
+        return None
+    return int(text, 36) - 10 * 36 ** 3 + 10 ** 4
+
+
+def _residue_numbers_match(expected: int, actual: int) -> bool:
+    """Whether two numbers denote the same residue of the same ``.tpr``.
+
+    A folded PDB number (0) still identifies the GRO residue 10000. Hybrid-36
+    numbers decode to >= 10000 and were not folded, so they compare directly.
+    """
+    if expected == actual:
+        return True
+    return (
+        expected >= 0
+        and actual >= _PDB_RESSEQ_MODULUS
+        and expected == actual % _PDB_RESSEQ_MODULUS
+    )
 
 
 def _atom_serial(atom: Any) -> int | None:
@@ -752,28 +796,53 @@ def _validate_trajectory_topology(
             [_atom_serial(atom) for atom in traj_atoms]
         )
         kept_positions = set(kept_order)
-        comparable = set(expected_trusted) & set(traj_trusted) & kept_positions
-        for position in sorted(comparable):
-            if expected_trusted[position] != traj_trusted[position]:
+        # Per-atom identity: compare every kept position both files report a
+        # serial for. A serial that also appears on a filtered water atom stays
+        # unambiguous here -- reordering a block changes the value at that
+        # position, while the solvent copy never enters the comparison.
+        for position in kept_order:
+            expected_serial = _atom_serial(templates[position])
+            traj_serial = _atom_serial(traj_atoms[position])
+            if (
+                expected_serial is not None
+                and traj_serial is not None
+                and expected_serial != traj_serial
+            ):
                 raise ValueError(
                     "GRO trajectory atom serials differ from topology PDB; refusing to render"
                 )
+        # A serial unique in the whole file additionally proves the kept order
+        # when a rebuilt topology legitimately renumbers (42.. -> 1..).
+        comparable = set(expected_trusted) & set(traj_trusted) & kept_positions
         serials_prove_order = len(comparable) == len(kept_order)
         # Residue numbers are the fallback identity, but a rebuilt topology may
-        # legitimately renumber (42.. -> 1..) or drop solvent residues (1, 3).
-        # Only two cases are provably in order: identical numbering, or a changed
-        # numbering backed by an atom-serial match at every kept position.
-        # Otherwise the movie is skipped instead of risking an atom-order mismatch.
+        # legitimately renumber or drop solvent residues. Only two cases are
+        # provably in order: identical numbering, or a changed numbering backed
+        # by an atom-serial match at every kept position.
         expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
         traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
-        # Compare pair by pair: an unparseable residue number (e.g. hybrid36
-        # ``A000``) must not mask a provable change at another residue.
-        numbering_changed = any(
-            expected_number is not None
-            and traj_number is not None
-            and expected_number != traj_number
+        # Compare pair by pair: an unparseable residue number must not mask a
+        # provable change at another residue, and a PDB field folded modulo
+        # 10000 must not read as a renumbering of the same .tpr residue.
+        pairs = [
+            (expected_number, traj_number)
             for expected_number, traj_number in zip(expected_numbers, traj_numbers)
+            if expected_number is not None and traj_number is not None
+        ]
+        numbering_changed = any(
+            not _residue_numbers_match(expected_number, traj_number)
+            for expected_number, traj_number in pairs
         )
+        # A folded field is only believed when every kept residue carries a
+        # readable number: with an undecodable field the correspondence at that
+        # residue is unknown, so a cycle such as GRO [10001, 20001, 1] against
+        # PDB [1, ?, ?] cannot be ruled out by the numbers that remain.
+        folded = any(expected_number != traj_number for expected_number, traj_number in pairs)
+        if folded and len(pairs) < len(expected_numbers) and not serials_prove_order:
+            raise ValueError(
+                "GRO trajectory residue numbering differs from topology PDB "
+                "without atom-serial proof; refusing to render"
+            )
         if numbering_changed and not serials_prove_order:
             raise ValueError(
                 "GRO trajectory residue numbering differs from topology PDB "

@@ -1936,8 +1936,8 @@ def test_gro_topology_rejects_renumbering_when_serials_repeat(tmp_path: Path):
     xtc.write_bytes(b"xtc")
 
     gro_atoms = [
-        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
-        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=1),
     ]
     trajectory = _two_frame_trajectory(gro_atoms)
     with pytest.raises(ValueError, match="without atom-serial proof"):
@@ -1985,9 +1985,10 @@ def test_gro_topology_counts_serials_before_desolvation(tmp_path: Path):
         )
 
 
-def test_gro_topology_rejects_numbering_change_hidden_by_unparsable_residue(tmp_path: Path):
-    """One unparsable hybrid-36 residue number (``A000``) must not mask a provable
-    change at another residue: 43 vs 3 without full serial proof is a mismatch."""
+def test_gro_topology_rejects_numbering_change_behind_hybrid36_residue(tmp_path: Path):
+    """Hybrid-36 ``A000`` encodes 10000: it must decode and expose the mismatch
+    against GRO 10001 instead of being skipped as unparsable while the second
+    residue (43 == 43) matches."""
     ca_line = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
     hybrid_line = ca_line[:22] + "A000" + ca_line[26:]
     pdb = tmp_path / "topology.pdb"
@@ -2007,8 +2008,8 @@ def test_gro_topology_rejects_numbering_change_hidden_by_unparsable_residue(tmp_
     xtc.write_bytes(b"xtc")
 
     gro_atoms = [
-        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
-        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=3, serial=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=10001),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=43, serial=2),
     ]
     trajectory = _two_frame_trajectory(gro_atoms)
     with pytest.raises(ValueError, match="without atom-serial proof"):
@@ -2017,6 +2018,271 @@ def test_gro_topology_rejects_numbering_change_hidden_by_unparsable_residue(tmp_
             topology_gro=gro,
             trajectory_loader=lambda top, traj: trajectory,
         )
+
+
+def test_gro_topology_accepts_pdb_residue_fold_after_atom_serial_wrap(tmp_path: Path):
+    """GROMACS folds atom serials modulo 100000 and PDB resSeq modulo 10000. In a
+    100,004-atom system the solute serials 1/2 repeat on water, so residue
+    identity rests on the numbers: PDB ``0`` (folded 10000) must match GRO
+    ``10000`` instead of being rejected as a renumbering."""
+    total_atoms = 100_004
+
+    def folded_serial(position: int) -> int:
+        return (position + 1) % 100_000
+
+    pdb_lines = [
+        _pdb_line(1, "CA", "ALA", "A", 9999, element="C"),
+        _pdb_line(2, "C1", "LIG", "L", 0, record="HETATM", element="C"),
+    ]
+    for position in range(2, total_atoms):
+        residue_number = 10000 + (position - 2) // 3
+        pdb_lines.append(
+            _pdb_line(
+                folded_serial(position), "OW", "SOL", "A",
+                residue_number % 10_000, record="HETATM", element="O",
+            )
+        )
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text("\n".join(pdb_lines) + "\n", encoding="utf-8")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=9999, serial=1),
+        _NamedGroAtom("C1", "C", "LIG", resindex=1, resseq=10000, serial=2),
+    ]
+    for position in range(2, total_atoms):
+        residue_index = (position - 2) // 3
+        gro_atoms.append(
+            _NamedGroAtom(
+                "OW", "O", "SOL",
+                resindex=2 + residue_index,
+                resseq=10000 + residue_index,
+                serial=folded_serial(position),
+            )
+        )
+    coordinates = [[0.1 * (index % 1000), 0.0, 0.0] for index in range(total_atoms)]
+    trajectory = _TopologyTrajectory(
+        [coordinates, coordinates], [0.0, 10.0], types.SimpleNamespace(atoms=gro_atoms)
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text(f"test gro\n{total_atoms}\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        config=movie.TrajectoryMovieConfig(ligand_resname="LIG"),
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def _folded_residue_fixture(tmp_path: Path, gro_atoms: list[_NamedGroAtom]):
+    """PDB ALA 1 / GLY 2 / ALA 1 without serials; GRO carries the shuffled or
+    original full numbers for the same three residues."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CA", "GLY", "A", 2, element="C"),
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+    return pdb, gro, xtc, _two_frame_trajectory(gro_atoms)
+
+
+def _folded_serial_fixture(
+    tmp_path: Path,
+    pdb_residues: list[tuple[str, int, int]],
+    gro_residues: list[tuple[str, int, int]],
+):
+    """One CA per kept residue plus four SOL atoms repeating the kept serials, so
+    no serial is unique in either file and only the value at each position can
+    identify an atom. Entries are ``(resname, resseq, serial)`` packets."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(serial, "CA", resname, "A", resseq, element="C")
+                for resname, resseq, serial in pdb_residues
+            ]
+            + [
+                _pdb_line(serial, "OW", "SOL", "A", 5000 + index, record="HETATM", element="O")
+                for index, (_, _, serial) in enumerate(pdb_residues)
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text(
+        f"test gro\n{2 * len(gro_residues)}\n   5.00000   5.00000   5.00000\n",
+        encoding="utf-8",
+    )
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+    atoms = [
+        _NamedGroAtom("CA", "C", resname, resindex=index, resseq=resseq, serial=serial)
+        for index, (resname, resseq, serial) in enumerate(gro_residues)
+    ] + [
+        _NamedGroAtom(
+            "OW", "O", "SOL", resindex=len(gro_residues) + index,
+            resseq=5000 + index, serial=serial,
+        )
+        for index, (_, _, serial) in enumerate(gro_residues)
+    ]
+    return pdb, gro, xtc, _two_frame_trajectory(atoms)
+
+
+def test_gro_topology_rejects_block_swap_with_duplicate_serials(tmp_path: Path):
+    """PDB folds full residue numbers (1 == 10001), so swapping the two ALA/GLY
+    blocks leaves every number pair congruent. The serials travel with the atoms,
+    and even though solvent repeats 1-4 file-wide, comparing the value at each
+    kept position still exposes the swap."""
+    pdb_residues = [("ALA", 1, 1), ("GLY", 2, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    swapped = [("ALA", 1, 3), ("GLY", 2, 4), ("ALA", 10001, 1), ("GLY", 10002, 2)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, swapped)
+    with pytest.raises(ValueError, match="atom serials differ"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_accepts_residue_number_reset_with_duplicate_serials(tmp_path: Path):
+    """GROMACS may reset residue numbers between molecules: GRO [10001, 10002,
+    1, 2] folds to PDB [1, 2, 1, 2]. Every pair is congruent and every serial
+    matches at its position, so this is genuine output rather than a swap."""
+    pdb_residues = [("ALA", 1, 1), ("GLY", 2, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    ordered = [("ALA", 10001, 1), ("GLY", 10002, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, ordered)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_gro_residue_wrap_at_100000(tmp_path: Path):
+    """The five-column GRO resnr wraps at 100000: [99998, 99999, 0, 1] folds to
+    PDB [9998, 9999, 0, 1]. A zero in either file is a wrapped full number, not
+    a sign that the two files disagree."""
+    pdb_residues = [("ALA", 9998, 1), ("GLY", 9999, 2), ("ALA", 0, 3), ("GLY", 1, 4)]
+    ordered = [("ALA", 99998, 1), ("GLY", 99999, 2), ("ALA", 0, 3), ("GLY", 1, 4)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, ordered)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_rejects_cycle_hidden_by_unreadable_residue_fields(tmp_path: Path):
+    """With PDB fields [1, 9ZZZ, 8ZZZ, 2] against GRO [10001, 20001, 1, 30002]
+    only two pairs stay readable; they are congruent, but the correspondence at
+    the unreadable residues is unknown, so a cycle cannot be ruled out without
+    atom serials."""
+    base = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    pdb_lines = [
+        base,
+        base[:22] + "9ZZZ" + base[26:],
+        base[:22] + "8ZZZ" + base[26:],
+        _pdb_line(0, "CA", "ALA", "A", 2, element="C"),
+    ]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text("\n".join(pdb_lines) + "\n", encoding="utf-8")
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n4\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=10001),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=20001),
+        _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=3, resseq=30002),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_accepts_folded_residues_that_keep_their_order(tmp_path: Path):
+    """The same residues in their original order read 1, 2, 10001; every pair is
+    congruent and the GRO numbers increase, so the fold is genuine."""
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+        _NamedGroAtom("CA", "C", "GLY", resindex=1, resseq=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=10001),
+    ]
+    pdb, gro, xtc, trajectory = _folded_residue_fixture(tmp_path, gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        ("A000", 10000),
+        ("ZZZZ", 1223055),
+        ("9999", 9999),
+        ("-999", -999),
+        ("9ZZZ", None),
+        ("a000", None),
+        ("A00a", None),
+        ("", None),
+    ],
+)
+def test_gro_residue_number_only_decodes_valid_hybrid36(field: str, expected: int | None):
+    """The upper-case block always starts with a letter; a digit-led field such
+    as 9ZZZ is not hybrid-36 and must stay unparsable."""
+    assert movie._residue_number(field) == expected
+
+
+def test_gro_topology_ignores_invalid_hybrid36_residue_fields(tmp_path: Path):
+    """``9ZZZ`` is not hybrid-36. It must not decode to 9999 and turn a valid
+    GRO 42 into a numbering mismatch when the other residue (43 == 43) matches."""
+    ca_line = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    invalid_line = ca_line[:22] + "9ZZZ" + ca_line[26:]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join([invalid_line, _pdb_line(2, "CA", "ALA", "A", 43, element="C")]) + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=42),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=43, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
 
 
 def test_gro_topology_accepts_case_preserved_atom_names(tmp_path: Path):
