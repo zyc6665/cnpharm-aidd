@@ -615,10 +615,49 @@ def _mdtraj_gro_atom_name(atom_name: str, resname: str = "") -> str:
     return _GRO_RESIDUE_ATOM_ALIASES.get(res, {}).get(name, base.get(name, name))
 
 
+_HYBRID36_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# GROMACS' PDB writer stores only resSeq % 10000 in the four-column field while
+# GRO keeps the full five-column number, so the two files describe one residue
+# with e.g. 0 (PDB) and 10000 (GRO) once a system has more than 9999 residues.
+_PDB_RESSEQ_MODULUS = 10000
+
+
 def _residue_number(value: Any) -> int | None:
+    """Parse a residue number, decoding the hybrid-36 upper-case block.
+
+    GROMACS writes plain decimals, but a topology PDB produced by other tools
+    may encode resSeq > 9999 as hybrid-36 (``A000`` == 10000). Decoding it keeps
+    the comparison honest instead of treating that residue as unparsable.
+    """
     text = "" if value is None else str(value).strip()
-    digits = text[1:] if text[:1] in ("+", "-") else text
-    return int(text) if digits.isdigit() else None
+    if not text:
+        return None
+    if text[:1] in ("+", "-"):
+        digits = text[1:]
+        return int(text) if digits.isdigit() else None
+    if text.isdigit():
+        return int(text)
+    if len(text) != 4 or not text.isupper():
+        return None
+    if any(character not in _HYBRID36_DIGITS for character in text):
+        return None
+    return int(text, 36) - 10 * 36 ** 3 + 10 ** 4
+
+
+def _residue_numbers_match(expected: int, actual: int) -> bool:
+    """Whether two numbers denote the same residue of the same ``.tpr``.
+
+    A folded PDB number (0) still identifies the GRO residue 10000. Hybrid-36
+    numbers decode to >= 10000 and were not folded, so they compare directly.
+    """
+    if expected == actual:
+        return True
+    return (
+        expected >= 0
+        and actual >= _PDB_RESSEQ_MODULUS
+        and expected == actual % _PDB_RESSEQ_MODULUS
+    )
 
 
 def _atom_serial(atom: Any) -> int | None:
@@ -766,12 +805,13 @@ def _validate_trajectory_topology(
         # Otherwise the movie is skipped instead of risking an atom-order mismatch.
         expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
         traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
-        # Compare pair by pair: an unparseable residue number (e.g. hybrid36
-        # ``A000``) must not mask a provable change at another residue.
+        # Compare pair by pair: an unparseable residue number must not mask a
+        # provable change at another residue, and a PDB field folded modulo
+        # 10000 must not read as a renumbering of the same .tpr residue.
         numbering_changed = any(
             expected_number is not None
             and traj_number is not None
-            and expected_number != traj_number
+            and not _residue_numbers_match(expected_number, traj_number)
             for expected_number, traj_number in zip(expected_numbers, traj_numbers)
         )
         if numbering_changed and not serials_prove_order:
