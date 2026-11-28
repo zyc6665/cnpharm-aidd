@@ -2977,6 +2977,9 @@ export default {
       },
       trajectoryNotice: 'In-browser DCD playback is not supported (MoleculeViewer has no trajectory/dual-file support). Download the trajectory to view it locally.',
       staticPreviewNote: 'This is a static preview of the topology PDB; download the DCD for trajectory playback.',
+      downloadMovie: 'Download multi-frame PDB (Movie)',
+      movieNotice: 'A multi-frame PDB-movie is available — play the trajectory directly in the 3D viewer below, or download trajectory_movie.pdb to view it locally.',
+      moviePreviewNote: 'Play the multi-frame PDB-movie below; drag the playback bar or press play to inspect the trajectory.',
       structurePreview: 'Structure preview',
       noTopology: 'No topology structure',
       chartEmpty: 'No data',
@@ -3314,6 +3317,15 @@ export default {
     visualizationNearbyEmpty: 'No receptor residues found within 5 Å of ligand',
     visualizationUnsupported: 'These output files are not supported for online preview yet',
     visualizationUnsupportedDesc: 'PDB / mmCIF / PDBQT / SDF / MOL2 previews are enabled first. Other files can still be downloaded directly.',
+    visualizationTrajectoryControls: 'Trajectory playback controls',
+    visualizationTrajectoryPlay: 'Play',
+    visualizationTrajectoryPause: 'Pause',
+    visualizationTrajectoryPrev: 'Previous frame',
+    visualizationTrajectoryNext: 'Next frame',
+    visualizationTrajectorySlider: 'Trajectory frame',
+    visualizationTrajectorySpeed: 'Playback speed',
+    visualizationTrajectoryLoop: 'Loop',
+    visualizationTrajectoryExport: 'Export movie',
     filePreview: 'Result file',
     filePreviewFile: 'File',
     filePreviewLoading: 'Loading file content...',
@@ -3911,7 +3923,8 @@ export default {
     fileName: 'File name',
     fileSize: 'Size',
     mdTrajectory: {
-      notice: 'Trajectory files (e.g. DCD) are download-only; a static topology preview is shown here. See the task MD result page for RMSD/RMSF curves.'
+      notice: 'Trajectory files (e.g. DCD) are download-only; a static topology preview is shown here. See the task MD result page for RMSD/RMSF curves.',
+      movieNotice: 'A multi-frame PDB-movie is available — play the trajectory directly in the 3D viewer below, or export/download trajectory_movie.pdb to view it locally.'
     },
     compoundSet: {
       notice: 'Compound set artifact: download member files here, or manage them on the candidates page.',

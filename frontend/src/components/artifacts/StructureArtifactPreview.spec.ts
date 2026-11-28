@@ -1,18 +1,36 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import StructureArtifactPreview from './StructureArtifactPreview.vue'
-import type { TypedArtifact } from '@/types/artifacts'
+import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
 
 vi.mock('@/components/tasks/MoleculeViewer.vue', () => ({
   __esModule: true,
   default: {
     name: 'MoleculeViewer',
-    props: ['scene', 'mode'],
-    template: '<div data-testid="molecule-viewer" :data-mode="mode">{{ scene.entries[0].url }}</div>',
+    props: ['scene', 'mode', 'frameTimesPs', 'canExportMovie'],
+    emits: ['export-movie'],
+    template:
+      '<div data-testid="molecule-viewer" :data-mode="mode" :data-prefer-complex="scene.entries[0].preferComplexRepresentation" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" @click="$emit(\'export-movie\')">{{ scene.entries[0].url }}</div>',
   },
 }))
 
-function makeArtifact(artifactType: TypedArtifact['artifact_type'], filename: string): TypedArtifact {
+function makeFile(role: string, filename: string, isPrimary = false): ArtifactVersionFile {
+  return {
+    id: `file-${role}`,
+    role,
+    file_id: `file-${role}`,
+    is_primary: isPrimary,
+    sort_order: 0,
+    filename,
+    download_url: `/api/v1/files/${role}/download`,
+  }
+}
+
+function makeArtifact(
+  artifactType: TypedArtifact['artifact_type'],
+  filename: string,
+  files?: ArtifactVersionFile[],
+): TypedArtifact {
   return {
     id: 'artifact-1',
     project_id: 'project-1',
@@ -27,6 +45,7 @@ function makeArtifact(artifactType: TypedArtifact['artifact_type'], filename: st
       sha256: 'a'.repeat(64),
       status: 'available',
       created_at: '2026-11-23T00:00:00Z',
+      ...(files ? { files } : {}),
     },
     created_at: '2026-11-23T00:00:00Z',
     updated_at: '2026-11-23T00:00:00Z',
@@ -73,5 +92,47 @@ describe('StructureArtifactPreview', () => {
     })
     await flushPromises()
     expect(wrapper.get('[data-testid="molecule-viewer"]').attributes('data-mode')).toBe('docking')
+  })
+
+  it('prefers the multi-frame movie file and forwards playback props', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', [
+          makeFile('topology_pdb', 'topology.pdb'),
+          makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+        ]),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+        frameTimesPs: [0, 2, 4],
+        canExportMovie: true,
+      },
+    })
+
+    await flushPromises()
+    const viewer = wrapper.get('[data-testid="molecule-viewer"]')
+    expect(viewer.attributes('data-prefer-complex')).toBe('true')
+    expect(viewer.attributes('data-can-export')).toBe('true')
+    expect(viewer.attributes('data-frame-times')).toBe('[0,2,4]')
+    expect(viewer.text()).toContain('/api/v1/files/trajectory_movie_pdb/download')
+
+    await viewer.trigger('click')
+    expect(wrapper.emitted('export-movie')).toHaveLength(1)
+  })
+
+  it('falls back to the topology file without complex representation for legacy tasks', async () => {
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', [
+          makeFile('topology_pdb', 'topology.pdb', true),
+        ]),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+        canExportMovie: false,
+      },
+    })
+
+    await flushPromises()
+    const viewer = wrapper.get('[data-testid="molecule-viewer"]')
+    expect(viewer.attributes('data-prefer-complex')).toBe('false')
+    expect(viewer.attributes('data-can-export')).toBe('false')
+    expect(viewer.text()).toContain('/api/v1/files/topology_pdb/download')
   })
 })

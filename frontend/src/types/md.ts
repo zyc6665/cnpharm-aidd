@@ -25,9 +25,15 @@ export interface MdSubmitParams {
   analysis_stride?: number
 }
 
-/** P-27 `md_trajectory@1` 产物的 file role（`rmsf_csv` 自 v1.1、`contacts_csv` / `interactions_json` 自 v1.1.0 起产出）。 */
+/**
+ * P-27 `md_trajectory@1` 产物的 file role（`rmsf_csv` 自 v1.1、`contacts_csv` / `interactions_json` 自 v1.1.0 起产出）。
+ *
+ * `trajectory_movie_pdb` 自「多帧 PDB-movie」起产出：把轨迹按 stride 抽成全帧堆叠的单文件 PDB，
+ * 供 Mol* 在浏览器内多帧原地播放（历史旧任务无此 role，回退到 `topology_pdb` 静态预览）。
+ */
 export type MdTrajectoryRole =
   | 'topology_pdb'
+  | 'trajectory_movie_pdb'
   | 'trajectory_dcd'
   | 'analysis_csv'
   | 'rmsf_csv'
@@ -37,6 +43,7 @@ export type MdTrajectoryRole =
 
 export const MD_TRAJECTORY_ROLES: readonly MdTrajectoryRole[] = [
   'topology_pdb',
+  'trajectory_movie_pdb',
   'trajectory_dcd',
   'analysis_csv',
   'rmsf_csv',
@@ -121,6 +128,16 @@ export interface MdTrajectoryMetadata {
   ligand_resname?: string | null
   interaction_mode?: string
   interaction_engine?: string
+  /** 多帧 PDB-movie 的帧数（`trajectory_movie_pdb` 实际堆叠的帧数，非原始总帧数）。 */
+  movie_frames?: number
+  /** 抽取 movie 时相对原始轨迹的步长（每隔多少帧取一帧）。 */
+  movie_stride?: number
+  /** movie 是否已剔除溶剂（播放时结构更清爽）。 */
+  movie_desolvated?: boolean
+  /** movie 是否已做骨架对齐（避免整帧漂移）。 */
+  movie_aligned?: boolean
+  /** 每一 movie 帧对应的物理时间（ps），长度与 `movie_frames` 一致，用于播放条的帧标签。 */
+  movie_time_ps?: number[]
   [key: string]: unknown
 }
 
