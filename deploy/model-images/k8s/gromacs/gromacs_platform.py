@@ -24,13 +24,15 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 GMX = os.environ.get("GMX_BIN", "gmx")
 
@@ -510,6 +512,201 @@ def run_interactions_postprocess(
         }
 
 
+_INTEGER_RE = re.compile(r"[+-]?\d+(?:\.0+)?")
+
+
+def _strict_int(value: Any, *, minimum: int, warnings: list[str], label: str, maximum: int | None = None) -> int | None:
+    """Parse one movie setting without ``float()`` (which rounds ``1024.000…01``
+    and raises ``OverflowError`` on ``10**400``): bool is rejected, int passes
+    through, float must be finite and integral, str must match a strict integer
+    pattern, then the range bounds are enforced."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        warnings.append(f"{label} rejected non-numeric {value!r}")
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float):
+        if not (math.isfinite(value) and value.is_integer()):
+            warnings.append(f"{label} ignored non-integer {value!r}")
+            return None
+        number = int(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if _INTEGER_RE.fullmatch(text) is None:
+            warnings.append(f"{label} ignored invalid {value!r}")
+            return None
+        try:
+            number = int(text.split(".", 1)[0])
+        except (ValueError, OverflowError):
+            warnings.append(f"{label} ignored out-of-range {value!r}")
+            return None
+    else:
+        warnings.append(f"{label} ignored invalid {value!r}")
+        return None
+    if number < minimum or (maximum is not None and number > maximum):
+        warnings.append(f"{label} out of range: {number} (min {minimum}, max {maximum})")
+        return None
+    return number
+
+
+def _movie_file_ready(path: Path, summary: dict[str, Any]) -> bool:
+    """True only when the movie was declared written *and* the file is non-empty."""
+    if summary.get("written") is not True:
+        return False
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _movie_metadata_fields(summary: dict[str, Any]) -> dict[str, Any]:
+    """Metadata keys the result page reads; ``movie_time_ps`` is a per-MODEL list."""
+    frames = int(summary.get("movie_frames") or 0)
+    try:
+        times = [float(value) for value in (summary.get("frame_times_ps") or [])]
+    except (TypeError, ValueError):
+        times = []
+    if not all(math.isfinite(value) for value in times):
+        times = []
+    return {
+        "movie_frames": frames,
+        "movie_stride": int(summary.get("movie_stride") or 1),
+        "movie_desolvated": bool(summary.get("desolvated")),
+        "movie_aligned": bool(summary.get("aligned")),
+        "movie_time_ps": times if (summary.get("written") and frames and len(times) == frames) else [],
+    }
+
+
+def _empty_movie_summary(warnings: list[str]) -> dict[str, Any]:
+    """Neutral movie result used whenever the optional movie cannot be produced."""
+    return {
+        "written": False, "movie_frames": 0, "total_source_frames": 0, "movie_stride": 1,
+        "frame_indices": [], "frame_times_ps": [], "atom_count": 0, "desolvated": False,
+        "aligned": False, "conect_count": 0, "size_bytes": 0,
+        "warnings": warnings,
+    }
+
+
+def _first_existing_file(candidates: Sequence[Path]) -> Path | None:
+    """First readable candidate; callers run this inside the movie guard because
+    ``Path.is_file`` can raise ``PermissionError`` on an unreadable parent."""
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    return None
+
+
+def _remove_movie_path(path: Path) -> bool:
+    """Best-effort removal, including files left unreadable by an earlier attempt."""
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except OSError:
+        try:
+            os.chmod(path, 0o600)
+            path.unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False
+
+
+def _discard_movie_target(output_dir: Path, warnings: list[str]) -> None:
+    """Drop a movie left by an earlier attempt before this run decides anything.
+
+    The uploader publishes ``result.json`` last and treats every file under
+    ``output_dir`` as part of the result: a stale movie is either uploaded without
+    a reference or, when unreadable, blocks the whole MD result.
+    """
+    target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
+    if not _remove_movie_path(target):
+        warnings.append(f"stale trajectory movie could not be removed: {target}")
+
+
+def _publish_movie(
+    output_dir: Path, staging_target: Path, movie_summary: dict[str, Any], warnings: list[str],
+) -> dict[str, str] | None:
+    """Move a validated movie into ``artifacts`` and return its SHA-256 reference.
+
+    The movie is exported outside ``artifacts`` so a hashing or permission failure
+    can never leave an unreadable file behind for the output uploader, which
+    publishes ``result.json`` last and would otherwise fail on that file.  Any
+    failure also clears the final path so a movie from an earlier attempt cannot
+    survive without a matching reference.
+    """
+    target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
+    if not _movie_file_ready(staging_target, movie_summary):
+        if not _remove_movie_path(target):
+            warnings.append(f"failed trajectory movie could not be removed: {target}")
+        return None
+    try:
+        digest = sha256_file(staging_target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging_target, target)
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 - a broken/missing movie ref must not lose the MD result
+        warnings.append(f"trajectory movie reference failed: {exc}")
+        if not _remove_movie_path(target):
+            warnings.append(f"failed trajectory movie could not be removed: {target}")
+        return None
+    return {"path": "artifacts/trajectory_movie.pdb", "sha256": digest}
+
+
+def run_trajectory_movie_postprocess(
+    topology_pdb: Path, trajectory_path: Path, out_dir: Path, *,
+    ligand_resname: str = "LIG", ligand_template_sdf: Path | None = None,
+    ligand_itp_candidates: Sequence[Path] = (), water_resname: str | None = None,
+    run_params: dict[str, Any] | None = None,
+    topology_gro_candidates: Sequence[Path] = (), superpose: bool = True,
+) -> dict[str, Any]:
+    """Export ``trajectory_movie.pdb`` isolated from the MD run.  Every movie
+    setting is parsed inside this guard (run params -> env -> default) so a bad
+    value only records a warning; a finished trajectory is never discarded."""
+    warnings: list[str] = []
+    try:
+        try:
+            import trajectory_movie
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import trajectory_movie
+        params = run_params if isinstance(run_params, dict) else {}
+        movie_target = Path(out_dir) / "trajectory_movie.pdb"
+        movie_target.unlink(missing_ok=True)  # drop a stale movie inside the guard
+        ligand_itp = _first_existing_file(ligand_itp_candidates)
+        topology_gro = _first_existing_file(topology_gro_candidates)
+
+        def _pick(key: str, env: str, minimum: int, maximum: int | None = None) -> int | None:
+            found = _strict_int(params.get(key), minimum=minimum, maximum=maximum, warnings=warnings, label=key)
+            if found is not None:
+                return found
+            return _strict_int(os.environ.get(env), minimum=minimum, maximum=maximum, warnings=warnings, label=env)
+
+        max_frames = _pick("movie_max_frames", "MD_MOVIE_MAX_FRAMES",
+                           trajectory_movie.MIN_MOVIE_MAX_FRAMES, trajectory_movie.MAX_MOVIE_MAX_FRAMES)
+        stride = _pick("movie_stride", "MD_MOVIE_STRIDE", 1)
+        max_bytes = _pick("movie_max_bytes", "MD_MOVIE_MAX_BYTES", trajectory_movie.MIN_MOVIE_MAX_BYTES)
+        cfg = trajectory_movie.TrajectoryMovieConfig(
+            max_frames=trajectory_movie.DEFAULT_MOVIE_MAX_FRAMES if max_frames is None else max_frames,
+            stride=stride, max_bytes=trajectory_movie.DEFAULT_MOVIE_MAX_BYTES if max_bytes is None else max_bytes,
+            ligand_resname=ligand_resname, water_resname=water_resname, superpose=bool(superpose),
+        )
+        summary = trajectory_movie.export_desolvated_pdb_movie(
+            topology_pdb, trajectory_path, movie_target,
+            config=cfg, ligand_template_sdf=ligand_template_sdf, ligand_itp=ligand_itp, topology_gro=topology_gro,
+        )
+        summary["warnings"] = [*warnings, *(summary.get("warnings") or [])]
+        if summary.get("written") is True and not _movie_file_ready(movie_target, summary):
+            summary["written"] = False
+            summary["warnings"].append("trajectory movie file missing or empty after export")
+        return summary
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 - never discard a finished MD trajectory
+        print(f"[gromacs] trajectory movie skipped: {exc}", flush=True)
+        return _empty_movie_summary([*warnings, f"trajectory movie failed: {exc}"])
+
+
 def ensure_pdb_elements(
     pdb_path: Path,
     element_symbols: list[str],
@@ -687,6 +884,7 @@ def run_pipeline(
     return {
         "duration_ns": nsteps * dt / 1000.0,
         "trajectory_xtc": str(xtc_path),
+        "trajectory_gro": str(gro_path),
         "ligand": param_lig,
     }
 
@@ -785,6 +983,62 @@ def main() -> int:
         water_resname=water_resname,
     )
 
+    progress(96, "trajectory movie")
+    # Reuse only the ITP this task actually produced; never a stale file left in work/.
+    # File probes stay inside run_trajectory_movie_postprocess so a permission error
+    # cannot abort a finished MD result before result.json is written.
+    ligand_itp_candidates: list[Path] = []
+    if param_lig is not None:
+        ligand_itp_candidates = [work / "ligand.itp", Path(getattr(param_lig, "ligand_itp", "") or "")]
+    gro_path = Path(info.get("trajectory_gro") or (work / "md.gro"))
+    movie_warnings: list[str] = []
+    movie_summary = _empty_movie_summary(movie_warnings)
+    movie_ref: dict[str, str] | None = None
+    # A retry can find the previous attempt's movie under artifacts. Drop it before
+    # any early exit (e.g. a failing mkdtemp) so an unreferenced or unreadable file
+    # can never block the uploader from publishing this run's result.json.
+    _discard_movie_target(output_dir, movie_warnings)
+    # Export outside output_dir: a movie that cannot be hashed/moved must leave
+    # nothing behind that the output uploader would try (and fail) to upload.
+    try:
+        staging_dir = Path(tempfile.mkdtemp(prefix=".trajectory-movie-", dir=str(output_dir.parent)))
+    except OSError as exc:
+        movie_warnings.append(f"trajectory movie failed: {exc}")
+    else:
+        try:
+            movie_summary = run_trajectory_movie_postprocess(
+                work / "topology.pdb",
+                xtc_path,
+                staging_dir,
+                ligand_resname=effective_resname,
+                ligand_template_sdf=param_lig.template_sdf if param_lig is not None else None,
+                ligand_itp_candidates=ligand_itp_candidates,
+                water_resname=water_resname,
+                run_params=run_params,
+                topology_gro_candidates=[gro_path],
+            )
+            # Keep the stale-file diagnostics collected before the export: overwriting
+            # them would silently drop a warning this run already decided to record.
+            movie_warnings = [*movie_warnings, *(movie_summary.get("warnings") or [])]
+            movie_ref = _publish_movie(
+                output_dir, staging_dir / "trajectory_movie.pdb", movie_summary, movie_warnings,
+            )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+    effective_movie_summary = (
+        movie_summary
+        if movie_ref is not None
+        else {
+            **movie_summary,
+            "written": False,
+            "movie_frames": 0,
+            "movie_stride": 1,
+            "desolvated": False,
+            "aligned": False,
+            "frame_times_ps": [],
+        }
+    )
+
     metadata = {
         "source_task_id": args.task_id,
         "force_field": force_field,
@@ -800,6 +1054,8 @@ def main() -> int:
         "ligand_resname": effective_resname if param_lig is not None else None,
         "interaction_mode": interaction_summary.get("mode"),
         "interaction_engine": interaction_summary.get("engine"),
+        **_movie_metadata_fields(effective_movie_summary),
+        **({"movie_warnings": movie_warnings} if movie_warnings else {}),
     }
     write_json(out / "metadata.json", metadata)
     report = {
@@ -816,6 +1072,7 @@ def main() -> int:
         "interaction_mode": interaction_summary.get("mode"),
         "interaction_engine": interaction_summary.get("engine"),
         "contacts_count": int((interaction_summary.get("summary") or {}).get("total_interactions") or 0),
+        "movie_frames": metadata["movie_frames"],
     }
     write_json(out / "report.json", report)
 
@@ -828,6 +1085,7 @@ def main() -> int:
         **({"contacts_csv": file_ref(output_dir, "artifacts/contacts.csv")} if (out / "contacts.csv").is_file() else {}),
         **({"interactions_json": file_ref(output_dir, "artifacts/interactions.json")}
            if (out / "interactions.json").is_file() else {}),
+        **({"trajectory_movie_pdb": movie_ref} if movie_ref is not None else {}),
     }
 
     result = {
