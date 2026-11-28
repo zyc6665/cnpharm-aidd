@@ -2077,6 +2077,110 @@ def test_gro_topology_accepts_pdb_residue_fold_after_atom_serial_wrap(tmp_path: 
     assert stats["written"] is True
 
 
+def _folded_residue_fixture(tmp_path: Path, gro_atoms: list[_NamedGroAtom]):
+    """PDB ALA 1 / GLY 2 / ALA 1 without serials; GRO carries the shuffled or
+    original full numbers for the same three residues."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CA", "GLY", "A", 2, element="C"),
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+    return pdb, gro, xtc, _two_frame_trajectory(gro_atoms)
+
+
+def test_gro_topology_rejects_swapped_residues_that_fold_to_the_same_field(tmp_path: Path):
+    """Swapping residues numbered 1 and 10001 keeps every folded pair congruent
+    (1 vs 10001, 2 vs 2, 1 vs 1) and no serial is trustworthy, so only the
+    order of GRO numbers exposes the swap: 10001 before 1 is a decrease."""
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=10001),
+        _NamedGroAtom("CA", "C", "GLY", resindex=1, resseq=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=1),
+    ]
+    pdb, gro, xtc, trajectory = _folded_residue_fixture(tmp_path, gro_atoms)
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_accepts_folded_residues_that_keep_their_order(tmp_path: Path):
+    """The same residues in their original order read 1, 2, 10001; every pair is
+    congruent and the GRO numbers increase, so the fold is genuine."""
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1),
+        _NamedGroAtom("CA", "C", "GLY", resindex=1, resseq=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=10001),
+    ]
+    pdb, gro, xtc, trajectory = _folded_residue_fixture(tmp_path, gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        ("A000", 10000),
+        ("ZZZZ", 1223055),
+        ("9999", 9999),
+        ("-999", -999),
+        ("9ZZZ", None),
+        ("a000", None),
+        ("A00a", None),
+        ("", None),
+    ],
+)
+def test_gro_residue_number_only_decodes_valid_hybrid36(field: str, expected: int | None):
+    """The upper-case block always starts with a letter; a digit-led field such
+    as 9ZZZ is not hybrid-36 and must stay unparsable."""
+    assert movie._residue_number(field) == expected
+
+
+def test_gro_topology_ignores_invalid_hybrid36_residue_fields(tmp_path: Path):
+    """``9ZZZ`` is not hybrid-36. It must not decode to 9999 and turn a valid
+    GRO 42 into a numbering mismatch when the other residue (43 == 43) matches."""
+    ca_line = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    invalid_line = ca_line[:22] + "9ZZZ" + ca_line[26:]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join([invalid_line, _pdb_line(2, "CA", "ALA", "A", 43, element="C")]) + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=42),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=43, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
 def test_gro_topology_accepts_case_preserved_atom_names(tmp_path: Path):
     """MDTraj looks atom names up case-sensitively against the upper-case XML, so
     a raw ``h1`` stays ``h1``. Upper-casing only the template would map it to
