@@ -84,6 +84,7 @@
               :can-export-movie="Boolean(movieFile) && !movieUnavailable"
               @export-movie="handleExportMovie"
               @movie-unavailable="handleMovieUnavailable"
+              @movie-available="handleMovieAvailable"
             />
             <a-empty v-else :description="t('md.result.noTopology')" />
           </div>
@@ -203,7 +204,24 @@
   )
   // movie 存在但预览加载失败时回退 topology_pdb：此时时间数组与导出都不得继续挂在 movie 上。
   const movieUnavailable = ref(false)
-  function handleMovieUnavailable(): void { movieUnavailable.value = true }
+  interface MovieSource { artifactId: string; versionId: string }
+  // 预览组件的加载是异步的：刷新换版本后，旧版本那次加载的失败事件仍可能迟到。
+  // 事件必须带上来源版本，父页面只接受与当前 artifact 版本一致的状态变更。
+  function isCurrentMovieSource(source?: MovieSource): boolean {
+    const current = artifact.value
+    if (!current) return false
+    if (!source) return true
+    return source.artifactId === current.id && source.versionId === current.latest_version.id
+  }
+  function handleMovieUnavailable(source?: MovieSource): void {
+    if (!isCurrentMovieSource(source)) return
+    movieUnavailable.value = true
+  }
+  // 同一版本重新拉取后影片可能恢复：预览组件重新选中影片时解除降级状态。
+  function handleMovieAvailable(source?: MovieSource): void {
+    if (!isCurrentMovieSource(source)) return
+    movieUnavailable.value = false
+  }
 
   const contactColumns = computed(() => [
     {

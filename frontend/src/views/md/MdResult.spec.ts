@@ -55,9 +55,9 @@ const stubs = {
   'structure-artifact-preview': {
     name: 'StructureArtifactPreview',
     props: ['artifact', 'preferredFileRoles', 'frameTimesPs', 'canExportMovie'],
-    emits: ['export-movie', 'movie-unavailable'],
+    emits: ['export-movie', 'movie-unavailable', 'movie-available'],
     template:
-      '<div data-testid="structure-preview-stub" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" :data-roles="JSON.stringify(preferredFileRoles)" @click="$emit(\'export-movie\')"><button data-testid="fail-movie" @click.stop="$emit(\'movie-unavailable\')">fail</button></div>',
+      '<div data-testid="structure-preview-stub" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" :data-roles="JSON.stringify(preferredFileRoles)" @click="$emit(\'export-movie\')"><button data-testid="fail-movie" @click.stop="$emit(\'movie-unavailable\', { artifactId: \'artifact-1\', versionId: \'version-1\' })">fail</button><button data-testid="recover-movie" @click.stop="$emit(\'movie-available\', { artifactId: \'artifact-1\', versionId: \'version-1\' })">recover</button></div>',
   },
   'a-card': { template: '<div><slot /></div>' },
   'a-row': { template: '<div><slot /></div>' },
@@ -180,6 +180,79 @@ describe('MD result movie integration', () => {
     expect(preview.attributes('data-frame-times')).toBe('null')
     expect(preview.attributes('data-can-export')).toBe('false')
     expect(wrapper.get('.md-result__viewer-note').text()).toBe('md.result.staticPreviewNote')
+  })
+
+  it('clears the movie fallback when the preview reports the same version available again', async () => {
+    const wrapper = await mountWithFiles([
+      'trajectory_movie_pdb',
+      'topology_pdb',
+      'metadata_json',
+    ])
+    await wrapper.get('[data-testid="fail-movie"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="structure-preview-stub"]').attributes('data-can-export')).toBe(
+      'false',
+    )
+
+    // 同一版本重新拉取后影片恢复：预览重新选中影片并上报 available，页面必须解除降级。
+    await wrapper.get('[data-testid="recover-movie"]').trigger('click')
+    await flushPromises()
+
+    const preview = wrapper.get('[data-testid="structure-preview-stub"]')
+    expect(preview.attributes('data-can-export')).toBe('true')
+    expect(preview.attributes('data-frame-times')).toBe('[0,2,4]')
+    expect(wrapper.get('.md-result__viewer-note').text()).toBe('md.result.moviePreviewNote')
+    expect(
+      wrapper
+        .findAll('.a-alert')
+        .some(alert => alert.attributes('data-message') === 'md.result.movieFallbackNotice'),
+    ).toBe(false)
+  })
+
+  it('ignores a late movie failure reported for a version that is no longer current', async () => {
+    type StreamHandlers = Parameters<typeof openTaskEventStream>[1]
+    let streamHandlers: Partial<StreamHandlers> = {}
+    vi.mocked(openTaskEventStream).mockImplementation((_id, handlers) => {
+      streamHandlers = handlers
+      return { available: true, close: vi.fn() }
+    })
+    vi.mocked(getMdResult).mockResolvedValue({
+      status: 'running',
+      outputs: [{ id: 'artifact-1', standard_type: 'md_trajectory@1' }],
+    } as unknown as MdResultDetail)
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      data: { id: 'task-1', status: 'running', progress: 50 },
+    } as unknown as Awaited<ReturnType<typeof getTaskDetail>>)
+    vi.mocked(getArtifactDetail).mockResolvedValue(
+      makeArtifact(['trajectory_movie_pdb', 'topology_pdb', 'metadata_json']),
+    )
+
+    const wrapper = mount(MdResult, { global: { stubs } })
+    await flushPromises()
+    await flushPromises()
+
+    const refreshed = makeArtifact(['trajectory_movie_pdb', 'topology_pdb', 'metadata_json'])
+    refreshed.latest_version = { ...refreshed.latest_version, id: 'version-2', version: 2 }
+    vi.mocked(getArtifactDetail).mockResolvedValue(refreshed)
+    streamHandlers.onDone?.({} as never)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="structure-preview-stub"]').attributes('data-can-export')).toBe(
+      'true',
+    )
+
+    // 旧版本（version-1）那次加载的失败事件迟到，不能把 version-2 的影片重新锁死。
+    await wrapper.get('[data-testid="fail-movie"]').trigger('click')
+    await flushPromises()
+
+    const preview = wrapper.get('[data-testid="structure-preview-stub"]')
+    expect(preview.attributes('data-can-export')).toBe('true')
+    expect(preview.attributes('data-frame-times')).toBe('[0,2,4]')
+    expect(
+      wrapper
+        .findAll('.a-alert')
+        .some(alert => alert.attributes('data-message') === 'md.result.movieFallbackNotice'),
+    ).toBe(false)
   })
 
   it('re-enables playback and export when the same artifact publishes a healthy new version', async () => {

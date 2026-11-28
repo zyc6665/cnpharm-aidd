@@ -677,6 +677,31 @@ function collectRepresentationRefs(preset: unknown): string[] {
   return refs
 }
 
+/**
+ * 读取某个 structure 当前在状态树里的 representation 节点 ref。
+ *
+ * 切换渲染样式会清空并重建 representation 节点（`applyPreset` / spacefill 的
+ * clear + addRepresentation），初始预设返回的 ref 随即失效。换帧校验必须用
+ * 重建后的 ref，否则新 representation 的错误永远看不到，坏帧会被当成成功提交。
+ */
+function collectLiveRepresentationRefs(
+  currentViewer: MolstarViewer,
+  structureRefKey: string,
+): string[] {
+  const structure = currentViewer.plugin.managers.structure.hierarchy.current.structures.find(
+    s => s.cell.transform.ref === structureRefKey,
+  )
+  if (!structure) return []
+  const refs: string[] = []
+  for (const component of structure.components) {
+    for (const representation of component.representations ?? []) {
+      const ref = representation.cell.transform.ref
+      if (ref) refs.push(ref)
+    }
+  }
+  return refs
+}
+
 async function loadEntryStructure(
   currentViewer: MolstarViewer,
   entry: VisualizationScene['entries'][number],
@@ -1009,6 +1034,13 @@ async function handleRepresentationChange() {
       activeColorTheme.value,
       record.preferComplexRepresentationForCartoon,
     )
+    // 样式切换后旧 representation 节点已被销毁，换帧校验必须改用新建的节点。
+    record.representationRefs = collectLiveRepresentationRefs(currentViewer, record.structureRefKey)
+    for (const trajectoryModel of activeTrajectoryModels) {
+      if (trajectoryModel.structureRefKey === record.structureRefKey) {
+        trajectoryModel.representationRefs = record.representationRefs
+      }
+    }
   }
 
   await syncSelectedResiduesHighlight()

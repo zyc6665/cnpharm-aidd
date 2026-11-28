@@ -51,7 +51,16 @@ const props = withDefaults(
   }
 )
 
-const emit = defineEmits<{ 'export-movie': []; 'movie-unavailable': [] }>()
+interface MovieSource {
+  artifactId: string
+  versionId: string
+}
+
+const emit = defineEmits<{
+  'export-movie': []
+  'movie-unavailable': [source: MovieSource]
+  'movie-available': [source: MovieSource]
+}>()
 
 const { t } = useI18n()
 
@@ -79,12 +88,23 @@ const failedFiles = ref<string[]>([])
  */
 const versionUnavailable = ref(false)
 
+/**
+ * 每次父组件换入新的 artifact 对象（刷新、同版本重新拉取都算）就开启新一代加载。
+ * 旧一代的失败回调可能晚于新对象到达（下载/解析是异步的），只用版本号比对无法区分
+ * 「同版本的新一次尝试」，因此在 entry key 里带上代次，旧事件自然失配被忽略。
+ */
+const loadAttempt = ref(0)
+
 watch(
-  () => [props.artifact.id, props.artifact.latest_version.id],
+  () => props.artifact,
   () => {
+    loadAttempt.value += 1
     failedFiles.value = []
     versionUnavailable.value = false
-  }
+  },
+  // flush: 'sync' 保证父组件刚把新对象传进来的同一轮事件循环里 key 就已换代，
+  // 不给旧一代的迟到失败留出「仍匹配当前 key」的窗口。
+  { flush: 'sync' }
 )
 
 const files = computed<ArtifactVersionFile[]>(() => props.artifact.latest_version.files ?? [])
@@ -115,7 +135,10 @@ const selectedRoleFile = computed<ArtifactVersionFile | null>(() => {
  * 失败事件的 key 与之比对后才记为失败，避免旧场景的迟到事件污染新选中的文件。
  */
 const entryKey = computed(
-  () => `artifact-${props.artifact.id}-${selectedRoleFile.value ? fileIdentity(selectedRoleFile.value) : 'version'}`
+  () =>
+    `artifact-${props.artifact.id}@${props.artifact.latest_version.id}#${loadAttempt.value}-${
+      selectedRoleFile.value ? fileIdentity(selectedRoleFile.value) : 'version'
+    }`
 )
 
 const fileRef = computed(() => ({
@@ -139,6 +162,11 @@ const resolvedMode = computed(() =>
   })
 )
 
+/** 事件携带源版本，父页面据此忽略「刷新前那一代」的迟到失败。 */
+function movieSource(): MovieSource {
+  return { artifactId: props.artifact.id, versionId: props.artifact.latest_version.id }
+}
+
 function handleEntryUnavailable(key: string): void {
   if (key !== entryKey.value) return
   const failedFile = selectedRoleFile.value
@@ -151,7 +179,7 @@ function handleEntryUnavailable(key: string): void {
     failedFiles.value = [...failedFiles.value, identity]
   }
   if (failedFile.role === 'trajectory_movie_pdb') {
-    emit('movie-unavailable')
+    emit('movie-unavailable', movieSource())
   }
 }
 
@@ -184,6 +212,21 @@ const scene = computed(() => {
   }
 
   return createVisualizationScene([], [entry], [])
+})
+
+/**
+ * 影片重新被选中（首次加载、失败后回退、刷新后重选）时通知父页面。
+ * 父页面据此清掉「影片不可用」的降级状态：同一版本的 artifact 重新拉取后，
+ * 影片可能已恢复，而父页面只按版本号变化重置是看不到这种情况的。
+ */
+const movieSelected = computed(
+  () => scene.value !== null && selectedRoleFile.value?.role === 'trajectory_movie_pdb'
+)
+
+watch(movieSelected, selected => {
+  if (selected) {
+    emit('movie-available', movieSource())
+  }
 })
 </script>
 

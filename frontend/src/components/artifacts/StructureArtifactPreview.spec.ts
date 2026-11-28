@@ -183,6 +183,113 @@ describe('StructureArtifactPreview', () => {
     expect(wrapper.emitted('movie-unavailable')).toHaveLength(1)
   })
 
+  it('ignores a late movie failure from the previous version after a refresh', async () => {
+    const files = [
+      makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+      makeFile('topology_pdb', 'topology.pdb'),
+    ]
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', files),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+      },
+    })
+    await flushPromises()
+
+    const viewer = wrapper.getComponent({ name: 'MoleculeViewer' })
+    const staleKey = (viewer.props('scene') as { entries: { key: string }[] }).entries[0]!.key
+
+    const refreshed = makeArtifact('md_trajectory', 'md_trajectory.pdb', files)
+    refreshed.latest_version = { ...refreshed.latest_version, id: 'version-2', version: 2 }
+    await wrapper.setProps({ artifact: refreshed })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+
+    // 刷新后旧版本那次加载才报错：不能把新版本的影片重新标记为失败。
+    viewer.vm.$emit('entry-unavailable', staleKey)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+    expect(wrapper.emitted('movie-unavailable')).toBeUndefined()
+  })
+
+  it('ignores a late movie failure from an older load attempt of the same version', async () => {
+    const files = [
+      makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+      makeFile('topology_pdb', 'topology.pdb'),
+    ]
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', files),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+      },
+    })
+    await flushPromises()
+
+    const viewer = wrapper.getComponent({ name: 'MoleculeViewer' })
+    const staleMovieKey = (viewer.props('scene') as { entries: { key: string }[] }).entries[0]!.key
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('movie-unavailable')).toHaveLength(1)
+
+    // 同一版本重新拉取：新一代加载重新选中影片，旧一代的迟到失败必须被忽略。
+    await wrapper.setProps({
+      artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', files),
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+
+    viewer.vm.$emit('entry-unavailable', staleMovieKey)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+    expect(wrapper.emitted('movie-unavailable')).toHaveLength(1)
+  })
+
+  it('reports movie available again when the same version is fetched and the movie is reselected', async () => {
+    const files = [
+      makeFile('trajectory_movie_pdb', 'trajectory_movie.pdb'),
+      makeFile('topology_pdb', 'topology.pdb'),
+    ]
+    const wrapper = mount(StructureArtifactPreview, {
+      props: {
+        artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', files),
+        preferredFileRoles: ['trajectory_movie_pdb', 'topology_pdb'],
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="fail-entry"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/topology_pdb/download'
+    )
+    expect(wrapper.emitted('movie-available')).toBeUndefined()
+
+    // 同一 artifact/version 的新对象（刷新重新拉取），影片这次可以正常加载。
+    await wrapper.setProps({
+      artifact: makeArtifact('md_trajectory', 'md_trajectory.pdb', files),
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/api/v1/files/trajectory_movie_pdb/download'
+    )
+    expect(wrapper.emitted('movie-available')).toHaveLength(1)
+    expect(wrapper.emitted('movie-available')?.[0]?.[0]).toEqual({
+      artifactId: 'artifact-1',
+      versionId: 'version-1',
+    })
+  })
+
   it('shows the unavailable alert when the version-level fallback fails with no role files', async () => {
     const wrapper = mount(StructureArtifactPreview, {
       props: {
