@@ -2414,6 +2414,7 @@ def test_gro_topology_accepts_rebuilt_serials_when_numbering_is_unchanged(tmp_pa
         trajectory_loader=lambda top, traj: _two_frame_trajectory(rebuilt),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_rejects_serial_swap_masked_by_unrelated_zero_serial(tmp_path: Path):
@@ -2451,6 +2452,7 @@ def test_gro_topology_rejects_serial_swap_masked_by_unrelated_zero_serial(tmp_pa
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(swapped),
         )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 def test_gro_topology_rejects_folded_duplicate_atom_names_without_serials(tmp_path: Path):
@@ -2484,6 +2486,7 @@ def test_gro_topology_rejects_folded_duplicate_atom_names_without_serials(tmp_pa
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(folded),
         )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 def test_gro_topology_rejects_undistinguished_twin_residues(tmp_path: Path):
@@ -2519,6 +2522,7 @@ def test_gro_topology_rejects_undistinguished_twin_residues(tmp_path: Path):
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(twins),
         )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 def test_gro_topology_accepts_within_residue_serial_renumbering(tmp_path: Path):
@@ -2554,6 +2558,7 @@ def test_gro_topology_accepts_within_residue_serial_renumbering(tmp_path: Path):
         trajectory_loader=lambda top, traj: _two_frame_trajectory(rebuilt),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_accepts_unique_serials_within_one_residue(tmp_path: Path):
@@ -2587,6 +2592,7 @@ def test_gro_topology_accepts_unique_serials_within_one_residue(tmp_path: Path):
         trajectory_loader=lambda top, traj: _two_frame_trajectory(rebuilt),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_accepts_same_number_with_distinct_resnames(tmp_path: Path):
@@ -2619,6 +2625,7 @@ def test_gro_topology_accepts_same_number_with_distinct_resnames(tmp_path: Path)
         trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_accepts_same_number_with_distinct_atom_names(tmp_path: Path):
@@ -2653,6 +2660,7 @@ def test_gro_topology_accepts_same_number_with_distinct_atom_names(tmp_path: Pat
         trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_rejects_blank_resnames_with_duplicate_numbers(tmp_path: Path):
@@ -2687,6 +2695,7 @@ def test_gro_topology_rejects_blank_resnames_with_duplicate_numbers(tmp_path: Pa
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(swapped),
         )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 def test_gro_topology_rejects_blank_atom_names_with_serial_permutation(tmp_path: Path):
@@ -2719,6 +2728,109 @@ def test_gro_topology_rejects_blank_atom_names_with_serial_permutation(tmp_path:
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(swapped),
         )
+    assert not (tmp_path / "bad.pdb").exists()
+
+
+def test_gro_topology_accepts_blank_resnames_with_distinct_atom_names(tmp_path: Path):
+    """Blank trajectory residue names only disable the residue-name component of
+    the uniqueness signature. CA/CB still bind each run to its template atom, so
+    ALA 1 and GLY 1 may share a number without becoming interchangeable."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CB", "GLY", "B", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    atoms = [
+        _NamedGroAtom("CA", "C", "", resindex=0, resseq=1, serial=0),
+        _NamedGroAtom("CB", "C", "", resindex=1, resseq=1, serial=0),
+    ]
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
+    )
+    assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
+
+
+def test_gro_topology_rejects_twin_runs_with_unreadable_residue_numbers(tmp_path: Path):
+    """Two ALA runs carry fields that cannot be parsed as residue numbers and
+    no atom serials. Nothing distinguishes them, so exchanging the runs would
+    stay invisible in the output; the old code skipped the uniqueness check
+    whenever the numbers were unreadable."""
+    ca_line = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                ca_line[:22] + "9ZZZ" + ca_line[26:],
+                ca_line[:22] + "9ZZY" + ca_line[26:],
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq="abc", serial=0),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq="xyz", serial=0),
+    ]
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
+        )
+    assert not (tmp_path / "bad.pdb").exists()
+
+
+def test_gro_topology_rejects_duplicate_atom_names_without_fold_or_serials(tmp_path: Path):
+    """Two LIG C1 atoms share one PDB residue and carry no serials. The run is
+    not folded, but the atoms are still interchangeable in the output -- neither
+    name nor element tells them apart -- so a refusal is required just as under
+    a fold."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "C1", "LIG", "L", 1, record="HETATM", element="C"),
+                _pdb_line(0, "C1", "LIG", "L", 1, record="HETATM", element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    atoms = [
+        _NamedGroAtom("C1", "C", "LIG", resindex=0, resseq=1, serial=8),
+        _NamedGroAtom("C1", "C", "LIG", resindex=0, resseq=1, serial=7),
+    ]
+    with pytest.raises(ValueError, match="without atom-serial proof"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
+        )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 def test_gro_topology_accepts_unique_global_residue_number_matching(tmp_path: Path):
@@ -2745,6 +2857,7 @@ def test_gro_topology_accepts_unique_global_residue_number_matching(tmp_path: Pa
         trajectory_loader=lambda top, traj: _two_frame_trajectory(wrapped),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_accepts_negative_residue_fold(tmp_path: Path):
@@ -2767,6 +2880,7 @@ def test_gro_topology_accepts_negative_residue_fold(tmp_path: Path):
         trajectory_loader=lambda top, traj: _two_frame_trajectory(folded),
     )
     assert stats["written"] is True
+    assert (tmp_path / "movie.pdb").is_file()
 
 
 def test_gro_topology_rejects_invalid_negative_residue_fold(tmp_path: Path):
@@ -2789,6 +2903,7 @@ def test_gro_topology_rejects_invalid_negative_residue_fold(tmp_path: Path):
             topology_gro=gro,
             trajectory_loader=lambda top, traj: _two_frame_trajectory(changed),
         )
+    assert not (tmp_path / "bad.pdb").exists()
 
 
 @pytest.mark.parametrize(
@@ -2825,6 +2940,17 @@ def test_gro_residue_numbers_match_across_truncated_fields():
     assert not movie._residue_numbers_match(10_000, 10_001)
     assert not movie._residue_numbers_match(10_001, 1)
     assert not movie._residue_numbers_match(9_999, -1)
+
+
+def test_gro_signature_matching_aligns_negative_remainder_classes():
+    """The truncated PDB side must be counted under its C++ remainder class,
+    the same key the GRO side uses. ``-10001`` and ``-1`` are one class, so a
+    single run is forced; keying the expected counter by the raw value read
+    them as two different classes and refused."""
+    assert movie._signature_group_number_matching_is_forced([-10_001], [-10_001], [0])
+    assert not movie._signature_group_number_matching_is_forced(
+        [-10_001, -10_001], [-10_001, -10_001], [0, 1]
+    )
 
 
 def test_gro_topology_ignores_invalid_hybrid36_residue_fields(tmp_path: Path):
