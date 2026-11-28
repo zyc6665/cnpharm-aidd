@@ -796,18 +796,29 @@ def _validate_trajectory_topology(
             [_atom_serial(atom) for atom in traj_atoms]
         )
         kept_positions = set(kept_order)
-        comparable = set(expected_trusted) & set(traj_trusted) & kept_positions
-        for position in sorted(comparable):
-            if expected_trusted[position] != traj_trusted[position]:
+        # Per-atom identity: compare every kept position both files report a
+        # serial for. A serial that also appears on a filtered water atom stays
+        # unambiguous here -- reordering a block changes the value at that
+        # position, while the solvent copy never enters the comparison.
+        for position in kept_order:
+            expected_serial = _atom_serial(templates[position])
+            traj_serial = _atom_serial(traj_atoms[position])
+            if (
+                expected_serial is not None
+                and traj_serial is not None
+                and expected_serial != traj_serial
+            ):
                 raise ValueError(
                     "GRO trajectory atom serials differ from topology PDB; refusing to render"
                 )
+        # A serial unique in the whole file additionally proves the kept order
+        # when a rebuilt topology legitimately renumbers (42.. -> 1..).
+        comparable = set(expected_trusted) & set(traj_trusted) & kept_positions
         serials_prove_order = len(comparable) == len(kept_order)
         # Residue numbers are the fallback identity, but a rebuilt topology may
-        # legitimately renumber (42.. -> 1..) or drop solvent residues (1, 3).
-        # Only two cases are provably in order: identical numbering, or a changed
-        # numbering backed by an atom-serial match at every kept position.
-        # Otherwise the movie is skipped instead of risking an atom-order mismatch.
+        # legitimately renumber or drop solvent residues. Only two cases are
+        # provably in order: identical numbering, or a changed numbering backed
+        # by an atom-serial match at every kept position.
         expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
         traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
         # Compare pair by pair: an unparseable residue number must not mask a
@@ -822,16 +833,12 @@ def _validate_trajectory_topology(
             not _residue_numbers_match(expected_number, traj_number)
             for expected_number, traj_number in pairs
         )
-        # A folded field only identifies its own residue while the order holds:
-        # swapping two residues that fold to the same field (GRO 1 / 10001 vs
-        # PDB 1 / 1) keeps every pair congruent. GROMACS numbers residues
-        # sequentially, so a swap shows up as a decrease over the kept runs.
+        # A folded field is only believed when every kept residue carries a
+        # readable number: with an undecodable field the correspondence at that
+        # residue is unknown, so a cycle such as GRO [10001, 20001, 1] against
+        # PDB [1, ?, ?] cannot be ruled out by the numbers that remain.
         folded = any(expected_number != traj_number for expected_number, traj_number in pairs)
-        traj_sequence = [number for _, number in pairs]
-        folded_order_broken = folded and any(
-            later <= earlier for earlier, later in zip(traj_sequence, traj_sequence[1:])
-        )
-        if folded_order_broken and not serials_prove_order:
+        if folded and len(pairs) < len(expected_numbers) and not serials_prove_order:
             raise ValueError(
                 "GRO trajectory residue numbering differs from topology PDB "
                 "without atom-serial proof; refusing to render"

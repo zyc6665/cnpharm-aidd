@@ -1936,8 +1936,8 @@ def test_gro_topology_rejects_renumbering_when_serials_repeat(tmp_path: Path):
     xtc.write_bytes(b"xtc")
 
     gro_atoms = [
-        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
-        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=1),
     ]
     trajectory = _two_frame_trajectory(gro_atoms)
     with pytest.raises(ValueError, match="without atom-serial proof"):
@@ -2099,16 +2099,120 @@ def _folded_residue_fixture(tmp_path: Path, gro_atoms: list[_NamedGroAtom]):
     return pdb, gro, xtc, _two_frame_trajectory(gro_atoms)
 
 
-def test_gro_topology_rejects_swapped_residues_that_fold_to_the_same_field(tmp_path: Path):
-    """Swapping residues numbered 1 and 10001 keeps every folded pair congruent
-    (1 vs 10001, 2 vs 2, 1 vs 1) and no serial is trustworthy, so only the
-    order of GRO numbers exposes the swap: 10001 before 1 is a decrease."""
+def _folded_serial_fixture(
+    tmp_path: Path,
+    pdb_residues: list[tuple[str, int, int]],
+    gro_residues: list[tuple[str, int, int]],
+):
+    """One CA per kept residue plus four SOL atoms repeating the kept serials, so
+    no serial is unique in either file and only the value at each position can
+    identify an atom. Entries are ``(resname, resseq, serial)`` packets."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(serial, "CA", resname, "A", resseq, element="C")
+                for resname, resseq, serial in pdb_residues
+            ]
+            + [
+                _pdb_line(serial, "OW", "SOL", "A", 5000 + index, record="HETATM", element="O")
+                for index, (_, _, serial) in enumerate(pdb_residues)
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text(
+        f"test gro\n{2 * len(gro_residues)}\n   5.00000   5.00000   5.00000\n",
+        encoding="utf-8",
+    )
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+    atoms = [
+        _NamedGroAtom("CA", "C", resname, resindex=index, resseq=resseq, serial=serial)
+        for index, (resname, resseq, serial) in enumerate(gro_residues)
+    ] + [
+        _NamedGroAtom(
+            "OW", "O", "SOL", resindex=len(gro_residues) + index,
+            resseq=5000 + index, serial=serial,
+        )
+        for index, (_, _, serial) in enumerate(gro_residues)
+    ]
+    return pdb, gro, xtc, _two_frame_trajectory(atoms)
+
+
+def test_gro_topology_rejects_block_swap_with_duplicate_serials(tmp_path: Path):
+    """PDB folds full residue numbers (1 == 10001), so swapping the two ALA/GLY
+    blocks leaves every number pair congruent. The serials travel with the atoms,
+    and even though solvent repeats 1-4 file-wide, comparing the value at each
+    kept position still exposes the swap."""
+    pdb_residues = [("ALA", 1, 1), ("GLY", 2, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    swapped = [("ALA", 1, 3), ("GLY", 2, 4), ("ALA", 10001, 1), ("GLY", 10002, 2)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, swapped)
+    with pytest.raises(ValueError, match="atom serials differ"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: trajectory,
+        )
+
+
+def test_gro_topology_accepts_residue_number_reset_with_duplicate_serials(tmp_path: Path):
+    """GROMACS may reset residue numbers between molecules: GRO [10001, 10002,
+    1, 2] folds to PDB [1, 2, 1, 2]. Every pair is congruent and every serial
+    matches at its position, so this is genuine output rather than a swap."""
+    pdb_residues = [("ALA", 1, 1), ("GLY", 2, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    ordered = [("ALA", 10001, 1), ("GLY", 10002, 2), ("ALA", 1, 3), ("GLY", 2, 4)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, ordered)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_gro_residue_wrap_at_100000(tmp_path: Path):
+    """The five-column GRO resnr wraps at 100000: [99998, 99999, 0, 1] folds to
+    PDB [9998, 9999, 0, 1]. A zero in either file is a wrapped full number, not
+    a sign that the two files disagree."""
+    pdb_residues = [("ALA", 9998, 1), ("GLY", 9999, 2), ("ALA", 0, 3), ("GLY", 1, 4)]
+    ordered = [("ALA", 99998, 1), ("GLY", 99999, 2), ("ALA", 0, 3), ("GLY", 1, 4)]
+    pdb, gro, xtc, trajectory = _folded_serial_fixture(tmp_path, pdb_residues, ordered)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_rejects_cycle_hidden_by_unreadable_residue_fields(tmp_path: Path):
+    """With PDB fields [1, 9ZZZ, 8ZZZ, 2] against GRO [10001, 20001, 1, 30002]
+    only two pairs stay readable; they are congruent, but the correspondence at
+    the unreadable residues is unknown, so a cycle cannot be ruled out without
+    atom serials."""
+    base = _pdb_line(0, "CA", "ALA", "A", 1, element="C")
+    pdb_lines = [
+        base,
+        base[:22] + "9ZZZ" + base[26:],
+        base[:22] + "8ZZZ" + base[26:],
+        _pdb_line(0, "CA", "ALA", "A", 2, element="C"),
+    ]
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text("\n".join(pdb_lines) + "\n", encoding="utf-8")
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n4\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
     gro_atoms = [
         _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=10001),
-        _NamedGroAtom("CA", "C", "GLY", resindex=1, resseq=2),
+        _NamedGroAtom("CA", "C", "ALA", resindex=1, resseq=20001),
         _NamedGroAtom("CA", "C", "ALA", resindex=2, resseq=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=3, resseq=30002),
     ]
-    pdb, gro, xtc, trajectory = _folded_residue_fixture(tmp_path, gro_atoms)
+    trajectory = _two_frame_trajectory(gro_atoms)
     with pytest.raises(ValueError, match="without atom-serial proof"):
         movie.export_desolvated_pdb_movie(
             pdb, xtc, tmp_path / "bad.pdb",
