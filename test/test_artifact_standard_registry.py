@@ -174,3 +174,53 @@ def test_md_trajectory_declares_optional_interaction_roles():
     assert "csv" in roles["contacts_csv"].allowed_formats
     assert roles["interactions_json"].required is False
     assert "json" in roles["interactions_json"].allowed_formats
+
+
+def test_md_trajectory_declares_optional_trajectory_movie_role():
+    spec = get_standard_artifact_spec("md_trajectory@1")
+    roles = {role.role: role for role in spec.file_roles}
+    required_roles = {role.role for role in spec.file_roles if role.required}
+    primary_roles = {role.role for role in spec.file_roles if role.primary}
+
+    movie = roles["trajectory_movie_pdb"]
+    assert movie.required is False
+    assert movie.primary is False
+    assert movie.recommended_name == "trajectory_movie.pdb"
+    assert "pdb" in movie.allowed_formats
+    assert "chemical/x-pdb" in movie.content_types
+
+    # 新增可选角色不得改变历史必填集合与 primary 角色（向后兼容）
+    assert required_roles == {
+        "topology_pdb",
+        "trajectory_dcd",
+        "analysis_csv",
+        "metadata_json",
+    }
+    assert primary_roles == {"topology_pdb"}
+
+
+def test_md_trajectory_metadata_schema_declares_optional_movie_fields():
+    spec = get_standard_artifact_spec("md_trajectory@1")
+    schema = spec.metadata_schema
+    properties = schema["properties"]
+
+    assert properties["movie_frames"]["type"] == "integer"
+    assert properties["movie_stride"]["type"] == "integer"
+    assert properties["movie_desolvated"]["type"] == "boolean"
+    assert properties["movie_aligned"]["type"] == "boolean"
+    assert properties["movie_time_ps"]["type"] == "array"
+    assert properties["movie_time_ps"]["items"]["type"] == "number"
+    assert properties["movie_warnings"]["type"] == "array"
+    assert properties["movie_warnings"]["items"]["type"] == "string"
+
+    # movie_* 均为可选字段，历史必填项保持不变
+    assert schema["required"] == ["source_task_id", "force_field", "duration_ns"]
+    for field in (
+        "movie_frames",
+        "movie_stride",
+        "movie_desolvated",
+        "movie_aligned",
+        "movie_time_ps",
+        "movie_warnings",
+    ):
+        assert field not in schema["required"]
