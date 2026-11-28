@@ -55,9 +55,9 @@ const stubs = {
   'structure-artifact-preview': {
     name: 'StructureArtifactPreview',
     props: ['artifact', 'preferredFileRoles', 'frameTimesPs', 'canExportMovie'],
-    emits: ['export-movie'],
+    emits: ['export-movie', 'movie-unavailable'],
     template:
-      '<div data-testid="structure-preview-stub" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" :data-roles="JSON.stringify(preferredFileRoles)" @click="$emit(\'export-movie\')" />',
+      '<div data-testid="structure-preview-stub" :data-can-export="canExportMovie" :data-frame-times="JSON.stringify(frameTimesPs)" :data-roles="JSON.stringify(preferredFileRoles)" @click="$emit(\'export-movie\')"><button data-testid="fail-movie" @click.stop="$emit(\'movie-unavailable\')">fail</button></div>',
   },
   'a-card': { template: '<div><slot /></div>' },
   'a-row': { template: '<div><slot /></div>' },
@@ -151,10 +151,34 @@ describe('MD result movie integration', () => {
     expect(preview.attributes('data-roles')).toBe('["trajectory_movie_pdb","topology_pdb"]')
 
     await preview.trigger('click')
-    expect(triggerProtectedFileDownload).toHaveBeenCalledWith({
-      url: '/api/v1/files/trajectory_movie_pdb/download',
-      filename: 'trajectory_movie_pdb.pdb',
-    })
+    expect(triggerProtectedFileDownload).toHaveBeenCalledWith(
+      {
+        url: '/api/v1/files/trajectory_movie_pdb/download',
+        filename: 'trajectory_movie_pdb.pdb',
+      },
+      {},
+      { requireContent: true },
+    )
+  })
+
+  it('falls back to the topology preview when the movie fails to load', async () => {
+    const wrapper = await mountWithFiles(['trajectory_movie_pdb', 'topology_pdb', 'metadata_json'])
+    await wrapper.get('[data-testid="fail-movie"]').trigger('click')
+    await flushPromises()
+
+    const alerts = wrapper.findAll('.a-alert')
+    const fallbackAlert = alerts.find(
+      alert => alert.attributes('data-message') === 'md.result.movieFallbackNotice',
+    )
+    expect(fallbackAlert).toBeTruthy()
+    expect(fallbackAlert?.attributes('data-type')).toBe('warning')
+    expect(
+      alerts.some(alert => alert.attributes('data-message') === 'md.result.movieNotice'),
+    ).toBe(false)
+
+    const preview = wrapper.get('[data-testid="structure-preview-stub"]')
+    expect(preview.attributes('data-frame-times')).toBe('null')
+    expect(preview.attributes('data-can-export')).toBe('false')
   })
 
   it('degrades legacy tasks without a movie to a static topology preview', async () => {

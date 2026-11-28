@@ -3,22 +3,23 @@
     <a-alert
       type="info"
       show-icon
-      :message="movieFile ? t('artifactAssets.mdTrajectory.movieNotice') : t('artifactAssets.mdTrajectory.notice')"
+      :message="noticeMessage"
     />
     <FileArtifact :artifact="artifact" />
     <StructureArtifactPreview
       :artifact="artifact"
       role="structure"
       :preferred-file-roles="trajectoryFileRoles"
-      :frame-times-ps="movieFrameTimesPs"
-      :can-export-movie="Boolean(movieFile)"
+      :frame-times-ps="movieUnavailable ? null : movieFrameTimesPs"
+      :can-export-movie="Boolean(movieFile) && !movieUnavailable"
       @export-movie="handleExportMovie"
+      @movie-unavailable="handleMovieUnavailable"
     />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 
@@ -46,8 +47,9 @@ const movieFile = computed<ArtifactVersionFile | null>(() => {
  *
  * 后端把工具元数据挂在 `latest_version.manifest_json.metadata`（与 `FileArtifact` /
  * `api/design` 的读取口径一致）；历史/兼容响应也可能把同名字段直接放在
- * `latest_version.metadata`，两处都做容错读取。只有整组都是有限数值时才返回，
- * 避免个别脏值让帧号与时间错位。
+ * `latest_version.metadata`，两处都做容错读取。只接受**原样的有限 number**：
+ * 不做 `Number()` 强转，否则 `null`/空串会被悄悄变成 0，让帧号与时间错位。
+ * 长度是否与帧数一致由 `formatTrajectoryFrameLabel` 再校验。
  */
 function extractMovieFrameTimes(artifact: TypedArtifact): number[] | null {
   const version = artifact.latest_version as ArtifactVersion & { metadata?: Record<string, unknown> | null }
@@ -55,8 +57,16 @@ function extractMovieFrameTimes(artifact: TypedArtifact): number[] | null {
     if (!metadata || typeof metadata !== 'object') continue
     const raw = (metadata as Record<string, unknown>).movie_time_ps
     if (!Array.isArray(raw) || raw.length === 0) continue
-    const times = raw.map(value => Number(value))
-    if (times.every(time => Number.isFinite(time))) return times
+    const times: number[] = []
+    let valid = true
+    for (const value of raw) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        valid = false
+        break
+      }
+      times.push(value)
+    }
+    if (valid) return times
   }
   return null
 }
@@ -71,13 +81,41 @@ const movieFrameTimesPs = computed<number[] | null>(() =>
   movieFile.value ? frameTimesPs.value : null,
 )
 
+/**
+ * movie 文件存在但预览加载失败（空文件、404/403、内容不是合法 PDB）时，
+ * 预览会回退到 topology_pdb 并发出 `movie-unavailable`：
+ * 此时不能再展示「可直接播放」的提示，也不能提供导出按钮，否则会误导用户。
+ */
+const movieUnavailable = ref(false)
+
+watch(
+  () => props.artifact.latest_version.id,
+  () => {
+    movieUnavailable.value = false
+  },
+)
+
+const noticeMessage = computed(() => {
+  if (movieUnavailable.value) return t('artifactAssets.mdTrajectory.movieFallbackNotice')
+  return movieFile.value ? t('artifactAssets.mdTrajectory.movieNotice') : t('artifactAssets.mdTrajectory.notice')
+})
+
+function handleMovieUnavailable(): void {
+  movieUnavailable.value = true
+}
+
 async function handleExportMovie(): Promise<void> {
-  if (!movieFile.value) return
+  if (!movieFile.value || movieUnavailable.value) return
   try {
-    await triggerProtectedFileDownload({
-      url: movieFile.value.download_url,
-      filename: movieFile.value.filename ?? undefined,
-    })
+    await triggerProtectedFileDownload(
+      {
+        url: movieFile.value.download_url,
+        filename: movieFile.value.filename ?? undefined,
+      },
+      {},
+      // 影片可能是上一次失败残留的空文件：必须验证实际响应内容再交给浏览器保存。
+      { requireContent: true },
+    )
   } catch (cause) {
     message.error(cause instanceof Error ? cause.message : String(cause))
   }

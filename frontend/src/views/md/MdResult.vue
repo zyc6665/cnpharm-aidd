@@ -68,10 +68,10 @@
             <a-button v-if="interactionsFile" block data-testid="md-download-interactions" @click="downloadRole('interactions_json')">{{ t('md.result.downloadInteractions') }}</a-button>
           </a-space>
           <a-alert
-            :type="movieFile ? 'info' : 'warning'"
+            :type="movieFile && !movieUnavailable ? 'info' : 'warning'"
             show-icon
             class="md-result__notice"
-            :message="movieFile ? t('md.result.movieNotice') : t('md.result.trajectoryNotice')"
+            :message="movieUnavailable ? t('md.result.movieFallbackNotice') : movieFile ? t('md.result.movieNotice') : t('md.result.trajectoryNotice')"
           />
         </a-card></a-col>
         <a-col :xs="24" :lg="12"><a-card :bordered="false" :title="t('md.result.structurePreview')" size="small">
@@ -80,9 +80,10 @@
               v-if="artifact && (movieFile || topologyFile)"
               :artifact="artifact"
               :preferred-file-roles="['trajectory_movie_pdb', 'topology_pdb']"
-              :frame-times-ps="movieFrameTimes"
-              :can-export-movie="Boolean(movieFile)"
+              :frame-times-ps="movieUnavailable ? null : movieFrameTimes"
+              :can-export-movie="Boolean(movieFile) && !movieUnavailable"
               @export-movie="handleExportMovie"
+              @movie-unavailable="handleMovieUnavailable"
             />
             <a-empty v-else :description="t('md.result.noTopology')" />
           </div>
@@ -200,6 +201,9 @@
   const movieFrameTimes = computed<number[] | null>(() =>
     Array.isArray(metadata.value.movie_time_ps) ? metadata.value.movie_time_ps : null
   )
+  // movie 存在但预览加载失败时回退 topology_pdb：此时时间数组与导出都不得继续挂在 movie 上。
+  const movieUnavailable = ref(false)
+  function handleMovieUnavailable(): void { movieUnavailable.value = true }
 
   const contactColumns = computed(() => [
     {
@@ -345,7 +349,7 @@
       const nextArtifact = output ? await getArtifactDetail(output.id) : null
       if (disposed || sequence !== requestSequence) return
       const nextId = nextArtifact?.id ?? null
-      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; artifactIdLoaded = nextId }
+      if (artifactIdLoaded !== nextId) { analysisRows.value = []; rmsfRows.value = []; contactRows.value = []; interactionsSummary.value = null; metadata.value = {}; analysisLoadErrors.value = []; movieUnavailable.value = false; artifactIdLoaded = nextId }
       artifact.value = nextArtifact
       if (nextArtifact) await loadAnalysisAndMetadata(sequence)
       if (disposed || sequence !== requestSequence) return
@@ -356,7 +360,9 @@
   }
   async function downloadRole(role: MdTrajectoryRole): Promise<void> {
     const file = roleFile(role); if (!file) return
-    try { await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined }) }
+    // 影片是可选产物：历史结果里可能残留 0 字节占位文件，必须在真正下载后校验内容。
+    const options = role === 'trajectory_movie_pdb' ? { requireContent: true } : {}
+    try { await triggerProtectedFileDownload({ url: file.download_url, filename: file.filename ?? undefined }, {}, options) }
     catch (cause) { message.error(cause instanceof Error ? cause.message : String(cause)) }
   }
   async function handleExportMovie(): Promise<void> {

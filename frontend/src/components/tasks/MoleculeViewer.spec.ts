@@ -16,6 +16,7 @@ function deferred<T = undefined>() {
 interface MockPreset {
   structure: { ref: string }
   model?: { ref: string }
+  representation?: Record<string, { ref: string }>
 }
 
 function defaultPreset(): MockPreset {
@@ -291,6 +292,38 @@ function buildMultiMovieScene(): VisualizationScene {
   }
 }
 
+function buildFallbackScene(): VisualizationScene {
+  return {
+    entries: [
+      {
+        key: 'movie-1',
+        url: '/api/v1/files/movie/download',
+        label: 'trajectory_movie.pdb',
+        source: 'output',
+        role: 'structure',
+        format: 'pdb',
+        extension: '.pdb',
+        fallbackOnFailure: true,
+      },
+      {
+        key: 'topology-1',
+        url: '/api/v1/files/topology/download',
+        label: 'topology.pdb',
+        source: 'output',
+        role: 'structure',
+        format: 'pdb',
+        extension: '.pdb',
+      },
+    ],
+    inputEntries: [],
+    outputEntries: [],
+    supportedOutputFiles: [],
+    unsupportedOutputFiles: [],
+    hasRenderableOutput: true,
+    selectedOutputKey: 'movie-1',
+  }
+}
+
 function buildDockingScene(): VisualizationScene {
   return {
     entries: [
@@ -468,7 +501,7 @@ describe('MoleculeViewer', () => {
         scene: buildMovieScene({ preferComplexRepresentation: true }),
         mode: 'protein',
         variant: 'full',
-        frameTimesPs: [0, 2, 4],
+        frameTimesPs: Array.from({ length: 25 }, (_, index) => index * 2),
       },
       global: {
         stubs: {
@@ -905,6 +938,58 @@ describe('MoleculeViewer', () => {
       { ref: 'm-movie-2', payload: { modelIndex: 3 } },
       { ref: 'm-movie-3', payload: { modelIndex: 1 } },
     ])
+  })
+
+  it('treats a failed representation cell as a failed frame and stops playback', async () => {
+    vi.useFakeTimers()
+    mockState.trajectoryFrameCount = 5
+    mockState.presetQueue = [
+      {
+        structure: { ref: 'structure-ref-movie' },
+        model: { ref: 'model-ref-movie' },
+        representation: { 'polymer-cartoon': { ref: 'rep-ref-movie' } },
+      },
+    ]
+    const wrapper = mount(MoleculeViewer, {
+      props: {
+        scene: buildMovieScene(),
+        mode: 'protein',
+        variant: 'full',
+      },
+      global: { stubs: { ASpin: true, AAlert: true } },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="viewer-traj-counter"]').text()).toBe('1 / 5')
+
+    // Mol* 可能只把 representation 节点置为 error，model/structure 仍为 ok：
+    // 这同样意味着新帧没有完整渲染，不能提交帧号。
+    mockState.cells.set('rep-ref-movie', { status: 'error' })
+
+    await wrapper.get('[data-testid="viewer-traj-play"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(computeFrameIntervalMs(1))
+    await vi.advanceTimersByTimeAsync(computeFrameIntervalMs(1))
+
+    expect(wrapper.get('[data-testid="viewer-traj-counter"]').text()).toBe('1 / 5')
+    expect(wrapper.get('[data-testid="viewer-traj-play"]').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.emitted('frame-change')).toBeUndefined()
+    expect(mockState.updateModel).toHaveBeenLastCalledWith({ modelIndex: 0 })
+  })
+
+  it('emits entry-unavailable for one broken fallback entry and still renders the rest', async () => {
+    mockState.applyPreset.mockRejectedValueOnce(new Error('empty movie file'))
+    const wrapper = mount(MoleculeViewer, {
+      props: {
+        scene: buildFallbackScene(),
+        mode: 'protein',
+        variant: 'full',
+      },
+      global: { stubs: { ASpin: true, AAlert: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.emitted('entry-unavailable')).toEqual([['movie-1']])
+    expect(mockState.applyPreset).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.viewer-overlay--error').exists()).toBe(false)
   })
 
   it('waits for a delayed Mol* frame update to finish before disposing on unmount', async () => {
