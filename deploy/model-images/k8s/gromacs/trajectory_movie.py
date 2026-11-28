@@ -688,6 +688,7 @@ def _residue_number_matching_is_forced(
     expected_numbers: Sequence[int | None],
     actual_numbers: Sequence[int | None],
     slots: Sequence[int],
+    signatures: Sequence[tuple[str, tuple[str, ...]]],
 ) -> bool:
     """Whether the identity pairing on ``slots`` is the only perfect matching
     the residue numbers allow.
@@ -700,9 +701,33 @@ def _residue_number_matching_is_forced(
     serial are removed by the caller, so anything left here must be proven by
     the numbers alone -- otherwise two runs remain interchangeable and a swap
     would be invisible in the output.
+
+    Only runs with the same output-visible signature -- canonical residue name
+    plus ordered atom names -- are interchangeable at all: a swap between ALA
+    and GLY at number 1 changes the residue name, and CA/CB at the same number
+    changes an atom name, so the per-position checks reject it without help from
+    the numbering. Uniqueness is therefore required inside each signature group
+    instead of across every run sharing a number.
     """
     if not slots:
         return True
+    groups: dict[tuple[str, tuple[str, ...]], list[int]] = {}
+    for slot in slots:
+        groups.setdefault(signatures[slot], []).append(slot)
+    return all(
+        _signature_group_number_matching_is_forced(
+            expected_numbers, actual_numbers, group
+        )
+        for group in groups.values()
+    )
+
+
+def _signature_group_number_matching_is_forced(
+    expected_numbers: Sequence[int | None],
+    actual_numbers: Sequence[int | None],
+    slots: Sequence[int],
+) -> bool:
+    """Number-only uniqueness within one interchangeable signature group."""
     class_expected: Counter[int] = Counter()
     class_actual: Counter[int] = Counter()
     exact_expected: Counter[int] = Counter()
@@ -956,7 +981,16 @@ def _validate_trajectory_topology(
         # file-wide: a same-value duplicate cannot explain why residue identity
         # stayed congruent while the serials moved. Only an exact renumbering
         # may ignore such a mismatch.
-        if serial_mismatches and (folded or proven_mismatch or serials_reordered):
+        # A serial exchange confined to one residue with distinct atom names is
+        # a rebuilt serial assignment rather than a swap: the per-position name
+        # check below already binds every atom, even when both serials are
+        # unique in their own file. Only mismatches outside that exemption can
+        # prove a reorder through their serials.
+        if (
+            serial_mismatches
+            and not permutation_within_one_residue
+            and (folded or proven_mismatch or serials_reordered)
+        ):
             raise ValueError(
                 "GRO trajectory atom serials differ from topology PDB; refusing to render"
             )
@@ -985,6 +1019,21 @@ def _validate_trajectory_topology(
         run_positions: dict[int, list[int]] = {}
         for position in kept_order:
             run_positions.setdefault(expected_positions[position], []).append(position)
+        # Fields the output exposes for a run: canonical residue name and the
+        # ordered canonical atom names. Runs whose signatures differ cannot be
+        # exchanged without one of those fields changing at a kept position.
+        run_signatures = [
+            (
+                _canonical_gro_resname(expected_runs[run][0]),
+                tuple(
+                    _mdtraj_gro_atom_name(
+                        templates[position].atom_name, templates[position].resname
+                    )
+                    for position in run_positions[run]
+                ),
+            )
+            for run in kept_runs
+        ]
         kept_run_slots = {run: slot for slot, run in enumerate(kept_runs)}
         pinned_run_slots = {
             kept_run_slots[run]
@@ -1032,7 +1081,7 @@ def _validate_trajectory_topology(
         if remaining_slots:
             if remaining_consistent:
                 if not _residue_number_matching_is_forced(
-                    expected_numbers, traj_numbers, remaining_slots
+                    expected_numbers, traj_numbers, remaining_slots, run_signatures
                 ):
                     raise ValueError(
                         "GRO trajectory residue numbering differs from topology PDB "

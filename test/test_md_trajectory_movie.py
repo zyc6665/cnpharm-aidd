@@ -2556,6 +2556,105 @@ def test_gro_topology_accepts_within_residue_serial_renumbering(tmp_path: Path):
     assert stats["written"] is True
 
 
+def test_gro_topology_accepts_unique_serials_within_one_residue(tmp_path: Path):
+    """N/CA inside one ALA exchange serials 2/1 with no solvent at all. Both
+    serials are unique in their own file, so the pair is a proven permutation,
+    but the distinct atom names already fix the order: this is a rebuilt serial
+    assignment, not a swap, and must not be rejected."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(2, "N", "ALA", "A", 1, element="N"),
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    rebuilt = [
+        _NamedGroAtom("N", "N", "ALA", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
+    ]
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: _two_frame_trajectory(rebuilt),
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_same_number_with_distinct_resnames(tmp_path: Path):
+    """ALA 1 and GLY 1 share a residue number but not a residue name. A swap
+    would rename the residue at each position, which the per-run name check
+    rejects, so the duplicate number alone must not refuse a legal movie."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CA", "GLY", "B", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=0),
+        _NamedGroAtom("CA", "C", "GLY", resindex=1, resseq=1, serial=0),
+    ]
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_same_number_with_distinct_atom_names(tmp_path: Path):
+    """ALA 1 / SER 2 / ALA 1 repeats residue number 1, but the two ALA runs carry
+    different atom names (CA and CB). Exchanging them would change an atom name
+    at a kept position, so the numbering does not need to distinguish them."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(0, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(0, "CB", "SER", "A", 2, element="C"),
+                _pdb_line(0, "CB", "ALA", "B", 1, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=0),
+        _NamedGroAtom("CB", "C", "SER", resindex=1, resseq=2, serial=0),
+        _NamedGroAtom("CB", "C", "ALA", resindex=2, resseq=1, serial=0),
+    ]
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: _two_frame_trajectory(atoms),
+    )
+    assert stats["written"] is True
+
+
 def test_gro_topology_accepts_unique_global_residue_number_matching(tmp_path: Path):
     """PDB 0/A000 (0/10000) against GRO 20000/10000. Truncated 0 fits both GRO
     numbers by itself, but full 10000 can only take GRO 10000, which leaves
