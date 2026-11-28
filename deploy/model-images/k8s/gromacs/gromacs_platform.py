@@ -640,7 +640,8 @@ def _publish_movie(
     """
     target = Path(output_dir) / "artifacts" / "trajectory_movie.pdb"
     if not _movie_file_ready(staging_target, movie_summary):
-        _remove_movie_path(target)
+        if not _remove_movie_path(target):
+            warnings.append(f"failed trajectory movie could not be removed: {target}")
         return None
     try:
         digest = sha256_file(staging_target)
@@ -1016,7 +1017,9 @@ def main() -> int:
                 run_params=run_params,
                 topology_gro_candidates=[gro_path],
             )
-            movie_warnings = list(movie_summary.get("warnings") or [])
+            # Keep the stale-file diagnostics collected before the export: overwriting
+            # them would silently drop a warning this run already decided to record.
+            movie_warnings = [*movie_warnings, *(movie_summary.get("warnings") or [])]
             movie_ref = _publish_movie(
                 output_dir, staging_dir / "trajectory_movie.pdb", movie_summary, movie_warnings,
             )

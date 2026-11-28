@@ -35,6 +35,7 @@ class AtomTemplate:
     temp_factor: float
     element: str
     segment_index: int = 0
+    serial: int | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,7 @@ def parse_pdb_atom_templates(topology_pdb: Path) -> list[AtomTemplate]:
         atom_name, altloc = line[12:16].strip(), line[16:17].strip()
         resname, chain_id = line[17:20].strip(), line[21:22].strip()
         resseq, icode = line[22:26].strip(), line[26:27].strip()
+        serial_text = line[6:11].strip()
         key = (segment, chain_id, resseq, icode)
         if key != residue_key:
             residue_key, seen_alts = key, {}
@@ -101,6 +103,8 @@ def parse_pdb_atom_templates(topology_pdb: Path) -> list[AtomTemplate]:
             chain_id=chain_id, resseq=resseq, icode=icode,
             occupancy=_as_float(line[54:60], 1.0), temp_factor=_as_float(line[60:66], 0.0),
             element=line[76:78].strip() if len(line) >= 78 else "", segment_index=segment,
+            # Hybrid-36 and blank serials cannot prove identity; leave them unknown.
+            serial=int(serial_text) if serial_text.isdigit() and int(serial_text) > 0 else None,
         ))
     return templates
 

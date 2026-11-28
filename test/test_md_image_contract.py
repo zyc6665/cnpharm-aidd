@@ -682,3 +682,73 @@ def test_main_removes_stale_movie_when_staging_dir_fails(tmp_path: Path, monkeyp
     metadata = json.loads((output_dir / "artifacts" / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["movie_frames"] == 0
     assert any("trajectory movie failed" in warning for warning in metadata["movie_warnings"])
+
+
+def test_main_keeps_stale_movie_warning_when_export_also_warns(tmp_path: Path, monkeypatch):
+    """清理残留影片的告警与导出阶段的告警必须同时保留。覆盖会让运维看不到残留
+    文件为什么还在，也看不到导出本身失败的原因。"""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text(PDB, encoding="utf-8")
+    output_dir = tmp_path / "out"
+    (output_dir / "artifacts").mkdir(parents=True)
+    stale = output_dir / "artifacts" / "trajectory_movie.pdb"
+    stale.write_text("MODEL     1\nENDMDL\nEND\n", encoding="utf-8")
+    params_path = tmp_path / "params.json"
+    params_path.write_text(json.dumps({
+        "input_files": {"protein_pdb": "protein.pdb"},
+        "params": {"nsteps": 2500, "dt": 0.002, "temperature": 300.0},
+    }), encoding="utf-8")
+
+    def fake_run_pipeline(protein, work, **kwargs):
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "topology.pdb").write_text(PDB, encoding="utf-8")
+        (work / "trajectory.dcd").write_bytes(b"dcd")
+        xtc = work / "md.xtc"
+        xtc.write_bytes(b"xtc")
+        gro = work / "md.gro"
+        gro.write_text("gro\n", encoding="utf-8")
+        return {"duration_ns": 5.0, "trajectory_xtc": str(xtc), "trajectory_gro": str(gro), "ligand": None}
+
+    def fake_analysis(work, target, **kwargs):
+        Path(target).write_text("time,potential\n", encoding="utf-8")
+
+    def failing_movie(topology_pdb, trajectory_path, out_dir, **kwargs):
+        return {
+            "written": False, "movie_frames": 0, "total_source_frames": 0, "movie_stride": 1,
+            "frame_indices": [], "frame_times_ps": [], "atom_count": 0, "desolvated": False,
+            "aligned": False, "conect_count": 0, "size_bytes": 0,
+            "warnings": ["trajectory movie failed: boom"],
+        }
+
+    monkeypatch.setattr(gromacs, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(gromacs, "write_analysis_csv", fake_analysis)
+    monkeypatch.setattr(gromacs, "write_rmsf_csv", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        gromacs, "run_interactions_postprocess",
+        lambda *args, **kwargs: {"mode": "skipped", "engine": "skipped", "summary": {}},
+    )
+    monkeypatch.setattr(gromacs, "run_trajectory_movie_postprocess", failing_movie)
+    # 文件系统同时拒绝 unlink 与 chmod 时，残留影片无法删除。
+    monkeypatch.setattr(gromacs, "_remove_movie_path", lambda path: False)
+    monkeypatch.setattr(sys, "argv", [
+        "gromacs_platform.py", "--task-id", "t1",
+        "--input-dir", str(input_dir), "--output-dir", str(output_dir),
+        "--params-json", str(params_path), "--work-dir", str(tmp_path / "work"),
+    ])
+
+    class _ExitCalled(Exception):
+        pass
+
+    monkeypatch.setattr(gromacs.os, "_exit", lambda code: (_ for _ in ()).throw(_ExitCalled(code)))
+    with pytest.raises(_ExitCalled):
+        gromacs.main()
+
+    metadata = json.loads((output_dir / "artifacts" / "metadata.json").read_text(encoding="utf-8"))
+    warnings = metadata["movie_warnings"]
+    assert any("stale trajectory movie could not be removed" in warning for warning in warnings)
+    assert any("trajectory movie failed: boom" in warning for warning in warnings)
+    assert stale.exists()  # 残留文件仍在，但 result.json 不引用它，上传器会跳过
+    assert "trajectory_movie_pdb" not in json.loads(
+        (output_dir / "result.json").read_text(encoding="utf-8")
+    )["artifacts"]["trajectory"]["files"]

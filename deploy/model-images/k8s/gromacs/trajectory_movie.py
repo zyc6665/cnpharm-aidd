@@ -375,105 +375,207 @@ def _coords_valid(frames_angstrom) -> bool:
     return True
 
 
-# MDTraj 1.10.3's GRO reader rewrites names through pdbNames.xml. Both the
-# topology PDB and the GRO file come from the same TPR, so the template must be
-# normalized with the same tables before their names are compared.
-_GRO_ATOM_ALIASES = {
-    "HN": "H", "H1": "H", "1H": "H", "HN1": "H", "HT1": "H",
-    "2H": "H2", "HN2": "H2", "HT2": "H2",
-    "3H": "H3", "HN3": "H3", "HT3": "H3",
-    "O1": "O", "OT1": "O", "OCT1": "O", "OC1": "O",
-    "O2": "OXT", "OT2": "OXT", "OCT2": "OXT", "OC2": "OXT", "OT": "OXT",
+# MDTraj 1.10.3's GRO reader rewrites atom and residue names through its bundled
+# pdbNames.xml. Both the topology PDB and the GRO file come from the same TPR, so
+# normalise the PDB template exactly the way that reader normalises the GRO names
+# before comparing them. The tables below are generated from that file: a
+# per-residue entry overrides a base entry keyed by the *raw* name (PRO HT1 -> H2
+# while other residues map HT1 -> H), and residues absent from the file (CYM,
+# ASH, arbitrary ligands) keep their raw names.
+_GRO_PROTEIN_ATOM_ALIASES = {
+    'H': 'H', 'HN': 'H', 'H1': 'H', '1H': 'H', 'HN1': 'H', 'HT1': 'H',
+    'H2': 'H2', '2H': 'H2', 'HN2': 'H2', 'HT2': 'H2', 'H3': 'H3', '3H': 'H3',
+    'HN3': 'H3', 'HT3': 'H3', 'O': 'O', 'O1': 'O', 'OT1': 'O', 'OCT1': 'O',
+    'OC1': 'O', 'OXT': 'OXT', 'O2': 'OXT', 'OT2': 'OXT', 'OCT2': 'OXT', 'OC2': 'OXT',
+    'OT': 'OXT',
 }
 
-# Per-residue entries from the same table (generic protein aliases applied first).
-_GRO_RESIDUE_ATOM_ALIASES: dict[str, dict[str, str]] = {
-    "GLY": {"2HA": "HA2", "HA1": "HA3", "1HA": "HA3", "3HA": "HA3"},
-    "ALA": {"1HB": "HB1", "2HB": "HB2", "3HB": "HB3"},
-    "VAL": {"1HG1": "HG11", "2HG1": "HG12", "3HG1": "HG13",
-            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23"},
-    "LEU": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "1HD1": "HD11", "2HD1": "HD12", "3HD1": "HD13",
-            "1HD2": "HD21", "2HD2": "HD22", "3HD2": "HD23"},
-    "ILE": {"CD": "CD1", "2HG1": "HG12", "HG11": "HG13", "1HG1": "HG13", "3HG1": "HG13",
-            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23",
-            "1HD1": "HD11", "HD1": "HD11", "2HD1": "HD12", "HD2": "HD12",
-            "3HD1": "HD13", "HD3": "HD13"},
-    "SER": {"OG1": "OG", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "HG1": "HG", "HOG": "HG"},
-    "THR": {"OG": "OG1", "CG": "CG2", "HOG": "HG1", "HOG1": "HG1", "1HG": "HG1",
-            "1HG2": "HG21", "2HG2": "HG22", "3HG2": "HG23"},
-    "CYS": {"SG1": "SG", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "HG1": "HG", "HSG": "HG"},
-    "PRO": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3"},
-    "PHE": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
-    "TYR": {"HOH": "HH", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
-    "TRP": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3", "HNE": "HE1"},
-    "HIS": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "HND": "HD1", "HND1": "HD1", "HD": "HD2", "HE": "HE1",
-            "HNE": "HE2", "HNE2": "HE2"},
-    "ASP": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3"},
-    "ASN": {"OD": "OD1", "ND": "ND2", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "1HD2": "HD21", "HND1": "HD21", "2HD2": "HD22", "HND2": "HD22"},
-    "GLU": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3"},
-    "GLN": {"OE": "OE1", "NE": "NE2", "2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "1HE2": "HE21", "HNE1": "HE21", "2HE2": "HE22", "HNE2": "HE22"},
-    "MET": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "1HE": "HE1", "2HE": "HE2", "3HE": "HE3"},
-    "LYS": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
-            "2HE": "HE2", "HE1": "HE3", "1HE": "HE3", "3HE": "HE3",
-            "1HZ": "HZ1", "HNZ1": "HZ1", "2HZ": "HZ2", "HNZ2": "HZ2",
-            "3HZ": "HZ3", "HNZ3": "HZ3"},
-    "ARG": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
-            "1HH1": "HH11", "HN11": "HH11", "2HH1": "HH12", "HN12": "HH12",
-            "1HH2": "HH21", "HN21": "HH21", "2HH2": "HH22", "HN22": "HH22"},
-    "ORN": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3",
-            "2HD": "HD2", "HD1": "HD3", "1HD": "HD3", "3HD": "HD3",
-            "1HE": "HE1", "HNE1": "HE1", "2HE": "HE2", "HNE2": "HE2",
-            "3HE": "HE3", "HNE3": "HE3"},
-    "AIB": {"1HB1": "HB11", "2HB1": "HB12", "3HB1": "HB13",
-            "1HB2": "HB21", "2HB2": "HB22", "3HB2": "HB23"},
-    "PCA": {"2HB": "HB2", "HB1": "HB3", "1HB": "HB3", "3HB": "HB3",
-            "2HG": "HG2", "HG1": "HG3", "1HG": "HG3", "3HG": "HG3"},
-    "FOR": {"CY": "C", "OY": "O", "HY": "H"},
-    "ACE": {"CY": "C", "CAY": "CH3", "CA": "CH3", "OY": "O",
-            "HY1": "H1", "HH31": "H1", "1HH3": "H1",
-            "HY2": "H2", "HH32": "H2", "2HH3": "H2",
-            "HY3": "H3", "HH33": "H3", "3HH3": "H3"},
-    "NME": {"NT": "N", "CH3": "C", "CT": "C", "CAT": "C", "CA": "C", "HNT": "H",
-            "1HA": "H1", "HH31": "H1", "1HH3": "H1",
-            "2HA": "H2", "HH32": "H2", "2HH3": "H2",
-            "3HA": "H3", "HH33": "H3", "3HH3": "H3"},
-    "NH2": {"H2": "HN2", "NT": "N"},
+_GRO_NUCLEIC_ATOM_ALIASES = {
+    'H': 'H', 'HN': 'H', 'OP1': 'OP1', 'O1P': 'OP1', 'OP2': 'OP2', 'O2P': 'OP2',
+    'OP3': 'OP3', 'O3P': 'OP3', 'HOP2': 'HOP2', '2HOP': 'HOP2', 'HOP3': 'HOP3', '3HOP': 'HOP3',
+    "C1'": "C1'", 'C1*': "C1'", "C2'": "C2'", 'C2*': "C2'", "C3'": "C3'", 'C3*': "C3'",
+    "C4'": "C4'", 'C4*': "C4'", "C5'": "C5'", 'C5*': "C5'", "O2'": "O2'", 'O2*': "O2'",
+    "O3'": "O3'", 'O3*': "O3'", "O4'": "O4'", 'O4*': "O4'", "O5'": "O5'", 'O5*': "O5'",
+    "H1'": "H1'", 'H1*': "H1'", "H2'": "H2'", 'H2*': "H2'", '1H2*': "H2'", "H2''": "H2''",
+    '2H2*': "H2''", "H3'": "H3'", 'H3*': "H3'", "H4'": "H4'", 'H4*': "H4'", "H5'": "H5'",
+    '1H5*': "H5'", "H5''": "H5''", '2H5*': "H5''", "HO2'": "HO2'", '2HO*': "HO2'", "HO3'": "HO3'",
+    'H3T': "HO3'",
 }
 
-# MDTraj 1.10.3 only applies the atom-name replacements to residues present in
-# pdbNames.xml; arbitrary ligands keep their raw names. Mirror that boundary so a
-# swapped same-element ligand pair (``O``/``O1``) is still rejected.
-_PROTEIN_RESNAMES = frozenset({
-    "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
-    "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
-    "HID", "HIE", "HIP", "HSD", "HSE", "HSP", "HSH", "HIH", "CYX", "CYM",
-    "ASH", "GLH", "LYN", "ORN", "AIB", "PCA", "FOR", "ACE", "NME", "NH2", "UNK",
+_GRO_PROTEIN_RESNAMES = frozenset({
+    'GLY', 'ALA', 'VAL', 'LEU', 'ILE', 'SER', 'THR', 'CYS', 'PRO', 'PHE', 'TYR', 'TRP', 'HIS', 'ASP', 'ASN', 'GLU', 'GLN', 'MET', 'LYS', 'ARG', 'ORN', 'AIB', 'PCA', 'FOR', 'ACE', 'NME', 'NH2', 'UNK'
 })
 
-# Residue renames performed by the same MDTraj table before the atom aliases apply.
+_GRO_NUCLEIC_RESNAMES = frozenset({
+    'A', 'G', 'C', 'U', 'DA', 'DG', 'DC', 'DT'
+})
+
 _GRO_RESIDUE_ALIASES = {
-    "CYX": "CYS",
-    "HID": "HIS", "HIE": "HIS", "HIP": "HIS", "HSD": "HIS", "HSE": "HIS",
-    "HSP": "HIS", "HSH": "HIS", "HIH": "HIS",
-    "NMA": "NME",
+    'CYX': 'CYS', 'HSP': 'HIS', 'HSH': 'HIS', 'HIP': 'HIS', 'HIH': 'HIS',
+    'HID': 'HIS', 'HIE': 'HIS', 'HSD': 'HIS', 'HSE': 'HIS', 'NMA': 'NME',
+    'ADE': 'A', 'GUA': 'G', 'CYT': 'C', 'URA': 'U', 'DAD': 'DA',
+    'DGU': 'DG', 'DCY': 'DC', 'THY': 'DT', 'H20': 'HOH', 'WAT': 'HOH',
+    'SOL': 'HOH', 'TIP3': 'HOH',
 }
+
+_GRO_RESIDUE_ATOM_ALIASES = {
+    'GLY': {
+        'HA2': 'HA2', '2HA': 'HA2', 'HA3': 'HA3', 'HA1': 'HA3', '1HA': 'HA3', '3HA': 'HA3',
+    },
+    'ALA': {
+        'HB1': 'HB1', '1HB': 'HB1', 'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', '3HB': 'HB3',
+    },
+    'VAL': {
+        'HG11': 'HG11', '1HG1': 'HG11', 'HG12': 'HG12', '2HG1': 'HG12', 'HG13': 'HG13', '3HG1': 'HG13',
+        'HG21': 'HG21', '1HG2': 'HG21', 'HG22': 'HG22', '2HG2': 'HG22', 'HG23': 'HG23', '3HG2': 'HG23',
+    },
+    'LEU': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HD11': 'HD11', '1HD1': 'HD11', 'HD12': 'HD12', '2HD1': 'HD12', 'HD13': 'HD13', '3HD1': 'HD13',
+        'HD21': 'HD21', '1HD2': 'HD21', 'HD22': 'HD22', '2HD2': 'HD22', 'HD23': 'HD23', '3HD2': 'HD23',
+    },
+    'ILE': {
+        'CD1': 'CD1', 'CD': 'CD1', 'HG12': 'HG12', '2HG1': 'HG12', 'HG13': 'HG13', 'HG11': 'HG13',
+        '1HG1': 'HG13', '3HG1': 'HG13', 'HG21': 'HG21', '1HG2': 'HG21', 'HG22': 'HG22', '2HG2': 'HG22',
+        'HG23': 'HG23', '3HG2': 'HG23', 'HD11': 'HD11', '1HD1': 'HD11', 'HD1': 'HD11', 'HD12': 'HD12',
+        '2HD1': 'HD12', 'HD2': 'HD12', 'HD13': 'HD13', '3HD1': 'HD13', 'HD3': 'HD13',
+    },
+    'SER': {
+        'OG': 'OG', 'OG1': 'OG', 'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3',
+        '1HB': 'HB3', '3HB': 'HB3', 'HG': 'HG', 'HG1': 'HG', 'HOG': 'HG',
+    },
+    'THR': {
+        'OG1': 'OG1', 'OG': 'OG1', 'CG2': 'CG2', 'CG': 'CG2', 'HG1': 'HG1', 'HOG': 'HG1',
+        'HOG1': 'HG1', '1HG': 'HG1', 'HG21': 'HG21', '1HG2': 'HG21', 'HG22': 'HG22', '2HG2': 'HG22',
+        'HG23': 'HG23', '3HG2': 'HG23',
+    },
+    'CYS': {
+        'SG': 'SG', 'SG1': 'SG', 'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3',
+        '1HB': 'HB3', '3HB': 'HB3', 'HG': 'HG', 'HG1': 'HG', 'HSG': 'HG',
+    },
+    'PRO': {
+        'HT1': 'H2', 'HT2': 'H3', 'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3',
+        '1HB': 'HB3', '3HB': 'HB3', 'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3',
+        '1HG': 'HG3', '3HG': 'HG3', 'HD2': 'HD2', '2HD': 'HD2', 'HD3': 'HD3', 'HD1': 'HD3',
+        '1HD': 'HD3', '3HD': 'HD3',
+    },
+    'PHE': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+    },
+    'TYR': {
+        'HH': 'HH', 'HOH': 'HH', 'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3',
+        '1HB': 'HB3', '3HB': 'HB3',
+    },
+    'TRP': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HE1': 'HE1', 'HNE': 'HE1',
+    },
+    'HIS': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HD1': 'HD1', 'HND': 'HD1', 'HND1': 'HD1', 'HD2': 'HD2', 'HD': 'HD2', 'HE1': 'HE1',
+        'HE': 'HE1', 'HE2': 'HE2', 'HNE': 'HE2', 'HNE2': 'HE2',
+    },
+    'ASP': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+    },
+    'ASN': {
+        'OD1': 'OD1', 'OD': 'OD1', 'ND2': 'ND2', 'ND': 'ND2', 'HB2': 'HB2', '2HB': 'HB2',
+        'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3', 'HD21': 'HD21', '1HD2': 'HD21',
+        'HND1': 'HD21', 'HD22': 'HD22', '2HD2': 'HD22', 'HND2': 'HD22',
+    },
+    'GLU': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+    },
+    'GLN': {
+        'OE1': 'OE1', 'OE': 'OE1', 'NE2': 'NE2', 'NE': 'NE2', 'HB2': 'HB2', '2HB': 'HB2',
+        'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3', 'HG2': 'HG2', '2HG': 'HG2',
+        'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3', 'HE21': 'HE21', '1HE2': 'HE21',
+        'HNE1': 'HE21', 'HE22': 'HE22', '2HE2': 'HE22', 'HNE2': 'HE22',
+    },
+    'MET': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+        'HE1': 'HE1', '1HE': 'HE1', 'HE2': 'HE2', '2HE': 'HE2', 'HE3': 'HE3', '3HE': 'HE3',
+    },
+    'LYS': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+        'HD2': 'HD2', '2HD': 'HD2', 'HD3': 'HD3', 'HD1': 'HD3', '1HD': 'HD3', '3HD': 'HD3',
+        'HE2': 'HE2', '2HE': 'HE2', 'HE3': 'HE3', 'HE1': 'HE3', '1HE': 'HE3', '3HE': 'HE3',
+        'HZ1': 'HZ1', '1HZ': 'HZ1', 'HNZ1': 'HZ1', 'HZ2': 'HZ2', '2HZ': 'HZ2', 'HNZ2': 'HZ2',
+        'HZ3': 'HZ3', '3HZ': 'HZ3', 'HNZ3': 'HZ3',
+    },
+    'ARG': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+        'HD2': 'HD2', '2HD': 'HD2', 'HD3': 'HD3', 'HD1': 'HD3', '1HD': 'HD3', '3HD': 'HD3',
+        'HH11': 'HH11', '1HH1': 'HH11', 'HN11': 'HH11', 'HH12': 'HH12', '2HH1': 'HH12', 'HN12': 'HH12',
+        'HH21': 'HH21', '1HH2': 'HH21', 'HN21': 'HH21', 'HH22': 'HH22', '2HH2': 'HH22', 'HN22': 'HH22',
+    },
+    'ORN': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+        'HD2': 'HD2', '2HD': 'HD2', 'HD3': 'HD3', 'HD1': 'HD3', '1HD': 'HD3', '3HD': 'HD3',
+        'HE1': 'HE1', '1HE': 'HE1', 'HNE1': 'HE1', 'HE2': 'HE2', '2HE': 'HE2', 'HNE2': 'HE2',
+        'HE3': 'HE3', '3HE': 'HE3', 'HNE3': 'HE3',
+    },
+    'AIB': {
+        'HB11': 'HB11', '1HB1': 'HB11', 'HB12': 'HB12', '2HB1': 'HB12', 'HB13': 'HB13', '3HB1': 'HB13',
+        'HB21': 'HB21', '1HB2': 'HB21', 'HB22': 'HB22', '2HB2': 'HB22', 'HB23': 'HB23', '3HB2': 'HB23',
+    },
+    'PCA': {
+        'HB2': 'HB2', '2HB': 'HB2', 'HB3': 'HB3', 'HB1': 'HB3', '1HB': 'HB3', '3HB': 'HB3',
+        'HG2': 'HG2', '2HG': 'HG2', 'HG3': 'HG3', 'HG1': 'HG3', '1HG': 'HG3', '3HG': 'HG3',
+    },
+    'FOR': {
+        'C': 'C', 'CY': 'C', 'OY': 'O', 'HY': 'H',
+    },
+    'ACE': {
+        'H1': 'H1', '1H': 'H1', 'C': 'C', 'CY': 'C', 'CH3': 'CH3', 'CAY': 'CH3',
+        'CA': 'CH3', 'OY': 'O', 'HY1': 'H1', 'HH31': 'H1', '1HH3': 'H1', 'HY2': 'H2',
+        'HH32': 'H2', '2HH3': 'H2', 'HY3': 'H3', 'HH33': 'H3', '3HH3': 'H3',
+    },
+    'NME': {
+        'H1': 'H1', '1H': 'H1', 'HT1': 'H1', 'N': 'N', 'NT': 'N', 'C': 'C',
+        'CH3': 'C', 'CT': 'C', 'CAT': 'C', 'CA': 'C', 'HNT': 'H', '1HA': 'H1',
+        'HH31': 'H1', '1HH3': 'H1', '2HA': 'H2', 'HH32': 'H2', '2HH3': 'H2', '3HA': 'H3',
+        'HH33': 'H3', '3HH3': 'H3',
+    },
+    'NH2': {
+        'H1': 'HN1', '1H': 'HN1', 'HN1': 'HN1', 'HT1': 'HN1', 'H2': 'HN2', '2H': 'HN2',
+        'HN2': 'HN2', 'HT2': 'HN2', 'N': 'N', 'NT': 'N',
+    },
+    'A': {
+        'H61': 'H61', '1H6': 'H61', 'H62': 'H62', '2H6': 'H62',
+    },
+    'G': {
+        'H21': 'H21', '1H2': 'H21', 'H22': 'H22', '2H2': 'H22',
+    },
+    'C': {
+        'H41': 'H41', '1H4': 'H41', 'H42': 'H42', '2H4': 'H42',
+    },
+    'DA': {
+        'H61': 'H61', '1H6': 'H61', 'H62': 'H62', '2H6': 'H62',
+    },
+    'DG': {
+        'H21': 'H21', '1H2': 'H21', 'H22': 'H22', '2H2': 'H22',
+    },
+    'DC': {
+        'H41': 'H41', '1H4': 'H41', 'H42': 'H42', '2H4': 'H42',
+    },
+    'DT': {
+        'C7': 'C7', 'C5M': 'C7', 'H71': 'H71', '1H5M': 'H71', 'H72': 'H72', '2H5M': 'H72',
+        'H73': 'H73', '3H5M': 'H73',
+    },
+    'HOH': {
+        'O': 'O', 'OW': 'O', 'OH2': 'O', 'O1': 'O', 'H1': 'H1', 'HW1': 'H1',
+        'H2': 'H2', 'HW2': 'H2',
+    },
+}
+
+# pdbNames.xml also carries non-protein, non-nucleic entries (water).
+_GRO_OTHER_RESNAMES = frozenset({"HOH"})
 
 
 def _canonical_gro_resname(resname: str) -> str:
@@ -481,20 +583,44 @@ def _canonical_gro_resname(resname: str) -> str:
     return _GRO_RESIDUE_ALIASES.get(name, name)
 
 
-def _canonical_gro_atom_name(atom_name: str, resname: str = "") -> str:
-    """Normalize MDTraj 1.10.3 GRO/pdbNames.xml aliases for protein residues only."""
+def _mdtraj_gro_atom_name(atom_name: str, resname: str = "") -> str:
+    """Return the atom name MDTraj 1.10.3's GRO reader emits for a raw PDB name.
+
+    The reader renames the residue first, then looks the raw atom name up in the
+    merged table for that residue. Residues outside pdbNames.xml are untouched.
+    Compare the result against the trajectory name as MDTraj returned it -- never
+    normalise both sides, or a canonical name such as ``H1`` would be mapped a
+    second time (ACE ``HH31`` -> ``H1`` -> ``H``).
+    """
     name = (atom_name or "").strip().upper()
     res = _canonical_gro_resname(resname)
-    if res not in _PROTEIN_RESNAMES:
+    if res in _GRO_PROTEIN_RESNAMES:
+        base: dict[str, str] = _GRO_PROTEIN_ATOM_ALIASES
+    elif res in _GRO_NUCLEIC_RESNAMES:
+        base = _GRO_NUCLEIC_ATOM_ALIASES
+    elif res in _GRO_OTHER_RESNAMES:
+        base = {}
+    else:
         return name
-    name = _GRO_ATOM_ALIASES.get(name, name)
-    return _GRO_RESIDUE_ATOM_ALIASES.get(res, {}).get(name, name)
+    return _GRO_RESIDUE_ATOM_ALIASES.get(res, {}).get(name, base.get(name, name))
 
 
 def _residue_number(value: Any) -> int | None:
     text = "" if value is None else str(value).strip()
     digits = text[1:] if text[:1] in ("+", "-") else text
     return int(text) if digits.isdigit() else None
+
+
+def _atom_serial(atom: Any) -> int | None:
+    """Atom serial as a positive int, or None when the source cannot prove one."""
+    value = getattr(atom, "serial", None)
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        serial = int(value)
+    except (TypeError, ValueError):
+        return None
+    return serial if serial > 0 else None
 
 
 def _template_residue_runs(
@@ -551,8 +677,11 @@ def _validate_trajectory_topology(
     element labels) and kept solute order. Under a GRO topology, MDTraj lacks an
     element column (inferring e.g. ``CL1`` as ``C`` and a digit-prefixed terminal
     ``1H`` as virtual-site ``VS``) and canonicalizes GROMACS terminal/ILE names, so
-    the canonical name comparison is the authoritative check; a second element
-    comparison would only re-read the same inferred name and reject valid atoms."""
+    the name comparison is the authoritative check; a second element comparison
+    would only re-read the same inferred name and reject valid atoms. Only the PDB
+    template is normalised -- trajectory names come back already normalised from
+    MDTraj, and mapping them again would reject e.g. ACE ``HH31`` -> ``H1`` ->
+    ``H``. Atom serials decide residue identity when both files carry them."""
     traj_atoms = list(getattr(getattr(trajectory, "topology", None), "atoms", []) or [])
     if not traj_atoms:
         return
@@ -576,30 +705,47 @@ def _validate_trajectory_topology(
             if expected_name and traj_name and expected_name != traj_name:
                 raise ValueError("GRO trajectory residue order differs from topology PDB; refusing to render")
         # A whole-residue swap of the same residue type keeps every ordinal and
-        # atom name; the residue numbers are the only identity left. Compare them
-        # only while both files use the same numbering scheme -- a legal
-        # renumbering (42.. -> 1..) must keep working.
-        expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
-        traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
-        if (
-            all(number is not None for number in expected_numbers)
-            and all(number is not None for number in traj_numbers)
-            and sorted(expected_numbers) == sorted(traj_numbers)
-            and expected_numbers != traj_numbers
+        # atom name. Atom serials are the per-atom identity both writers preserve
+        # for a shared TPR (PDB columns 7-11, GRO atom-number columns), so compare
+        # them whenever both sides prove one: they accept a legal renumbering
+        # (42.. -> 1..) and still reject an in-place swap.
+        kept_order = sorted(kept)
+        expected_serials = [templates[index].serial for index in kept_order]
+        traj_serials = [_atom_serial(traj_atoms[index]) for index in kept_order]
+        if all(serial is not None for serial in expected_serials) and all(
+            serial is not None for serial in traj_serials
         ):
-            raise ValueError("GRO trajectory residue numbering differs from topology PDB; refusing to render")
+            for expected_serial, traj_serial in zip(expected_serials, traj_serials):
+                if expected_serial != traj_serial:
+                    raise ValueError(
+                        "GRO trajectory atom serials differ from topology PDB; refusing to render"
+                    )
+        else:
+            # No trustworthy serials (e.g. an injected topology): fall back to the
+            # residue numbers. Only two cases are provably in order -- identical
+            # numbering, or a clean 1..N renumbering, which is what a rebuilt
+            # topology emits. Anything else cannot prove the order and is refused.
+            expected_numbers = [_residue_number(expected_runs[run][1]) for run in kept_runs]
+            traj_numbers = [_residue_number(traj_runs[run][1]) for run in kept_runs]
+            numbers_known = (
+                all(number is not None for number in expected_numbers)
+                and all(number is not None for number in traj_numbers)
+            )
+            if numbers_known and expected_numbers != traj_numbers:
+                clean_renumbering = traj_numbers == list(range(1, len(traj_numbers) + 1))
+                if not clean_renumbering:
+                    raise ValueError(
+                        "GRO trajectory residue numbering differs from topology PDB; refusing to render"
+                    )
     for index, (template, traj_atom) in enumerate(zip(templates, traj_atoms)):
         if index not in kept:
             continue
         if using_gro:
             traj_raw = (getattr(traj_atom, "name", "") or "").strip().upper()
-            residue = getattr(traj_atom, "residue", None)
-            traj_res = (getattr(residue, "name", "") or "").strip().upper()
             if traj_raw:
-                if (
-                    _canonical_gro_atom_name(traj_raw, traj_res or template.resname)
-                    != _canonical_gro_atom_name(template.atom_name, template.resname)
-                ):
+                # MDTraj already normalised its own name; normalise only the raw
+                # PDB template, or a canonical name would be mapped twice.
+                if _mdtraj_gro_atom_name(template.atom_name, template.resname) != traj_raw:
                     raise ValueError("GRO trajectory atom order differs from topology PDB; refusing to render")
                 continue
         symbol = (getattr(getattr(traj_atom, "element", None), "symbol", "") or "").strip().upper()

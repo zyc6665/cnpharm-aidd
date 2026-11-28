@@ -54,7 +54,12 @@ def _pdb_line(
     y: float = 10.0,
     z: float = 10.0,
 ) -> str:
-    name = f" {atom:<3}" if len(element) <= 1 else f"{atom:<4}"
+    if len(atom) >= 4:
+        name = atom[:4]  # PDB atom-name field is exactly four columns
+    elif len(element) <= 1:
+        name = f" {atom:<3}"
+    else:
+        name = f"{atom:<4}"
     return (
         f"{record:<6}{serial:5d} {name}{altloc}{resname:>3} {chain}{seq:4d}{icode}   "
         f"{x:8.3f}{y:8.3f}{z:8.3f}{occupancy:6.2f}{temp_factor:6.2f}          {element:>2}"
@@ -1401,10 +1406,12 @@ class _NamedGroAtom:
     def __init__(
         self, name: str, symbol: str, resname: str = "",
         resindex: int | None = None, resseq: int | None = None,
+        serial: int | None = None,
     ):
         self.name = name
         self.element = types.SimpleNamespace(symbol=symbol)
         self.residue = types.SimpleNamespace(name=resname, index=resindex, resSeq=resseq)
+        self.serial = serial
 
 
 def test_gro_topology_accepts_digit_prefixed_terminal_hydrogen(tmp_path: Path):
@@ -1701,6 +1708,139 @@ def test_gro_topology_rejects_numbered_same_resname_residue_swap(tmp_path: Path)
     ]
     swapped_traj = _two_frame_trajectory(swapped_atoms)
     with pytest.raises(ValueError, match="residue numbering"):
+        movie.export_desolvated_pdb_movie(
+            pdb, xtc, tmp_path / "bad.pdb",
+            topology_gro=gro,
+            trajectory_loader=lambda top, traj: swapped_traj,
+        )
+
+
+def test_gro_topology_accepts_per_residue_terminal_name_overrides(tmp_path: Path):
+    """pdbNames.xml overrides the generic terminal mapping per residue: ACE
+    ``HH31`` becomes ``H1`` and PRO ``HT1``/``HT2`` become ``H2``/``H3``. The
+    template must be normalised once against the raw name; normalising the
+    already-normalised trajectory name again would reject these atoms."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "HH31", "ACE", "A", 1, element="H"),
+                _pdb_line(2, "HT1", "PRO", "A", 2, element="H"),
+                _pdb_line(3, "HT2", "PRO", "A", 2, element="H"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n3\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("H1", "H", "ACE", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("H2", "H", "PRO", resindex=1, resseq=2, serial=2),
+        _NamedGroAtom("H3", "H", "PRO", resindex=1, resseq=2, serial=3),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_nucleic_residue_and_atom_aliases(tmp_path: Path):
+    """MDTraj renames DAD -> DA and THY -> DT and applies the nucleic acid table
+    (``O1P`` -> ``OP1``); the template must follow the same mapping."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "O1P", "DAD", "A", 1, element="O"),
+                _pdb_line(2, "C5M", "THY", "A", 2, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("OP1", "O", "DA", resindex=0, resseq=1, serial=1),
+        _NamedGroAtom("C7", "C", "DT", resindex=1, resseq=2, serial=2),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_accepts_renumbering_proved_by_atom_serials(tmp_path: Path):
+    """A rebuilt topology can renumber GRO residues 1..N while topology.pdb keeps
+    42/43; matching atom serials prove the order, so the residue-number heuristic
+    must not run at all."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(5, "CA", "ALA", "A", 42, element="C"),
+                _pdb_line(9, "CB", "ALA", "A", 43, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    gro_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=5),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=9),
+    ]
+    trajectory = _two_frame_trajectory(gro_atoms)
+    stats = movie.export_desolvated_pdb_movie(
+        pdb, xtc, tmp_path / "movie.pdb",
+        topology_gro=gro,
+        trajectory_loader=lambda top, traj: trajectory,
+    )
+    assert stats["written"] is True
+
+
+def test_gro_topology_rejects_serial_swap_of_same_resname_residues(tmp_path: Path):
+    """Atom serials identify atoms even when a same-resname residue pair is swapped
+    in place; the old residue-number multiset check misses that swap."""
+    pdb = tmp_path / "topology.pdb"
+    pdb.write_text(
+        "\n".join(
+            [
+                _pdb_line(1, "CA", "ALA", "A", 1, element="C"),
+                _pdb_line(2, "CB", "ALA", "A", 2, element="C"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gro = tmp_path / "md.gro"
+    gro.write_text("test gro\n2\n" + "   5.00000   5.00000   5.00000\n", encoding="utf-8")
+    xtc = tmp_path / "md.xtc"
+    xtc.write_bytes(b"xtc")
+
+    swapped_atoms = [
+        _NamedGroAtom("CA", "C", "ALA", resindex=0, resseq=1, serial=2),
+        _NamedGroAtom("CB", "C", "ALA", resindex=1, resseq=2, serial=1),
+    ]
+    swapped_traj = _two_frame_trajectory(swapped_atoms)
+    with pytest.raises(ValueError, match="atom serials"):
         movie.export_desolvated_pdb_movie(
             pdb, xtc, tmp_path / "bad.pdb",
             topology_gro=gro,
